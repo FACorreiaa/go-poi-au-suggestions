@@ -1,8 +1,3 @@
-Here’s your content transformed into a clean, professional `README.md` format along with **name suggestions** for the app at the end.
-
----
-
-```markdown
 # **WanderWiseAI** – Personalized City Discovery 🗺️✨
 
 A smart, mobile-first web application providing personalized recommendations for city exploration based on user interests, time constraints, location, and an evolving AI engine.
@@ -147,22 +142,6 @@ This will include:
 
 ---
 
-## 🤝 Contributing
-
-> 🛠 _Contribution guidelines and code of conduct coming soon._
-
----
-
-## 📄 License
-
-> 📃 _License type to be defined (MIT, Apache 2.0, or Proprietary)._
-
----
-
-```
-
----
-
 ### 🔤 Name Suggestions
 
 | Name | Meaning / Vibe |
@@ -234,3 +213,15 @@ This project aims for a high-performance, personalized user experience, integrat
 ### Summary
 
 This stack prioritizes **performance** (Go, PostGIS, efficient API), **personalization** (direct Gemini 1.5 integration via `go-genai`), **SEO** (SSR via SvelteKit/Next.js), and **developer experience**. Starting with an HTTP API simplifies frontend integration while retaining the option to introduce gRPC later if needed. The chosen components provide a solid foundation for current features and future expansion into mobile and enhanced social integration.
+
+---
+
+## 🤝 Contributing
+
+> 🛠 _Contribution guidelines and code of conduct coming soon._
+
+---
+
+## 📄 License
+
+> 📃 _License type to be defined (MIT, Apache 2.0, or Proprietary)._

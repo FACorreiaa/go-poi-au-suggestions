@@ -315,7 +315,7 @@ If you plan to work with **vector embeddings** (numerical representations of tex
     5.  **Query:** Use `pgvector`'s distance operators in your SQL queries (e.g., `ORDER BY embedding <=> $1 LIMIT 10`) to find semantically similar items.
 
 **Summary:** Rely on PostgreSQL's robust standard features (`TEXT`, `JSONB`, etc.) for most data storage related to `go-genai`. Integrate the `pgvector` extension specifically when you need to store and perform efficient similarity searches on vector embeddings.
-
+GCP, GKE, Terraform, Vault, GO, Ansible
 ---
 
 ## 🤝 Contributing

@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -11,69 +12,43 @@ import (
 var embeddedConfig []byte
 
 type Config struct {
-	Mode             string                 `mapstructure:"mode"`
-	Dotenv           string                 `mapstructure:"dotenv"`
-	Handlers         HandlersConfig         `mapstructure:"handlers"`
-	Server           ServerConfig           `mapstructure:"server"`
-	UpstreamServices UpstreamServicesConfig `mapstructure:"upstream_services"`
-	Database         DatabaseConfig         `mapstructure:"database"`
-}
-
-type HandlersConfig struct {
-	ExternalAPI struct {
-		Port      string `mapstructure:"port"`
-		CertFile  string `mapstructure:"certFile"`
-		KeyFile   string `mapstructure:"keyFile"`
-		EnableTLS bool   `mapstructure:"enableTLS"`
-	} `mapstructure:"externalAPI"`
-	Pprof struct {
-		Port      string `mapstructure:"port"`
-		CertFile  string `mapstructure:"certFile"`
-		KeyFile   string `mapstructure:"keyFile"`
-		EnableTLS bool   `mapstructure:"enableTLS"`
-	} `mapstructure:"pprof"`
-	Prometheus struct {
-		Port      string `mapstructure:"port"`
-		CertFile  string `mapstructure:"certFile"`
-		KeyFile   string `mapstructure:"keyFile"`
-		EnableTLS bool   `mapstructure:"enableTLS"`
-	} `mapstructure:"prometheus"`
-}
-
-type ServerConfig struct {
-	Port                   string `mapstructure:"port"`
-	CertFile               string `mapstructure:"certFile"`
-	KeyFile                string `mapstructure:"keyFile"`
-	EnableTLS              bool   `mapstructure:"enableTLS"`
-	Timeout                int    `mapstructure:"timeout"`
-	IdleTimeout            int    `mapstructure:"idleTimeout"`
-	ReadTimeout            int    `mapstructure:"readTimeout"`
-	WriteTimeout           int    `mapstructure:"writeTimeout"`
-	IdleConnsClosedTimeout int    `mapstructure:"idleConnsClosedTimeout"`
-	ShutdownTimeout        int    `mapstructure:"shutdownTimeout"`
-}
-
-type UpstreamServicesConfig struct {
-	AuthService struct {
-		Host string `mapstructure:"host"`
-		Port string `mapstructure:"port"`
-	} `mapstructure:"authService"`
-	PaymentService struct {
-		Host string `mapstructure:"host"`
-		Port string `mapstructure:"port"`
-	} `mapstructure:"paymentService"`
-}
-
-type DatabaseConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     string `mapstructure:"port"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
-	Database string `mapstructure:"database"`
-	SSLMode  string `mapstructure:"sslmode"`
-	PoolSize int    `mapstructure:"poolSize"`
-	Timeout  int    `mapstructure:"timeout"`
-	IdleTime int    `mapstructure:"idleTime"`
+	Mode     string `mapstructure:"mode"`
+	Dotenv   string `mapstructure:"dotenv"`
+	Handlers struct {
+		ExternalAPI struct {
+			Port      string `mapstrucutre:"port"`
+			CertFile  string `mapstructure:"certFile"`
+			KeyFile   string `mapstructure:"keyFile"`
+			EnableTLS bool   `mapstracture:"enableTLS"`
+		} `mapstructure:"externalAPI"`
+		Pprof struct {
+			Port      string `mapstructure:"port"`
+			CertFile  string `mapstructure:"certFile"`
+			KeyFile   string `mapstructure:"keyFile"`
+			EnableTLS bool   `mapstructure:"enableTLS"`
+		}
+		Prometheus struct {
+			Port      string `mapstructure:"port"`
+			CertFile  string `mapstructure:"certFile"`
+			KeyFile   string `mapstructure:"keyFile"`
+			EnableTLS bool   `mapstructure:"enableTLS"`
+		}
+	} `mapstructure:"handlers"`
+	Repositories struct {
+		Postgres struct {
+			Host              string `mapstructure:"host"`
+			Password          string `mapstructure:"password"`
+			Port              string `mapstructure:"port"`
+			Username          string `mapstructure:"username"`
+			DB                string `mapstructure:"db"`
+			SSLMODE           string `mapstructure:"SSLMODE"`
+			MAXCONWAITINGTIME int    `mapstructure:"MAXCONWAITINGTIME"`
+		} `mapstructure:"postgres"`
+	}
+	Server struct {
+		HTTPPort string        `mapstructure:"HTTPPort"`
+		Timeout  time.Duration `mapstructure:"HTTPTimeout"`
+	} `mapstructure:"server"`
 }
 
 func InitConfig() (Config, error) {

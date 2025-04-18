@@ -1,0 +1,62 @@
+mode: "dev"
+dotenv: ".env/dev"
+
+handlers:
+  externalAPI:
+    port: "8081"
+    certFile: "./.data/server.crt"
+    keyFile: "./.data/server.key"
+    enableTLS: false
+  internalAPI:
+    port: "8083"
+    certFile: "./.data/server.crt"
+    keyFile: "./.data/server.key"
+    enableTLS: false
+  pprof:
+    port: "8082"
+    certFile: "./.data/server.crt"
+    keyFile: "./.data/server.key"
+    enableTLS: false
+  prometheus:
+    port: "8084"
+    certFile: "./.data/server.crt"
+    keyFile: "./.data/server.key"
+    enableTLS: false
+
+services:
+  auth:
+    authTokenTTL: 5
+    refreshTokenTTL: 20160
+    pubKeyFile: "./.data/id_rsa.pub"
+    pemKeyFile: "./.data/id_rsa"
+
+repositories:
+  postgres:
+    #    port: "5432"
+    #    host: "postgres"
+    password: "postgres"
+    port: "5440"
+    host: "localhost"
+    username: "postgres"
+    db: "fit-me-dev"
+    SSLMODE: "verify-full"
+    MAXCONWAITINGTIME: 10
+  # redis:
+  #   host: "redis"
+  #   port: "6388"
+  #   db: 0
+  #   ttl: 120s
+
+#change later
+server:
+  HTTPPort: "6666"
+  HTTPTimeout: 15s
+# UpstreamServices:
+#   Customer: "http://customer-service:8000"
+#   Auth: "http://auth-service:8000"
+#   Activity: "http://activity-service:8000"
+#   Calculator: "http://calculator-service:8000"
+#   Workout: "http://workout-service:8000"
+#   Measurement: "http://measurement-service:8000"
+#   Ingredients: "http://ingredients-service:8000"
+#   Meals: "http://meals-service:8000"

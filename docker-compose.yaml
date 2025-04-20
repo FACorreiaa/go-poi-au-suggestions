@@ -24,7 +24,7 @@ services:
       # Scripts here run only when the database is first initialized (volume is empty)
       - ./scripts/postgres/init:/docker-entrypoint-initdb.d
     networks:
-      - wanderwise-net # Use a specific network name
+      - wanderwise-net 
 
 # Define the named volume
 volumes:

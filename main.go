@@ -15,6 +15,9 @@ import (
 
 	database "github.com/FACorreiaa/go-poi-au-suggestions/app/db"
 	appLogger "github.com/FACorreiaa/go-poi-au-suggestions/app/logger"
+	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/app/middleware"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	api "github.com/FACorreiaa/go-poi-au-suggestions/internal/router"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/config"
 	"github.com/go-chi/chi/v5"
@@ -74,14 +77,23 @@ func main() {
 
 	// --- Dependency Injection (Example) ---
 	// Initialize services, handlers, etc., injecting dependencies like pool and logger
-	// Example: userRepo := database.NewPostgresUserRepository(pool)
-	// Example: authService := auth.NewService(userRepo, logger)
-	// Example: authHandler := api.NewAuthHandler(authService)
+	authRepo := auth.NewAuthRepoFactory(pool)
+	authService := auth.NewAuthService(authRepo)
+	authHandler := auth.NewAuthHandler(authService)
 
 	// --- Router Setup ---
 	// Assume SetupRouter initializes handlers and wires routes
 	// router := api.SetupRouter(pool, logger /*, other services/handlers */)
 	// --- Temporary Router Setup (Replace with actual SetupRouter call) ---
+	routerConfig := &api.Config{
+		AuthHandler:            authHandler,
+		AuthenticateMiddleware: appMiddleware.Authenticate,
+		// Add other handlers here:
+		// POIHandler: poiHandler,
+	}
+	// Create the main application router by calling the setup function
+	mainRouter := api.SetupRouter(routerConfig)
+
 	router := chi.NewMux() // Use NewMux for Chi v5
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
@@ -90,6 +102,7 @@ func main() {
 	router.Use(middleware.StripSlashes)
 	router.Use(middleware.Timeout(60 * time.Second))       // Example timeout
 	router.Use(middleware.Compress(5, "application/json")) // Compress JSON responses
+	router.Mount("/", mainRouter)
 
 	// Example public route
 	router.Get("/", func(w http.ResponseWriter, r *http.Request) {

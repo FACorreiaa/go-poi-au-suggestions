@@ -38,7 +38,7 @@ repositories:
     port: "5440"
     host: "localhost"
     username: "postgres"
-    db: "fit-me-dev"
+    db: "wanderwise-ai-dev"
     SSLMODE: "verify-full"
     MAXCONWAITINGTIME: 10
   # redis:

@@ -1,7 +1,7 @@
 # **WanderWiseAI** – Personalized City Discovery 🗺️✨
 
 A smart, mobile-first web application providing personalized recommendations for city exploration based on user interests, time constraints, location, and an evolving AI engine.
-
+Start with HTTP/REST (or HTTP/2 + Protobuf-over-HTTP) for public API and Use WebSockets or SSE for any real‑time push (e.g. live suggestions, social feeds).
 ---
 
 ## 📑 Table of Contents

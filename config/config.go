@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
 	"time"
 

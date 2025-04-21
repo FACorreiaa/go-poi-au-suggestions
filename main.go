@@ -1,4 +1,3 @@
-// cmd/server/main.go (or your main package)
 package main
 
 import (

@@ -18,13 +18,14 @@ import (
 	database "github.com/FACorreiaa/go-poi-au-suggestions/app/db"
 	l "github.com/FACorreiaa/go-poi-au-suggestions/app/logger"
 
-	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/app/middleware"
-	"github.com/FACorreiaa/go-poi-au-suggestions/config"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/go-chi/chi/v5" // Import chi directly
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 	"github.com/lmittmann/tint"
+
+	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/app/middleware"
+	"github.com/FACorreiaa/go-poi-au-suggestions/config"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/container"
 )
 
 func main() {
@@ -46,44 +47,41 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	// --- Database Setup (Revised Order) ---
-	dbConfig, err := database.NewDatabaseConfig(&cfg, logger) // 1. Get connection string
+	// --- Initialize Container ---
+	c, err := container.NewContainer(&cfg, logger)
+	if err != nil {
+		logger.Error("Failed to initialize container", slog.Any("error", err))
+		os.Exit(1)
+	}
+	defer c.Close() // Ensure resources are closed on exit
+
+	// --- Wait for Database ---
+	if !c.WaitForDB(ctx) {
+		logger.Error("Database not ready after waiting, exiting.")
+		os.Exit(1)
+	}
+
+	// --- Run Migrations ---
+	dbConfig, err := database.NewDatabaseConfig(&cfg, logger)
 	if err != nil {
 		logger.Error("Failed to generate database config", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	pool, err := database.Init(dbConfig.ConnectionURL, logger) // 2. Initialize Pool (attempts connection)
-	if err != nil {
-		logger.Error("Failed to initialize database pool", slog.Any("error", err))
-		os.Exit(1)
-	}
-	defer pool.Close() // Ensure pool is closed on exit
-
-	if !database.WaitForDB(ctx, pool, logger) { // 3. Wait for DB using the Pool
-		logger.Error("Database not ready after waiting, exiting.")
-		os.Exit(1)
-	}
-
-	// 4. Run Migrations (Now DB should exist and be connectable)
-	err = database.RunMigrations(dbConfig.ConnectionURL, logger)
+	err = c.RunMigrations(dbConfig.ConnectionURL)
 	if err != nil {
 		logger.Error("Failed to run database migrations", slog.Any("error", err))
 		os.Exit(1) // Exit if migrations fail
 	}
 
-	// --- Dependency Injection Wiring ---
-	authRepo := auth.NewAuthRepoFactory(pool, logger)
-	authService := auth.NewAuthService(authRepo, logger)
-	authHandler := auth.NewAuthHandler(authService, logger)
-
 	// --- Router Setup ---
 	routerConfig := &router.Config{
-		AuthHandler:            authHandler,
+		AuthHandler:            c.AuthHandler,
 		AuthenticateMiddleware: appMiddleware.Authenticate, // Your JWT auth middleware
 		// Add other handlers...
 	}
 	mainRouter := router.SetupRouter(routerConfig)
+
 	// --- Server-Wide Middleware Setup ---
 	rootRouter := chi.NewMux()
 	rootRouter.Use(chiMiddleware.RequestID)

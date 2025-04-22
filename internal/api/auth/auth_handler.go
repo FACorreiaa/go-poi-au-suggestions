@@ -10,8 +10,9 @@ type AuthHandler struct {
 	logger      *slog.Logger
 }
 
-func NewAuthHandler(authService AuthService) *AuthHandler {
+func NewAuthHandler(authService AuthService, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
+		logger:      logger,
 		AuthService: authService,
 	}
 }

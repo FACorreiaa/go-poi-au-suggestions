@@ -19,7 +19,7 @@ import (
 	uuid "github.com/vgarvardt/pgx-google-uuid/v5"
 )
 
-//go:embed migrations/*.sql
+//go:embed migrations
 var migrationFS embed.FS
 
 const defaultRetries = 5 // Renamed from retries to avoid conflict if needed elsewhere
@@ -54,9 +54,20 @@ func WaitForDB(ctx context.Context, pgpool *pgxpool.Pool, logger *slog.Logger) b
 	return false // Failed to connect after retries
 }
 
-// RunMigrations applies database migrations using the embedded filesystem.
 func RunMigrations(databaseURL string, logger *slog.Logger) error {
 	logger.Info("Running database migrations...")
+
+	entries, err := migrationFS.ReadDir(".")
+	if err != nil {
+		logger.Error("Failed to read embedded migrations directory", slog.Any("error", err))
+		return fmt.Errorf("failed to read embedded migrations directory: %w", err)
+	}
+	if len(entries) == 0 {
+		logger.Warn("No migration files found in embedded migrations directory")
+	}
+	for _, entry := range entries {
+		logger.Info("Found embedded migration file", slog.String("name", entry.Name()))
+	}
 
 	sourceDriver, err := iofs.New(migrationFS, "migrations")
 	if err != nil {
@@ -64,8 +75,6 @@ func RunMigrations(databaseURL string, logger *slog.Logger) error {
 		return fmt.Errorf("failed to create migration source driver: %w", err)
 	}
 
-	// Ensure databaseURL uses correct scheme for migrate (e.g., "postgresql://...")
-	// Example check (adapt as needed):
 	if !strings.HasPrefix(databaseURL, "postgres://") && !strings.HasPrefix(databaseURL, "postgresql://") {
 		errMsg := "invalid database URL scheme for migrate, ensure it starts with postgresql://"
 		logger.Error(errMsg, slog.String("url", databaseURL))
@@ -78,30 +87,23 @@ func RunMigrations(databaseURL string, logger *slog.Logger) error {
 		return fmt.Errorf("failed to initialize migrate instance: %w", err)
 	}
 
-	err = m.Up() // Apply all pending "up" migrations
+	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
 		logger.Error("Failed to apply migrations", slog.Any("error", err))
 		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
-	// Log current migration status
 	version, dirty, err := m.Version()
 	if err != nil {
 		logger.Warn("Could not determine migration version", slog.Any("error", err))
-		// Don't necessarily fail here, but log it
+	} else if dirty {
+		logger.Error("DATABASE MIGRATION STATE IS DIRTY!", slog.Uint64("version", uint64(version)))
+	} else if err == migrate.ErrNoChange {
+		logger.Info("No new migrations to apply.", slog.Uint64("current_version", uint64(version)))
 	} else {
-		if dirty {
-			// This is a critical state! Might require manual intervention.
-			logger.Error("DATABASE MIGRATION STATE IS DIRTY!", slog.Uint64("version", uint64(version)))
-			// Consider returning an error or panicking in dev?
-			// return fmt.Errorf("database migration state is dirty at version %d", version)
-		} else if err == migrate.ErrNoChange {
-			logger.Info("No new migrations to apply.", slog.Uint64("current_version", uint64(version)))
-		} else {
-			logger.Info("Database migrations applied successfully.", slog.Uint64("new_version", uint64(version)))
-		}
+		logger.Info("Database migrations applied successfully.", slog.Uint64("new_version", uint64(version)))
 	}
-	// Clean up source and database connections used by migrate
+
 	srcErr, dbErr := m.Close()
 	if srcErr != nil {
 		logger.Warn("Error closing migration source", slog.Any("error", srcErr))
@@ -110,7 +112,7 @@ func RunMigrations(databaseURL string, logger *slog.Logger) error {
 		logger.Warn("Error closing migration database connection", slog.Any("error", dbErr))
 	}
 
-	return nil // Return nil if migrations applied or no changes
+	return nil
 }
 
 // NewDatabaseConfig generates the database connection URL from configuration.

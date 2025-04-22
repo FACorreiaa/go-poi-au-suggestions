@@ -1,30 +1,24 @@
 services:
-  postgres: # Service name
+  postgres:
     env_file:
       - .env
-    container_name: postgres-wanderwise # Specific container name
-    # --- USE POSTGIS IMAGE ---
-    # Choose a version tag matching your desired Postgres/PostGIS version
-    # Example: postgis/postgis:16-3.4 uses Postgres 16 and PostGIS 3.4
-    image: postgis/postgis:17-3.5
+    container_name: postgres-wanderwise
+    build:
+      context: . 
+      dockerfile: Dockerfile.pg
     environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-postgres} # Use default if not set
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-      # POSTGRES_HOST_AUTH_METHOD: trust # 'trust' is insecure, avoid in production. Use scram-sha-256 (default) or md5.
     ports:
-      - "5440:5432" # Map host port 5440 to container port 5432
-    restart: unless-stopped # More common than on-failure
+      - "5454:5432"
+    restart: unless-stopped
     volumes:
-      # Use a named volume for persistent data
       - postgres-wanderwise-data:/var/lib/postgresql/data
-      # --- ADD INIT SCRIPT FOR EXTENSIONS ---
-      # Mount a directory containing .sql scripts into the initdb directory
-      # Scripts here run only when the database is first initialized (volume is empty)
       - ./scripts/postgres/init:/docker-entrypoint-initdb.d
     networks:
-      - wanderwise-net 
+      - wanderwise-net
 
 # Define the named volume
 volumes:

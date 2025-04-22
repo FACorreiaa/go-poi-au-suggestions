@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -29,11 +30,13 @@ type AuthRepo interface {
 }
 
 type AuthRepoFactory struct {
+	logger  *slog.Logger
 	pgxpool *pgxpool.Pool
 }
 
-func NewAuthRepoFactory(pgxpool *pgxpool.Pool) *AuthRepoFactory {
+func NewAuthRepoFactory(pgxpool *pgxpool.Pool, logger *slog.Logger) *AuthRepoFactory {
 	return &AuthRepoFactory{
+		logger:  logger,
 		pgxpool: pgxpool,
 	}
 }

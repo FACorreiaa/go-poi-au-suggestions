@@ -35,7 +35,7 @@ repositories:
     #    port: "5432"
     #    host: "postgres"
     password: "postgres"
-    port: "5440"
+    port: "5454"
     host: "localhost"
     username: "postgres"
     db: "wanderwise-ai-dev"

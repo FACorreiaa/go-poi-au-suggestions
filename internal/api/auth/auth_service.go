@@ -1,6 +1,9 @@
 package auth
 
-import "context"
+import (
+	"context"
+	"log/slog"
+)
 
 var _ AuthService = (*IAuthService)(nil)
 
@@ -19,12 +22,14 @@ type AuthService interface {
 }
 
 type IAuthService struct {
-	repo AuthRepo
+	logger *slog.Logger
+	repo   AuthRepo
 }
 
-func NewAuthService(repo AuthRepo) *IAuthService {
+func NewAuthService(repo AuthRepo, logger *slog.Logger) *IAuthService {
 	return &IAuthService{
-		repo: repo,
+		logger: logger,
+		repo:   repo,
 	}
 }
 

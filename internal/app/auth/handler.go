@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-
-	"github.com/gorilla/mux"
 )
 
 // Response is a generic response structure for all API endpoints
@@ -31,16 +29,16 @@ func NewAuthHandler(authService AuthService, logger *slog.Logger) *AuthHandler {
 }
 
 // RegisterRoutes registers all auth routes to the provided router
-func (h *AuthHandler) RegisterRoutes(r *mux.Router) {
-	r.HandleFunc("/auth/login", h.Login).Methods("POST")
-	r.HandleFunc("/auth/logout", h.Logout).Methods("POST")
-	r.HandleFunc("/auth/refresh", h.RefreshToken).Methods("POST")
-	r.HandleFunc("/auth/register", h.Register).Methods("POST")
-	r.HandleFunc("/auth/validate", h.ValidateSession).Methods("POST")
-	r.HandleFunc("/auth/password", h.ChangePassword).Methods("PUT")
-	r.HandleFunc("/auth/email", h.ChangeEmail).Methods("PUT")
-	r.HandleFunc("/auth/password/admin", h.AdminResetUserPassword).Methods("PUT")
-}
+//func (h *AuthHandler) RegisterRoutes(r *mux.Router) {
+//	r.HandleFunc("/auth/login", h.Login).Methods("POST")
+//	r.HandleFunc("/auth/logout", h.Logout).Methods("POST")
+//	r.HandleFunc("/auth/refresh", h.RefreshToken).Methods("POST")
+//	r.HandleFunc("/auth/register", h.Register).Methods("POST")
+//	r.HandleFunc("/auth/validate", h.ValidateSession).Methods("POST")
+//	r.HandleFunc("/auth/password", h.ChangePassword).Methods("PUT")
+//	r.HandleFunc("/auth/email", h.ChangeEmail).Methods("PUT")
+//	r.HandleFunc("/auth/password/admin", h.AdminResetUserPassword).Methods("PUT")
+//}
 
 // LoginRequest represents the login request body
 type LoginRequest struct {
@@ -317,9 +315,9 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
 // ChangeEmailRequest represents the change email request body
 type ChangeEmailRequest struct {
-	Tenant    string `json:"tenant"`
-	Password  string `json:"password"`
-	NewEmail  string `json:"new_email"`
+	Tenant   string `json:"tenant"`
+	Password string `json:"password"`
+	NewEmail string `json:"new_email"`
 }
 
 // ChangeEmail updates a user's email

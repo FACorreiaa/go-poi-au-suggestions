@@ -3,8 +3,6 @@ package auth
 import (
 	"context"
 	"log/slog"
-
-	"github.com/domonda/go-sqldb"
 )
 
 // AuthRepo defines the interface for authentication repository operations

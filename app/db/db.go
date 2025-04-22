@@ -1,4 +1,4 @@
-// internal/platform/database/db.go (or your db package path)
+// Package database internal/platform/database/db.go (or your db package path)
 package database // Assuming package name is database
 
 import (
@@ -10,13 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/config"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	uuid "github.com/vgarvardt/pgx-google-uuid/v5"
+
+	"github.com/FACorreiaa/go-poi-au-suggestions/config"
 )
 
 //go:embed migrations

@@ -49,3 +49,32 @@ CREATE INDEX idx_subscriptions_end_date ON subscriptions (end_date); -- Useful f
 CREATE TRIGGER trigger_set_subscriptions_updated_at
 BEFORE UPDATE ON subscriptions
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE refresh_tokens (
+                                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                                user_id UUID NOT NULL,
+                                token VARCHAR(255) UNIQUE NOT NULL,
+                                expires_at TIMESTAMPTZ NOT NULL,
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                                revoked_at TIMESTAMPTZ,
+                                CONSTRAINT fk_user_refresh_token
+                                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE sessions (
+                          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),         -- Internal row identifier
+                          session_id TEXT UNIQUE NOT NULL,                       -- The secure ID stored in cookie/header (used for lookup)
+                          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- Link to the user
+                          expires_at TIMESTAMPTZ NOT NULL,                       -- When the session automatically becomes invalid
+                          invalidated_at TIMESTAMPTZ,                             -- When the session was manually invalidated (e.g., logout), NULL if still valid until expiry
+                          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),         -- Tracks updates, e.g., extending session activity
+    -- Optional: Add metadata like IP address or User-Agent if needed
+                          ip_address INET,
+                          user_agent TEXT
+);
+
+-- Indexes for efficient lookups and cleanup
+CREATE INDEX idx_sessions_session_id ON sessions (session_id); -- For finding session by its ID
+CREATE INDEX idx_sessions_user_id ON sessions (user_id);       -- For finding sessions by user
+CREATE INDEX idx_sessions_expires_at ON sessions (expires_at); -- For cleaning up expired sessions

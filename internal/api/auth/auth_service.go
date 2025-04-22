@@ -5,85 +5,79 @@ import (
 	"log/slog"
 )
 
-var _ AuthService = (*IAuthService)(nil)
+var _ AuthService = (*AuthServiceImpl)(nil)
 
 type AuthService interface {
-	Login(ctx context.Context, tenant, email, password string) (string, string, error)
-	Logout(ctx context.Context, tenant, sessionID string) error
-	GetSession(ctx context.Context, tenant, sessionID string) (*Session, error)
-	RefreshSession(ctx context.Context, tenant, refreshToken string) (string, string, error) // accessToken, refreshToken, error
-	Register(ctx context.Context, tenant, username, email, password, role string) error
-	ValidateCredentials(ctx context.Context, tenant, email, password string) (bool, error)
-	ValidateSession(ctx context.Context, tenant, sessionID string) (bool, error)
-	GetUserRole(ctx context.Context, tenant, actingAdminID string) (string, error)
-	VerifyPassword(ctx context.Context, tenant, userID, password string) error
-	UpdatePassword(ctx context.Context, tenant, userID, newHashedPassword string) error
-	InvalidateAllUserRefreshTokens(ctx context.Context, tenant, userID string) error
+	Login(ctx context.Context, email, password string) (string, string, error)
+	Logout(ctx context.Context, sessionID string) error
+	GetSession(ctx context.Context, sessionID string) (*Session, error)
+	RefreshSession(ctx context.Context, refreshToken string) (string, string, error) // accessToken, refreshToken, error
+	Register(ctx context.Context, username, email, password string) error
+	ValidateCredentials(ctx context.Context, email, password string) (bool, error)
+	ValidateSession(ctx context.Context, sessionID string) (bool, error)
+	VerifyPassword(ctx context.Context, userID, password string) error
+	UpdatePassword(ctx context.Context, userID, newHashedPassword string) error
+	InvalidateAllUserRefreshTokens(ctx context.Context, userID string) error
 }
 
-type IAuthService struct {
+type AuthServiceImpl struct {
 	logger *slog.Logger
 	repo   AuthRepo
 }
 
-func NewAuthService(repo AuthRepo, logger *slog.Logger) *IAuthService {
-	return &IAuthService{
+func NewAuthService(repo AuthRepo, logger *slog.Logger) *AuthServiceImpl {
+	return &AuthServiceImpl{
 		logger: logger,
 		repo:   repo,
 	}
 }
 
 // GetSession implements AuthService.
-func (i *IAuthService) GetSession(ctx context.Context, tenant string, sessionID string) (*Session, error) {
-	panic("unimplemented")
-}
-
-// GetUserRole implements AuthService.
-func (i *IAuthService) GetUserRole(ctx context.Context, tenant string, actingAdminID string) (string, error) {
-	panic("unimplemented")
+func (a *AuthServiceImpl) GetSession(ctx context.Context, sessionID string) (*Session, error) {
+	return a.repo.GetSession(ctx, sessionID)
 }
 
 // InvalidateAllUserRefreshTokens implements AuthService.
-func (i *IAuthService) InvalidateAllUserRefreshTokens(ctx context.Context, tenant string, userID string) error {
-	panic("unimplemented")
+func (a *AuthServiceImpl) InvalidateAllUserRefreshTokens(ctx context.Context, userID string) error {
+	return a.repo.InvalidateAllUserRefreshTokens(ctx, userID)
 }
 
 // Login implements AuthService.
-func (i *IAuthService) Login(ctx context.Context, tenant string, email string, password string) (string, string, error) {
-	panic("unimplemented")
+func (a *AuthServiceImpl) Login(ctx context.Context, email string, password string) (string, string, error) {
+	return a.repo.Login(ctx, email, password)
 }
 
 // Logout implements AuthService.
-func (i *IAuthService) Logout(ctx context.Context, tenant string, sessionID string) error {
-	panic("unimplemented")
+func (a *AuthServiceImpl) Logout(ctx context.Context, sessionID string) error {
+	return a.repo.Logout(ctx, sessionID)
 }
 
 // RefreshSession implements AuthService.
-func (i *IAuthService) RefreshSession(ctx context.Context, tenant string, refreshToken string) (string, string, error) {
-	panic("unimplemented")
+func (a *AuthServiceImpl) RefreshSession(ctx context.Context, refreshToken string) (string, string, error) {
+	return a.repo.RefreshSession(ctx, refreshToken)
 }
 
 // Register implements AuthService.
-func (i *IAuthService) Register(ctx context.Context, tenant string, username string, email string, password string, role string) error {
-	panic("unimplemented")
+func (a *AuthServiceImpl) Register(ctx context.Context, username string, email string, password string) error {
+	return a.repo.Register(ctx, username, email, password)
 }
 
 // UpdatePassword implements AuthService.
-func (i *IAuthService) UpdatePassword(ctx context.Context, tenant string, userID string, newHashedPassword string) error {
-	panic("unimplemented")
+func (a *AuthServiceImpl) UpdatePassword(ctx context.Context, userID string, newHashedPassword string) error {
+	return a.repo.UpdatePassword(ctx, userID, newHashedPassword)
 }
 
 // ValidateCredentials implements AuthService.
-func (i *IAuthService) ValidateCredentials(ctx context.Context, tenant string, email string, password string) (bool, error) {
-	panic("unimplemented")
+func (a *AuthServiceImpl) ValidateCredentials(ctx context.Context, email string, password string) (bool, error) {
+	return a.repo.ValidateCredentials(ctx, email, password)
 }
 
 // ValidateSession implements AuthService.
-func (i *IAuthService) ValidateSession(ctx context.Context, tenant string, sessionID string) (bool, error) {
-	panic("unimplemented")
+func (a *AuthServiceImpl) ValidateSession(ctx context.Context, sessionID string) (bool, error) {
+	return a.repo.ValidateSession(ctx, sessionID)
 }
 
 // VerifyPassword implements AuthService.
-func (i *IAuthService) VerifyPassword(ctx context.Context, tenant string, userID string, password string) error {
-	panic("unimplemented")
+func (a *AuthServiceImpl) VerifyPassword(ctx context.Context, userID string, password string) error {
+	return a.repo.VerifyPassword(ctx, userID, password)
 }

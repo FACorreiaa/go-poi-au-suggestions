@@ -1,4 +1,3 @@
-// cmd/server/main.go
 package main
 
 import (
@@ -13,17 +12,18 @@ import (
 	"syscall"
 	"time"
 
+	tracing "github.com/FACorreiaa/go-poi-au-suggestions/app/tracer"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	router "github.com/FACorreiaa/go-poi-au-suggestions/internal/router"
 
 	database "github.com/FACorreiaa/go-poi-au-suggestions/app/db"
 	l "github.com/FACorreiaa/go-poi-au-suggestions/app/logger"
 
-	"github.com/go-chi/chi/v5" // Import chi directly
+	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 	"github.com/lmittmann/tint"
 
-	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/app/middleware"
 	"github.com/FACorreiaa/go-poi-au-suggestions/config"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/container"
 )
@@ -43,6 +43,11 @@ func main() {
 	logger := setupLogger()
 	slog.SetDefault(logger)
 
+	// --- Initialize Tracing and Metrics ---
+	tracing.InitTracingAndMetrics() // Call your tracing initialization here
+
+	meter := otel.meter("WanderWiseAI")
+	tracing.InitializeMetrics(meter)
 	// --- Application Context & Shutdown ---
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -53,7 +58,7 @@ func main() {
 		logger.Error("Failed to initialize container", slog.Any("error", err))
 		os.Exit(1)
 	}
-	defer c.Close() // Ensure resources are closed on exit
+	defer c.Close()
 
 	// --- Wait for Database ---
 	if !c.WaitForDB(ctx) {
@@ -71,34 +76,34 @@ func main() {
 	err = c.RunMigrations(dbConfig.ConnectionURL)
 	if err != nil {
 		logger.Error("Failed to run database migrations", slog.Any("error", err))
-		os.Exit(1) // Exit if migrations fail
+		os.Exit(1)
 	}
 
+	authenticateMiddleware := auth.Authenticate(logger, cfg.JWT)
 	// --- Router Setup ---
 	routerConfig := &router.Config{
 		AuthHandler:            c.AuthHandler,
-		AuthenticateMiddleware: appMiddleware.Authenticate, // Your JWT auth middleware
-		// Add other handlers...
+		AuthenticateMiddleware: authenticateMiddleware,
 	}
 	mainRouter := router.SetupRouter(routerConfig)
 
 	// --- Server-Wide Middleware Setup ---
 	rootRouter := chi.NewMux()
+	rootRouter.Use(authenticateMiddleware)
 	rootRouter.Use(chiMiddleware.RequestID)
 	rootRouter.Use(chiMiddleware.RealIP)
-	rootRouter.Use(l.StructuredLogger(logger)) // Your slog middleware
+	rootRouter.Use(l.StructuredLogger(logger))
 	rootRouter.Use(chiMiddleware.Recoverer)
 	rootRouter.Use(chiMiddleware.StripSlashes)
 	rootRouter.Use(chiMiddleware.Timeout(60 * time.Second))
-	rootRouter.Use(chiMiddleware.Compress(5, "application/json")) // Added compress back
-	// Mount your application router under the root router
+	rootRouter.Use(chiMiddleware.Compress(5, "application/json"))
 	rootRouter.Mount("/", mainRouter)
 
 	// --- HTTP Server Setup ---
 	serverAddress := fmt.Sprintf(":%s", cfg.Server.HTTPPort)
 	srv := &http.Server{
 		Addr:         serverAddress,
-		Handler:      rootRouter, // Use the root router
+		Handler:      rootRouter,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -129,7 +134,6 @@ func main() {
 	logger.Info("Application shut down complete.")
 }
 
-// setupLogger function remains the same
 func setupLogger() *slog.Logger {
 	var logger *slog.Logger
 	env := os.Getenv("APP_ENV")

@@ -12,9 +12,29 @@ import (
 //go:embed config.yml
 var embeddedConfig []byte
 
+type JWTConfig struct {
+	// SecretKey is the secret used for signing HS256 tokens. REQUIRED.
+	// Load this from environment variables or a secure secrets manager.
+	SecretKey string `mapstructure:"secret"` // e.g., JWT_SECRET_KEY env var
+
+	// Issuer identifies the principal that issued the JWT. Recommended.
+	Issuer string `mapstructure:"issuer"` // e.g., "wanderwiseai" or your domain
+
+	// Audience identifies the recipients that the JWT is intended for. Recommended.
+	// Often the frontend URL or API identifier.
+	Audience string `mapstructure:"audience"` // e.g., "wanderwiseai-app"
+
+	// AccessTokenTTL defines the duration for which access tokens are valid. REQUIRED.
+	AccessTokenTTL time.Duration `mapstructure:"accessTokenTTL"` // e.g., "15m", "1h"
+
+	// RefreshTokenTTL defines the duration for which refresh tokens are valid. REQUIRED.
+	RefreshTokenTTL time.Duration `mapstructure:"refreshTokenTTL"` // e.g., "7d", "30d"
+}
+
 type Config struct {
-	Mode     string `mapstructure:"mode"`
-	Dotenv   string `mapstructure:"dotenv"`
+	Mode     string    `mapstructure:"mode"`
+	Dotenv   string    `mapstructure:"dotenv"`
+	JWT      JWTConfig `mapstructure:"jwt"`
 	Handlers struct {
 		ExternalAPI struct {
 			Port      string `mapstrucutre:"port"`

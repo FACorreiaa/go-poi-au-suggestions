@@ -8,393 +8,225 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/bcrypt"
 )
 
-var _ AuthRepo = (*AuthRepoFactory)(nil)
+var _ AuthRepo = (*PostgresAuthRepo)(nil)
 
 type AuthRepo interface {
-	Login(ctx context.Context, email, password string) (string, string, error)
-	Logout(ctx context.Context, sessionID string) error
-	GetSession(ctx context.Context, sessionID string) (*Session, error)
-	RefreshSession(ctx context.Context, refreshToken string) (string, string, error) // accessToken, refreshToken, error
-	Register(ctx context.Context, username, email, password string) error
-	ValidateCredentials(ctx context.Context, email, password string) (bool, error)
-	ValidateSession(ctx context.Context, sessionID string) (bool, error)
-	VerifyPassword(ctx context.Context, userID, password string) error
+	// GetUserByEmail fetches user details needed for validation/token generation.
+	GetUserByEmail(ctx context.Context, email string) (*User, error)
+	// GetUserByID fetches user details by ID.
+	GetUserByID(ctx context.Context, userID string) (*User, error)
+	// Register stores a new user with a HASHED password. Returns new user ID.
+	Register(ctx context.Context, username, email, hashedPassword string) (string, error)
+	// VerifyPassword checks if the given password matches the hash for the userID.
+	VerifyPassword(ctx context.Context, userID, password string) error // Password is plain text here
+	// UpdatePassword updates the user's HASHED password.
 	UpdatePassword(ctx context.Context, userID, newHashedPassword string) error
+
+	// --- Refresh Token Handling ---
+	// StoreRefreshToken saves a new refresh token for a user.
+	StoreRefreshToken(ctx context.Context, userID, token string, expiresAt time.Time) error
+	// ValidateRefreshTokenAndGetUserID checks if a refresh token is valid and returns the user ID.
+	ValidateRefreshTokenAndGetUserID(ctx context.Context, refreshToken string) (userID string, err error)
+	// InvalidateRefreshToken marks a specific refresh token as revoked.
+	InvalidateRefreshToken(ctx context.Context, refreshToken string) error
+	// InvalidateAllUserRefreshTokens marks all tokens for a user as revoked.
 	InvalidateAllUserRefreshTokens(ctx context.Context, userID string) error
 }
 
-type AuthRepoFactory struct {
+type PostgresAuthRepo struct {
 	logger *slog.Logger
 	pgpool *pgxpool.Pool
 }
 
-func NewAuthRepoFactory(pgxpool *pgxpool.Pool, logger *slog.Logger) *AuthRepoFactory {
-	return &AuthRepoFactory{
+func NewPostgresAuthRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresAuthRepo {
+	return &PostgresAuthRepo{
 		logger: logger,
 		pgpool: pgxpool,
 	}
 }
 
-// generateRefreshToken creates a random refresh token
-func generateRefreshToken() string {
-	return uuid.NewString()
-}
-
-// Login authenticates a user and returns an access token
-func (r *AuthRepoFactory) Login(ctx context.Context, email, password string) (string, string, error) {
+// GetUserByEmail implements auth.AuthRepo.
+func (r *PostgresAuthRepo) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	var user User
-	err := r.pgpool.QueryRow(ctx,
-		"SELECT id, username, email, password_hash FROM users WHERE email = $1",
-		email).Scan(&user.ID, &user.Username, &user.Email, &user.Password)
+	query := `SELECT id, username, email, password_hash FROM users WHERE email = $1 AND is_active = TRUE`
+	err := r.pgpool.QueryRow(ctx, query, email).Scan(&user.ID, &user.Username, &user.Email, &user.Password)
 	if err != nil {
-		return "", "", fmt.Errorf("user not found: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("user with email %s not found: %w", email, ErrNotFound) // Use a domain error
+		}
+		r.logger.ErrorContext(ctx, "Error fetching user by email", slog.Any("error", err), slog.String("email", email))
+		return nil, fmt.Errorf("database error fetching user: %w", err)
 	}
-
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
-	if err != nil {
-		return "", "", errors.New("invalid credentials")
-	}
-
-	// Generate access token
-	accessToken, err := generateAccessToken(user.ID, user.Username, user.Email)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to generate access token: %w", err)
-	}
-
-	// Generate and store refresh token
-	newRefreshToken := generateRefreshToken()
-	expiresAt := time.Now().Add(7 * 24 * time.Hour) // 7 days
-	_, err = r.pgpool.Exec(ctx,
-		"INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)",
-		user.ID, newRefreshToken, expiresAt)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to store refresh token: %w", err)
-	}
-
-	return accessToken, newRefreshToken, nil // Note: Refresh token not returned due to proto limitation
-}
-
-// SignOut invalidates a user session
-func (r *AuthRepoFactory) Logout(ctx context.Context, sessionID string) error {
-	return r.InvalidateRefreshToken(ctx, sessionID)
-}
-
-// GetSession retrieves a user session
-func (r *AuthRepoFactory) GetSession(ctx context.Context, sessionID string) (*Session, error) {
-	var userID string
-	var expiresAt time.Time
-	var invalidatedAt *time.Time
-
-	err := r.pgpool.QueryRow(ctx,
-		"SELECT user_id, expires_at, invalidated_at FROM sessions WHERE session_id = $1",
-		sessionID).Scan(&userID, &expiresAt, &invalidatedAt)
-	if err != nil {
-		return nil, errors.New("session not found")
-	}
-
-	// Check if session is expired or invalidated
-	if time.Now().After(expiresAt) || (invalidatedAt != nil) {
-		return nil, errors.New("session expired or invalidated")
-	}
-
-	// Session exists in DB but not in Redis, need to fetch user details
-	var user struct {
-		Username string
-		Email    string
-	}
-
-	err = r.pgpool.QueryRow(ctx,
-		"SELECT username, email FROM users WHERE id = $1",
-		userID).Scan(&user.Username, &user.Email)
-	if err != nil {
-		return nil, errors.New("user not found")
-	}
-
-	// Recreate session object
-	session := &Session{
-		ID:       userID,
-		Username: user.Username,
-		Email:    user.Email,
-	}
-
-	return session, nil
-}
-
-// GetUserByID retrieves a user by email
-
-// ValidateCredentials validates user credentials
-func (r *AuthRepoFactory) ValidateCredentials(ctx context.Context, email, password string) (bool, error) {
-	var hashedPassword string
-	err := r.pgpool.QueryRow(ctx,
-		"SELECT password_hash FROM users WHERE email = $1",
-		email).Scan(&hashedPassword)
-	if err != nil {
-		return false, fmt.Errorf("user not found: %w", err)
-	}
-
-	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
-	return err == nil, nil
-}
-
-func (r *AuthRepoFactory) RefreshSession(ctx context.Context, refreshToken string) (string, string, error) {
-
-	var userID string
-	var expiresAt time.Time
-	var invalidatedAt *time.Time
-	err := r.pgpool.QueryRow(ctx,
-		"SELECT user_id, expires_at, revoked_at FROM refresh_tokens WHERE token = $1",
-		refreshToken).Scan(&userID, &expiresAt, &invalidatedAt)
-	if err != nil {
-		return "", "", errors.New("invalid refresh token")
-	}
-
-	if time.Now().After(expiresAt) || invalidatedAt != nil {
-		return "", "", errors.New("refresh token expired or invalidated")
-	}
-
-	var username, email, role string
-	err = r.pgpool.QueryRow(ctx,
-		"SELECT username, email FROM users WHERE id = $1",
-		userID).Scan(&username, &email, &role)
-	if err != nil {
-		return "", "", fmt.Errorf("user not found: %w", err)
-	}
-
-	newAccessToken, err := generateAccessToken(userID, username, email)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to generate access token: %w", err)
-	}
-
-	newRefreshToken := generateRefreshToken()
-	newExpiresAt := time.Now().Add(7 * 24 * time.Hour)
-	_, err = r.pgpool.Exec(ctx,
-		"INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)",
-		userID, newRefreshToken, newExpiresAt)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to store new refresh token: %w", err)
-	}
-
-	_, err = r.pgpool.Exec(ctx,
-		"UPDATE refresh_tokens SET revoked_at = $1 WHERE token = $2",
-		time.Now(), refreshToken)
-	if err != nil {
-		fmt.Printf("Warning: failed to invalidate old refresh token: %v\n", err)
-	}
-
-	return newAccessToken, newRefreshToken, nil
-}
-
-// Register creates a new user in the tenant's database
-func (r *AuthRepoFactory) Register(ctx context.Context, username, email, password string) error {
-
-	var userID string
-	err := r.pgpool.QueryRow(ctx,
-		"SELECT id FROM users WHERE id = $1", userID).Scan(&userID)
-	if err != nil {
-		return fmt.Errorf("studio not found: %w", err)
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("failed to hash password: %w", err)
-	}
-
-	_, err = r.pgpool.Exec(ctx,
-		"INSERT INTO users (id, username, email, password_hash, created_at) VALUES ($1, $2, $3, $4, $5)",
-		userID, username, email, string(hashedPassword), time.Now())
-	if err != nil {
-		return fmt.Errorf("failed to insert user: %w", err)
-	}
-
-	return nil
-}
-
-// ChangePassword updates a user's password
-func (r *AuthRepoFactory) ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error {
-	var userID, hashedPassword string
-	err := r.pgpool.QueryRow(ctx,
-		"SELECT id, password_hash FROM users WHERE email = $1",
-		email).Scan(&userID, &hashedPassword)
-	if err != nil {
-		return fmt.Errorf("user not found: %w", err)
-	}
-
-	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(oldPassword))
-	if err != nil {
-		return errors.New("invalid old password")
-	}
-
-	newHashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("failed to hash new password: %w", err)
-	}
-
-	_, err = r.pgpool.Exec(ctx,
-		"UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3",
-		string(newHashedPassword), time.Now(), userID)
-	if err != nil {
-		return fmt.Errorf("failed to update password: %w", err)
-	}
-
-	// Invalidate all refresh tokens
-	_, err = r.pgpool.Exec(ctx,
-		"UPDATE refresh_tokens SET revoked_at = $1 WHERE user_id = $2 AND revoked_at IS NULL",
-		time.Now(), userID)
-	if err != nil {
-		fmt.Printf("Warning: failed to invalidate refresh tokens: %v\n", err)
-	}
-
-	return nil
-}
-
-// ChangeEmail updates a user's email
-func (r *AuthRepoFactory) ChangeEmail(ctx context.Context, email, password, newEmail string) error {
-	var userID, hashedPassword string
-	err := r.pgpool.QueryRow(ctx,
-		"SELECT id, password_hash FROM users WHERE email = $1",
-		email).Scan(&userID, &hashedPassword)
-	if err != nil {
-		return fmt.Errorf("user not found: %w", err)
-	}
-
-	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
-	if err != nil {
-		return errors.New("invalid credentials")
-	}
-
-	_, err = r.pgpool.Exec(ctx,
-		"UPDATE users SET email = $1, updated_at = $2 WHERE id = $3",
-		newEmail, time.Now(), userID)
-	if err != nil {
-		return fmt.Errorf("failed to update email: %w", err)
-	}
-
-	return nil
-}
-
-func (r *AuthRepoFactory) ValidateSession(ctx context.Context, sessionID string) (bool, error) {
-	var userID string
-	err := r.pgpool.QueryRow(ctx,
-		"SELECT user_id FROM sessions WHERE session_id = $1",
-		sessionID).Scan(&userID)
-	if err != nil {
-		return false, fmt.Errorf("session not found: %w", err)
-	}
-
-	if userID == "" {
-		return false, nil
-	}
-
-	return true, nil
-}
-
-func (r *AuthRepoFactory) GetUserByID(ctx context.Context, userID string) (*User, error) {
-	var user User
-	err := r.pgpool.QueryRow(ctx,
-		"SELECT id, username, email FROM users WHERE id = $1",
-		userID).Scan(&user.ID, &user.Username, &user.Email)
-	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
-	}
-
-	user.CreatedAt = time.Now()
-	user.UpdatedAt = time.Now()
-
 	return &user, nil
 }
 
-func (r *AuthRepoFactory) StoreRefreshToken(ctx context.Context, userID, token string, expiresAt time.Time) error {
-	_, err := r.pgpool.Exec(ctx,
-		`INSERT INTO refresh_tokens (user_id, token, expires_at)
-         VALUES ($1, $2, $3)`,
-		userID, token, expiresAt)
+// GetUserByID implements auth.AuthRepo.
+func (r *PostgresAuthRepo) GetUserByID(ctx context.Context, userID string) (*User, error) {
+	var user User
+	// Select fields needed by token generation or other logic
+	query := `SELECT id, username, email, role FROM users WHERE id = $1 AND is_active = TRUE`
+	err := r.pgpool.QueryRow(ctx, query, userID).Scan(&user.ID, &user.Username, &user.Email)
 	if err != nil {
-		return fmt.Errorf("store refresh token: db insert failed: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("user with ID %s not found: %w", userID, ErrNotFound) // Use a domain error
+		}
+		r.logger.ErrorContext(ctx, "Error fetching user by ID", slog.Any("error", err), slog.String("userID", userID))
+		return nil, fmt.Errorf("database error fetching user by ID: %w", err)
+	}
+	return &user, nil
+}
+
+// Register implements auth.AuthRepo. Expects HASHED password.
+func (r *PostgresAuthRepo) Register(ctx context.Context, username, email, hashedPassword string) (string, error) {
+	tracer := otel.Tracer("MyRESTAPI")
+
+	// Start a span for the repository layer
+	ctx, span := tracer.Start(ctx, "PostgresAuthRepo.Register", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.system", "postgresql"),
+		attribute.String("db.statement", "INSERT INTO users ..."),
+	))
+	defer span.End()
+
+	// Record query start time
+	//startTime := time.Now()
+
+	var userID string
+	query := `INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id`
+	err := r.pgpool.QueryRow(ctx, query, username, email, hashedPassword).Scan(&userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database error")
+		//dbQueryErrorsTotal.Add(ctx, 1)
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+			return "", fmt.Errorf("email or username already exists: %w", ErrConflict)
+		}
+		r.logger.ErrorContext(ctx, "Error inserting user", slog.Any("error", err), slog.String("email", email))
+		return "", fmt.Errorf("database error registering user: %w", err)
+	}
+
+	// Record query duration
+	//duration := time.Since(startTime).Seconds()
+	//dbQueryDurationSeconds.Record(ctx, duration)
+
+	span.SetStatus(codes.Ok, "User inserted into database")
+	return userID, nil
+}
+
+// VerifyPassword implements auth.AuthRepo. Compares plain password to stored hash.
+func (r *PostgresAuthRepo) VerifyPassword(ctx context.Context, userID, password string) error {
+	var storedHash string
+	query := `SELECT password_hash FROM users WHERE id = $1 AND is_active = TRUE`
+	err := r.pgpool.QueryRow(ctx, query, userID).Scan(&storedHash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("user not found: %w", ErrNotFound)
+		}
+		r.logger.ErrorContext(ctx, "Error fetching password hash for verification", slog.Any("error", err), slog.String("userID", userID))
+		return fmt.Errorf("database error verifying password: %w", err)
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password))
+	if err != nil {
+		// Don't log the actual password, but log the failure type
+		l := r.logger.With(slog.String("userID", userID))
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			l.WarnContext(ctx, "Password mismatch during verification")
+			return fmt.Errorf("invalid password: %w", ErrUnauthenticated) // Specific error
+		}
+		l.ErrorContext(ctx, "Error comparing password hash", slog.Any("error", err))
+		return fmt.Errorf("error during password comparison: %w", err)
 	}
 	return nil
 }
 
-func (r *AuthRepoFactory) GetSessionInfoFromRefreshToken(ctx context.Context, refreshToken string) (string, time.Time, *time.Time, error) {
+// UpdatePassword implements auth.AuthRepo. Expects HASHED password.
+func (r *PostgresAuthRepo) UpdatePassword(ctx context.Context, userID, newHashedPassword string) error {
+	query := `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 AND is_active = TRUE`
+	tag, err := r.pgpool.Exec(ctx, query, newHashedPassword, userID)
+	if err != nil {
+		r.logger.ErrorContext(ctx, "Error updating password hash", slog.Any("error", err), slog.String("userID", userID))
+		return fmt.Errorf("database error updating password: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		r.logger.WarnContext(ctx, "User not found or no password change needed during update", slog.String("userID", userID))
+		return fmt.Errorf("user not found or password unchanged: %w", ErrNotFound) // Or a different domain error
+	}
+	return nil
+}
+
+// StoreRefreshToken implements auth.AuthRepo.
+func (r *PostgresAuthRepo) StoreRefreshToken(ctx context.Context, userID, token string, expiresAt time.Time) error {
+	query := `INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`
+	_, err := r.pgpool.Exec(ctx, query, userID, token, expiresAt)
+	if err != nil {
+		r.logger.ErrorContext(ctx, "Error storing refresh token", slog.Any("error", err), slog.String("userID", userID))
+		return fmt.Errorf("database error storing refresh token: %w", err)
+	}
+	return nil
+}
+
+// ValidateRefreshTokenAndGetUserID implements auth.AuthRepo.
+func (r *PostgresAuthRepo) ValidateRefreshTokenAndGetUserID(ctx context.Context, refreshToken string) (string, error) {
 	var userID string
 	var expiresAt time.Time
-	var invalidatedAt *time.Time // Use pointer for nullable timestamp
+	var revokedAt *time.Time // Use pointer for nullable timestamp
 
-	err := r.pgpool.QueryRow(ctx,
-		`SELECT user_id, expires_at, revoked_at
-         FROM refresh_tokens
-         WHERE token = $1`, refreshToken).Scan(&userID, &expiresAt, &invalidatedAt)
-
+	query := `SELECT user_id, expires_at, revoked_at FROM refresh_tokens WHERE token = $1`
+	err := r.pgpool.QueryRow(ctx, query, refreshToken).Scan(&userID, &expiresAt, &revokedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", time.Time{}, nil, errors.New("invalid refresh token")
+			return "", fmt.Errorf("refresh token not found: %w", ErrUnauthenticated)
 		}
-		return "", time.Time{}, nil, fmt.Errorf("get session info: query failed: %w", err)
+		r.logger.ErrorContext(ctx, "Error querying refresh token", slog.Any("error", err))
+		return "", fmt.Errorf("database error validating refresh token: %w", err)
 	}
 
-	return userID, expiresAt, invalidatedAt, nil
+	if revokedAt != nil {
+		return "", fmt.Errorf("refresh token has been revoked: %w", ErrUnauthenticated)
+	}
+	if time.Now().After(expiresAt) {
+		return "", fmt.Errorf("refresh token has expired: %w", ErrUnauthenticated)
+	}
+
+	return userID, nil // Return only the userID
 }
 
-func (r *AuthRepoFactory) InvalidateRefreshToken(ctx context.Context, refreshToken string) error {
-	tag, err := r.pgpool.Exec(ctx,
-		`UPDATE refresh_tokens SET revoked_at = $1
-         WHERE token = $2 AND revoked_at IS NULL`,
-		time.Now(), refreshToken)
-
+// InvalidateRefreshToken implements auth.AuthRepo.
+func (r *PostgresAuthRepo) InvalidateRefreshToken(ctx context.Context, refreshToken string) error {
+	query := `UPDATE refresh_tokens SET revoked_at = NOW() WHERE token = $1 AND revoked_at IS NULL`
+	tag, err := r.pgpool.Exec(ctx, query, refreshToken)
 	if err != nil {
-		return fmt.Errorf("invalidate refresh token: db update failed: %w", err)
+		r.logger.ErrorContext(ctx, "Error invalidating refresh token", slog.Any("error", err))
+		return fmt.Errorf("database error invalidating token: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		// Token was already revoked or didn't exist, not necessarily an error for logout
-		// but could be logged.
-		fmt.Printf("Warning: No refresh token found or already revoked for token: %s\n", refreshToken)
+		r.logger.WarnContext(ctx, "Refresh token not found or already invalidated during invalidation attempt")
+		// Depending on context (e.g., logout), this might not be a critical error
+		// return fmt.Errorf("token not found or already revoked: %w", ErrNotFound)
 	}
 	return nil
 }
 
-func (r *AuthRepoFactory) InvalidateAllUserRefreshTokens(ctx context.Context, userID string) error {
-	_, err := r.pgpool.Exec(ctx,
-		`UPDATE refresh_tokens SET revoked_at = $1
-		 WHERE user_id = $2 AND revoked_at IS NULL`,
-		time.Now(), userID)
+// InvalidateAllUserRefreshTokens implements auth.AuthRepo.
+func (r *PostgresAuthRepo) InvalidateAllUserRefreshTokens(ctx context.Context, userID string) error {
+	query := `UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`
+	_, err := r.pgpool.Exec(ctx, query, userID)
 	if err != nil {
-		return fmt.Errorf("invalidate all tokens: db update failed: %w", err)
+		r.logger.ErrorContext(ctx, "Error invalidating all refresh tokens for user", slog.Any("error", err), slog.String("userID", userID))
+		return fmt.Errorf("database error invalidating tokens: %w", err)
 	}
-	// Log how many were invalidated?
-	return nil
-}
-
-func (r *AuthRepoFactory) VerifyPassword(ctx context.Context, userID, password string) error {
-	var hashedPassword string
-	err := r.pgpool.QueryRow(ctx, "SELECT password_hash FROM users WHERE id = $1", userID).Scan(&hashedPassword)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errors.New("user not found")
-		}
-		return fmt.Errorf("verify password: query failed: %w", err)
-	}
-
-	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
-	if err != nil {
-		return errors.New("invalid password")
-	}
-	return nil
-}
-
-func (r *AuthRepoFactory) UpdatePassword(ctx context.Context, userID, newHashedPassword string) error {
-	tag, err := r.pgpool.Exec(ctx,
-		`UPDATE users SET password_hash = $1, updated_at = $2 WHERE id = $3`,
-		newHashedPassword, time.Now(), userID)
-	if err != nil {
-		return fmt.Errorf("update password: db update failed: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return errors.New("user not found or password unchanged") // Or specific domain error
-	}
+	// Log how many were invalidated? (tag.RowsAffected())
 	return nil
 }

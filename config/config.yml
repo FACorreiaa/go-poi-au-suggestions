@@ -41,6 +41,12 @@ repositories:
     db: "wanderwise-ai-dev"
     SSLMODE: "verify-full"
     MAXCONWAITINGTIME: 10
+jwt:
+  secret: ${JWT_SECRET_KEY}
+  issuer: ""
+  audience: ""
+  accessTokenTTL: 0
+  refreshTokenTTL: 0
   # redis:
   #   host: "redis"
   #   port: "6388"

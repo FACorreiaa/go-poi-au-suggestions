@@ -35,10 +35,10 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	}
 
 	// Initialize repositories
-	authRepo := auth.NewAuthRepoFactory(pool, logger)
+	authRepo := auth.NewPostgresAuthRepo(pool, logger)
 
 	// Initialize services
-	authService := auth.NewAuthService(authRepo, logger)
+	authService := auth.NewAuthService(authRepo, cfg, logger)
 
 	// Initialize handlers
 	authHandler := auth.NewAuthHandler(authService, logger)

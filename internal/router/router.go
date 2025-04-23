@@ -2,13 +2,11 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 
-	// --- OR if handlers/services are directly under internal ---
-	// "github.com/FACorreiaa/WanderWiseAI/internal/auth"
-	// appMiddleware "github.com/FACorreiaa/WanderWiseAI/internal/middleware"
-
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors" // Import CORS middleware if needed
 )
@@ -17,6 +15,7 @@ import (
 type Config struct {
 	AuthHandler            *auth.AuthHandler
 	AuthenticateMiddleware func(http.Handler) http.Handler // Function signature for auth middleware
+	Logger                 *slog.Logger
 	// Add other handlers here as needed
 	// POIHandler *poi.Handler
 	// UserHandler *user.Handler
@@ -53,7 +52,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			// Example: Mount auth routes that don't need the JWT check
 			r.Post("/auth/register", cfg.AuthHandler.Register) // Assuming Register handler exists
 			r.Post("/auth/login", cfg.AuthHandler.Login)
-			r.Post("/auth/refresh", cfg.AuthHandler.RefreshSession) // Assuming RefreshSession exists
+			//r.Post("/auth/refresh", cfg.AuthHandler.RefreshSession) // Assuming RefreshSession exists
 		})
 
 		// --- Protected Routes ---
@@ -64,11 +63,11 @@ func SetupRouter(cfg *Config) chi.Router {
 
 			// Mount protected auth routes
 			r.Post("/auth/logout", cfg.AuthHandler.Logout)
-			r.Get("/auth/session/{sessionID}", cfg.AuthHandler.GetSession)                    // Needs Auth? Usually yes.
-			r.Get("/auth/validate-session", cfg.AuthHandler.ValidateSession)                  // Needs Auth
-			r.Post("/auth/verify-password", cfg.AuthHandler.VerifyPassword)                   // Needs Auth
-			r.Put("/auth/update-password", cfg.AuthHandler.UpdatePassword)                    // Needs Auth (use PUT for update)
-			r.Post("/auth/invalidate-tokens", cfg.AuthHandler.InvalidateAllUserRefreshTokens) // Needs Auth
+			//r.Get("/auth/session/{sessionID}", cfg.AuthHandler.GetSession)                    // Needs Auth? Usually yes.
+			r.Get("/auth/validate-session", cfg.AuthHandler.ValidateSession) // Needs Auth
+			//r.Post("/auth/verify-password", cfg.AuthHandler.VerifyPassword)                   // Needs Auth
+			r.Put("/auth/update-password", cfg.AuthHandler.ChangePassword) // Needs Auth (use PUT for update)
+			//r.Post("/auth/invalidate-tokens", cfg.AuthHandler.InvalidateAllUserRefreshTokens) // Needs Auth
 
 			// Mount other protected resource routes
 			// r.Mount("/users", UserRoutes(cfg.UserHandler)) // Example for user routes
@@ -83,6 +82,25 @@ func SetupRouter(cfg *Config) chi.Router {
 		// 	r.Get("/auth/user-role/{userID}", cfg.AuthHandler.GetUserRole) // Example Admin action
 		// 	// r.Mount("/admin", AdminRoutes(cfg.AdminHandler))
 		// })
+		// --- Premium Routes (Require active premium subscription) ---
+		r.Group(func(r chi.Router) {
+			r.Use(cfg.AuthenticateMiddleware) // Must be authenticated
+			// Apply premium check middleware
+			r.Use(appMiddleware.RequirePlanStatus(
+				cfg.Logger,
+				[]string{"premium_monthly", "premium_annual"}, // List of allowed plans
+				"active", // Required status
+			))
+
+			// Add routes specific to premium users
+			// e.g., advanced filtering endpoint, unlimited list creation, curated guides
+			// r.Get("/pois/advanced-search", cfg.POIHandler.AdvancedSearch)
+			// r.Get("/guides/exclusive/{guideID}", cfg.GuideHandler.GetExclusiveGuide)
+		})
+
+		// --- Admin Routes ---
+		// ... (Apply Authenticate + Admin role check middleware) ...
+
 	})
 
 	return r

@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	tracing "github.com/FACorreiaa/go-poi-au-suggestions/app/tracer"
+	metrics "github.com/FACorreiaa/go-poi-au-suggestions/app/tracer"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	router "github.com/FACorreiaa/go-poi-au-suggestions/internal/router"
 
@@ -44,13 +44,28 @@ func main() {
 	slog.SetDefault(logger)
 
 	// --- Initialize Tracing and Metrics ---
-	tracing.InitTracingAndMetrics() // Call your tracing initialization here
+	// change port
+	otelShutdown, err := metrics.InitOtelProviders("WanderWiseAI", ":9090")
+	if err != nil {
+		logger.Error("Failed to initialize OpenTelemetry providers", slog.Any("error", err))
+		os.Exit(1)
+	}
+	defer func() {
+		// Shutdown OTel at the very end
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelShutdown(shutdownCtx); err != nil {
+			logger.Error("OpenTelemetry shutdown failed", slog.Any("error", err))
+		} else {
+			logger.Info("OpenTelemetry shut down successfully.")
+		}
+	}()
 
-	meter := otel.meter("WanderWiseAI")
-	tracing.InitializeMetrics(meter)
+	metrics.InitAppMetrics()
+
 	// --- Application Context & Shutdown ---
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
+	defer cancel() // Ensure cancel is called eventually
 
 	// --- Initialize Container ---
 	c, err := container.NewContainer(&cfg, logger)

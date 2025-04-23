@@ -1,56 +1,84 @@
 package tracer
 
 import (
-	"log" // For fatal error on metric init failure
+	"log"
+	"sync"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
 
+// AppMetrics holds the application's metric instruments.
+// Make fields public so they can be accessed from other packages.
+type AppMetrics struct {
+	RegisterRequestsTotal   metric.Int64Counter
+	RegisterDurationSeconds metric.Float64Histogram
+	DbQueryDurationSeconds  metric.Float64Histogram
+	DbQueryErrorsTotal      metric.Int64Counter
+	// Add more metrics here (e.g., LoginRequestsTotal, ActiveSessionsGauge)
+}
+
 var (
-	registerRequestsTotal   metric.Int64Counter
-	registerDurationSeconds metric.Float64Histogram
-	dbQueryDurationSeconds  metric.Float64Histogram
-	dbQueryErrorsTotal      metric.Int64Counter
-	// Add other metrics...
+	// Global instance of AppMetrics (initialized once)
+	appMetrics *AppMetrics
+	once       sync.Once
 )
 
-// InitializeMetrics sets up the application's metrics. Call this during startup.
-func InitializeMetrics(meter metric.Meter) { // Pass the meter obtained from MeterProvider
-	var err error
+// InitAppMetrics initializes the global metrics instruments ONLY ONCE.
+// It gets the Meter from the globally configured MeterProvider.
+func InitAppMetrics() {
+	once.Do(func() { // Ensure this only runs once
+		meter := otel.GetMeterProvider().Meter("WanderWiseAI") // Get meter from global provider
+		var err error
+		m := &AppMetrics{}
 
-	registerRequestsTotal, err = meter.Int64Counter(
-		"register_requests_total",
-		metric.WithDescription("Total number of register requests"),
-	)
-	if err != nil {
-		log.Fatalf("Failed to create register_requests_total counter: %v", err)
+		m.RegisterRequestsTotal, err = meter.Int64Counter(
+			"register_requests_total",
+			metric.WithDescription("Total number of register requests completed"), // Clarify description
+			metric.WithUnit("{request}"),                                          // Use semantic units if possible
+		)
+		if err != nil {
+			log.Fatalf("Metrics: Failed to create register_requests_total: %v", err)
+		}
+
+		m.RegisterDurationSeconds, err = meter.Float64Histogram(
+			"register_duration_seconds",
+			metric.WithDescription("Duration of register requests in seconds"),
+			metric.WithUnit("s"),
+		)
+		if err != nil {
+			log.Fatalf("Metrics: Failed to create register_duration_seconds: %v", err)
+		}
+
+		m.DbQueryDurationSeconds, err = meter.Float64Histogram(
+			"db_query_duration_seconds",
+			metric.WithDescription("Duration of database queries in seconds"),
+			metric.WithUnit("s"),
+		)
+		if err != nil {
+			log.Fatalf("Metrics: Failed to create db_query_duration_seconds: %v", err)
+		}
+
+		m.DbQueryErrorsTotal, err = meter.Int64Counter(
+			"db_query_errors_total",
+			metric.WithDescription("Total number of database query errors"),
+			metric.WithUnit("{error}"),
+		)
+		if err != nil {
+			log.Fatalf("Metrics: Failed to create db_query_errors_total: %v", err)
+		}
+
+		log.Println("Application metrics instruments initialized.")
+		appMetrics = m // Assign to global variable
+	})
+}
+
+// Get returns the globally initialized AppMetrics instance.
+// Panics if InitAppMetrics was not called first.
+func Get() *AppMetrics {
+	if appMetrics == nil {
+		// This indicates a programming error - InitAppMetrics must be called at startup.
+		panic("metrics instruments not initialized. Call metrics.InitAppMetrics() first.")
 	}
-
-	registerDurationSeconds, err = meter.Float64Histogram(
-		"register_duration_seconds",
-		metric.WithDescription("Duration of register requests in seconds"),
-		metric.WithUnit("s"), // Specify units
-	)
-	if err != nil {
-		log.Fatalf("Failed to create register_duration_seconds histogram: %v", err)
-	}
-
-	dbQueryDurationSeconds, err = meter.Float64Histogram(
-		"db_query_duration_seconds",
-		metric.WithDescription("Duration of database queries in seconds"),
-		metric.WithUnit("s"), // Specify units
-	)
-	if err != nil {
-		log.Fatalf("Failed to create db_query_duration_seconds histogram: %v", err)
-	}
-
-	dbQueryErrorsTotal, err = meter.Int64Counter(
-		"db_query_errors_total",
-		metric.WithDescription("Total number of database query errors"),
-	)
-	if err != nil {
-		log.Fatalf("Failed to create db_query_errors_total counter: %v", err)
-	}
-
-	log.Println("Application metrics initialized successfully.")
+	return appMetrics
 }

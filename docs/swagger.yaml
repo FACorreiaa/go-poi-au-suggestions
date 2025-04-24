@@ -1,0 +1,308 @@
+basePath: /api/v1        // Base path for all API routes
+definitions:
+  auth.ChangePasswordRequest:
+    properties:
+      new_password:
+        description: User's desired new password.
+        example: NewStr0ngP@ss!
+        minLength: 8
+        type: string
+      old_password:
+        description: User's current password.
+        example: currentPassword123
+        type: string
+    required:
+    - new_password
+    - old_password
+    type: object
+  auth.LoginRequest:
+    properties:
+      email:
+        description: User's email address for login.
+        example: user@example.com
+        type: string
+      password:
+        description: User's password.
+        example: password123
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  auth.LoginResponse:
+    properties:
+      access_token:
+        description: Short-lived JWT access token.
+        example: eyJhbGciOiJI...
+        type: string
+      message:
+        description: Confirmation message.
+        example: Login successful
+        type: string
+      refresh_token:
+        description: Longer-lived refresh token (often set in HttpOnly cookie instead).
+        example: 4f1trt8s...
+        type: string
+    type: object
+  auth.LogoutRequest:
+    properties:
+      refresh_token:
+        description: Refresh token to invalidate.
+        type: string
+    required:
+    - refresh_token
+    type: object
+  auth.RefreshTokenRequest:
+    properties:
+      refresh_token:
+        description: The refresh token obtained during login.
+        example: 4f1trt8s...
+        type: string
+    required:
+    - refresh_token
+    type: object
+  auth.RegisterRequest:
+    properties:
+      email:
+        description: User's email address. Must be unique.
+        example: newuser@example.com
+        type: string
+      password:
+        description: User's desired password (min length 8).
+        example: Str0ngP@ss!
+        minLength: 8
+        type: string
+      role:
+        description: Optional role assignment (defaults server-side if empty).
+        example: user
+        type: string
+      username:
+        description: Desired username. Must be unique.
+        example: testuser
+        type: string
+    required:
+    - email
+    - password
+    - username
+    type: object
+  auth.Response:
+    properties:
+      error:
+        description: Optional error message.
+        example: Resource not found
+        type: string
+      message:
+        description: Optional success message.
+        example: Operation successful
+        type: string
+      success:
+        description: Indicates if the operation was successful.
+        example: true
+        type: boolean
+    type: object
+  auth.TokenResponse:
+    properties:
+      access_token:
+        description: The new short-lived JWT access token.
+        example: eyJhbGciOiJI...
+        type: string
+      refresh_token:
+        description: The *new* longer-lived refresh token (if rotation is enabled,
+          often set in cookie).
+        example: 9a8b7c...
+        type: string
+    type: object
+host: localhost:8000 // Adjust to your actual host/port
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API for personalized city discovery and recommendations.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: WanderWiseAI API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user and returns JWT access and refresh tokens.
+      parameters:
+      - description: Login Credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successful Login
+          schema:
+            $ref: '#/definitions/auth.LoginResponse'
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "401":
+          description: Authentication Failed
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/auth.Response'
+      summary: User Login
+      tags:
+      - Auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Invalidates the user's current session/refresh token. Typically
+        uses Refresh Token from HttpOnly cookie. Body might be empty or contain refresh
+        token if not using cookies.
+      parameters:
+      - description: Logout Request (only needed if sending refresh_token in body)
+        in: body
+        name: token
+        schema:
+          $ref: '#/definitions/auth.LogoutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Logout Successful
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "400":
+          description: Bad Request (e.g., malformed body if used)
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/auth.Response'
+      security:
+      - BearerAuth: []
+      summary: User Logout
+      tags:
+      - Auth
+  /auth/password:
+    put:
+      consumes:
+      - application/json
+      description: Allows an authenticated user to change their own password.
+      parameters:
+      - description: Old and New Passwords
+        in: body
+        name: passwords
+        required: true
+        schema:
+          $ref: '#/definitions/auth.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Password Updated Successfully
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "401":
+          description: Unauthorized (Invalid old password or bad token)
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/auth.Response'
+      security:
+      - BearerAuth: []
+      summary: Change User Password
+      tags:
+      - Auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Provides a new access token using a valid refresh token (typically
+        sent via HttpOnly cookie). Body might be empty or contain refresh token if
+        not using cookies.
+      parameters:
+      - description: Refresh Token Request (only needed if sending refresh_token in
+          body)
+        in: body
+        name: token
+        schema:
+          $ref: '#/definitions/auth.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: New Access Token (Refresh Token set in cookie)
+          schema:
+            $ref: '#/definitions/auth.TokenResponse'
+        "400":
+          description: Bad Request (e.g., missing token)
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "401":
+          description: Invalid or Expired Refresh Token
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/auth.Response'
+      summary: Refresh Access Token
+      tags:
+      - Auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user account.
+      parameters:
+      - description: User Registration Details
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User Registered Successfully
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "409":
+          description: Email or Username already exists
+          schema:
+            $ref: '#/definitions/auth.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/auth.Response'
+      summary: Register New User
+      tags:
+      - Auth
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

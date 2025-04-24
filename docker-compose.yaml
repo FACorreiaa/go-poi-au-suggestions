@@ -11,7 +11,7 @@ services:
   #   env_file:
   #     - .env # Load .env for the Go app container
   #   ports:
-  #     - "${HTTP_PORT}:${HTTP_PORT}"   # Expose API port (e.g., 6666:6666)
+  #     - "${HTTP_PORT}:${HTTP_PORT}"   # Expose API port (e.g., 8000:8000)
   #     - "${METRICS_PORT}:${METRICS_PORT}" # Expose metrics port (e.g., 9090:9090)
   #     - "40000:40000"
   #   volumes:

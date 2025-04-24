@@ -38,10 +38,6 @@ func SetupRouter(cfg *Config) chi.Router {
 	}))
 
 	// Optional: Heartbeat/Health check endpoint (often public)
-	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("pong"))
-	})
 
 	// Group API routes, potentially versioning them
 	r.Route("/api/v1", func(r chi.Router) {

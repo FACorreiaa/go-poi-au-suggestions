@@ -55,7 +55,7 @@ jwt:
 
 #change later
 server:
-  HTTPPort: "6666"
+  HTTPPort: "8000"
   HTTPTimeout: 15s
 # UpstreamServices:
 #   Customer: "http://customer-service:8000"

@@ -12,6 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/FACorreiaa/go-poi-au-suggestions/docs" // Import for swagger docs
+	httpSwagger "github.com/swaggo/http-swagger/v2"
+
 	"github.com/FACorreiaa/go-poi-au-suggestions/app/observability/metrics"
 	"github.com/FACorreiaa/go-poi-au-suggestions/app/observability/tracer"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
@@ -29,6 +32,25 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/container"
 )
 
+// @title           WanderWiseAI API
+// @version         1.0
+// @description     API for personalized city discovery and recommendations.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.url    http://www.swagger.io/support
+// @contact.email  support@swagger.io
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8000 // Adjust to your actual host/port
+// @BasePath  /api/v1        // Base path for all API routes
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
 func main() {
 	// --- Initial Loading ---
 	err := godotenv.Load()
@@ -100,12 +122,13 @@ func main() {
 	routerConfig := &router.Config{
 		AuthHandler:            c.AuthHandler,
 		AuthenticateMiddleware: authenticateMiddleware,
+		Logger:                 logger,
 	}
-	mainRouter := router.SetupRouter(routerConfig)
+	apiRouter := router.SetupRouter(routerConfig)
 
 	// --- Server-Wide Middleware Setup ---
 	rootRouter := chi.NewMux()
-	rootRouter.Use(authenticateMiddleware)
+	//rootRouter.Use(authenticateMiddleware)
 	rootRouter.Use(chiMiddleware.RequestID)
 	rootRouter.Use(chiMiddleware.RealIP)
 	rootRouter.Use(l.StructuredLogger(logger))
@@ -113,7 +136,12 @@ func main() {
 	rootRouter.Use(chiMiddleware.StripSlashes)
 	rootRouter.Use(chiMiddleware.Timeout(60 * time.Second))
 	rootRouter.Use(chiMiddleware.Compress(5, "application/json"))
-	rootRouter.Mount("/", mainRouter)
+	rootRouter.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("pong"))
+	})
+	rootRouter.Get("/swagger/*", httpSwagger.WrapHandler)
+	rootRouter.Mount("/", apiRouter)
 
 	// --- HTTP Server Setup ---
 	serverAddress := fmt.Sprintf(":%s", cfg.Server.HTTPPort)

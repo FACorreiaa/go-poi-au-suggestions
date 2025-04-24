@@ -25,6 +25,18 @@ func NewAuthHandler(authService AuthService, logger *slog.Logger) *AuthHandler {
 	}
 }
 
+// Login godoc
+// @Summary      User Login
+// @Description  Authenticates a user and returns JWT access and refresh tokens.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        credentials body LoginRequest true "Login Credentials"
+// @Success      200 {object} LoginResponse "Successful Login"
+// @Failure      400 {object} Response "Invalid Input"
+// @Failure      401 {object} Response "Authentication Failed"
+// @Failure      500 {object} Response "Internal Server Error"
+// @Router       /auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l := h.logger.With(slog.String("handler", "Login"))
@@ -71,6 +83,18 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	WriteJSONResponse(w, r, http.StatusOK, resp)
 }
 
+// Logout godoc
+// @Summary      User Logout
+// @Description  Invalidates the user's current session/refresh token. Typically uses Refresh Token from HttpOnly cookie. Body might be empty or contain refresh token if not using cookies.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        token body LogoutRequest false "Logout Request (only needed if sending refresh_token in body)"
+// @Success      200 {object} Response "Logout Successful"
+// @Failure      400 {object} Response "Bad Request (e.g., malformed body if used)"
+// @Failure      500 {object} Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /auth/logout [post]
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l := h.logger.With(slog.String("handler", "Logout"))
@@ -115,7 +139,18 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	WriteJSONResponse(w, r, http.StatusOK, Response{Success: true, Message: "Logged out successfully"})
 }
 
-// RefreshToken generates new access and refresh tokens using a valid refresh token
+// RefreshToken godoc
+// @Summary      Refresh Access Token
+// @Description  Provides a new access token using a valid refresh token (typically sent via HttpOnly cookie). Body might be empty or contain refresh token if not using cookies.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        token body RefreshTokenRequest false "Refresh Token Request (only needed if sending refresh_token in body)"
+// @Success      200 {object} TokenResponse "New Access Token (Refresh Token set in cookie)"
+// @Failure      400 {object} Response "Bad Request (e.g., missing token)"
+// @Failure      401 {object} Response "Invalid or Expired Refresh Token"
+// @Failure      500 {object} Response "Internal Server Error"
+// @Router       /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l := h.logger.With(slog.String("handler", "RefreshToken"))
@@ -163,6 +198,18 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Register godoc
+// @Summary      Register New User
+// @Description  Creates a new user account.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        user body RegisterRequest true "User Registration Details"
+// @Success      201 {object} Response "User Registered Successfully"
+// @Failure      400 {object} Response "Invalid Input"
+// @Failure      409 {object} Response "Email or Username already exists"
+// @Failure      500 {object} Response "Internal Server Error"
+// @Router       /auth/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("RegisterHandler").Start(r.Context(), "RegisterHandler", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
@@ -256,6 +303,19 @@ func (h *AuthHandler) ValidateSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ChangePassword godoc
+// @Summary      Change User Password
+// @Description  Allows an authenticated user to change their own password.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        passwords body ChangePasswordRequest true "Old and New Passwords"
+// @Success      200 {object} Response "Password Updated Successfully"
+// @Failure      400 {object} Response "Invalid Input"
+// @Failure      401 {object} Response "Unauthorized (Invalid old password or bad token)"
+// @Failure      500 {object} Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /auth/password [put]
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l := h.logger.With(slog.String("handler", "ChangePassword"))

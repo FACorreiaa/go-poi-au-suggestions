@@ -36,6 +36,18 @@ func Authenticate(logger *slog.Logger, jwtCfg config.JWTConfig) func(next http.H
 			ctx := r.Context()
 			l := logger.With(slog.String("middleware", "Authenticate"))
 
+			// Check if the request is for a public endpoint
+			// Define public routes that do not require authentication
+			publicRoutes := map[string]struct{}{
+				"/api/v1/auth/register": {},
+				"/api/v1/auth/login":    {},
+				"/api/v1/auth/refresh":  {},
+			}
+			if _, isPublic := publicRoutes[r.URL.Path]; isPublic {
+				l.DebugContext(ctx, "Skipping authentication for public route", slog.String("path", r.URL.Path))
+				next.ServeHTTP(w, r)
+				return
+			}
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
 				l.WarnContext(ctx, "Missing Authorization header")

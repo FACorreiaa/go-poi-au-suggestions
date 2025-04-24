@@ -1,4 +1,4 @@
-package tracer
+package metrics
 
 import (
 	"log"

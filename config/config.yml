@@ -1,4 +1,4 @@
-mode: "dev"
+mode: ${APP_ENV}
 dotenv: ".env/dev"
 
 handlers:
@@ -32,8 +32,8 @@ services:
 
 repositories:
   postgres:
-    #    port: "5432"
-    #    host: "postgres"
+    # port: "5432"
+    # host: "postgres-wanderwise"
     password: "postgres"
     port: "5454"
     host: "localhost"
@@ -43,10 +43,10 @@ repositories:
     MAXCONWAITINGTIME: 10
 jwt:
   secret: ${JWT_SECRET_KEY}
-  issuer: ""
-  audience: ""
-  accessTokenTTL: 0
-  refreshTokenTTL: 0
+  issuer: ${JWT_ISSUER}
+  audience: ${JWT_AUDIENCE}
+  accessTokenTTL: 15m # Default value if ENV not set or invalid
+  refreshTokenTTL: 168h # Default value if ENV not set or invalid
   # redis:
   #   host: "redis"
   #   port: "6388"
@@ -66,3 +66,11 @@ server:
 #   Measurement: "http://measurement-service:8000"
 #   Ingredients: "http://ingredients-service:8000"
 #   Meals: "http://meals-service:8000"
+
+otel:
+  serviceName: ${OTEL_SERVICE_NAME}
+  exporterOTLPEndpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+
+# Logging settings (optional)
+logging:
+  level: ${LOG_LEVEL}

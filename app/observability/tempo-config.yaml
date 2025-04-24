@@ -1,0 +1,19 @@
+# observability/tempo-config.yaml (Minimal Example)
+server:
+  http_listen_port: 3200 # Port Tempo listens on for its own API/UI
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc: # Port Tempo receives OTLP traces on (often handled by collector)
+        # http:
+
+storage:
+  trace:
+    backend: local # Use local filesystem for storage
+    local:
+      path: /var/tempo/traces
+
+ingester:
+  trace_idle_period: 10s # How long to keep traces in memory

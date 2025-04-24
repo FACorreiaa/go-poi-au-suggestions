@@ -1,0 +1,43 @@
+# observability/otel-collector-config.yaml
+receivers:
+  otlp:
+    protocols:
+      grpc: # Port 4317
+      http: # Port 4318 (optional)
+
+exporters:
+  debug: # Useful for seeing data flow through the collector
+    verbosity: detailed
+
+  otlp: # Export traces to Tempo
+    endpoint: tempo:4317 # Send traces to Tempo service via gRPC
+    tls:
+      insecure: true # OK for local docker network
+
+  prometheusremotewrite: # Optional: Send metrics to Prometheus/Mimir via remote write
+    endpoint: http://prometheus:9090/api/v1/write
+
+  loki: # Optional: Export logs to Loki
+    endpoint: http://loki:3100/loki/api/v1/push
+
+processors:
+  batch: # Batches spans/metrics/logs before exporting
+  memory_limiter: # Prevents collector from OOMing
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 25
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp, debug] # Send traces to Tempo & debug console
+    metrics:
+      receivers: [otlp] # If sending metrics via OTLP instead of scraping
+      processors: [memory_limiter, batch]
+      exporters: [prometheusremotewrite, debug] # Example sending to Prometheus via PRW
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [loki, debug]

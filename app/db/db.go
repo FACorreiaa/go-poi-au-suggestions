@@ -29,7 +29,7 @@ type DatabaseConfig struct {
 	ConnectionURL string
 }
 
-// WaitForDB waits for the database connection pool to be available.
+// WaitForDB waits for the database connection pool to be available..
 func WaitForDB(ctx context.Context, pgpool *pgxpool.Pool, logger *slog.Logger) bool {
 	maxAttempts := defaultRetries
 	for attempts := 1; attempts <= maxAttempts; attempts++ {

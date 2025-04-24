@@ -38,6 +38,7 @@ func Authenticate(logger *slog.Logger, jwtCfg config.JWTConfig) func(next http.H
 
 			// Check if the request is for a public endpoint
 			// Define public routes that do not require authentication
+			// maybe change later
 			publicRoutes := map[string]struct{}{
 				"/api/v1/auth/register": {},
 				"/api/v1/auth/login":    {},

@@ -12,7 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	metrics "github.com/FACorreiaa/go-poi-au-suggestions/app/tracer"
+	"github.com/FACorreiaa/go-poi-au-suggestions/app/observability/metrics"
+	"github.com/FACorreiaa/go-poi-au-suggestions/app/observability/tracer"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	router "github.com/FACorreiaa/go-poi-au-suggestions/internal/router"
 
@@ -45,7 +46,7 @@ func main() {
 
 	// --- Initialize Tracing and Metrics ---
 	// change port
-	otelShutdown, err := metrics.InitOtelProviders("WanderWiseAI", ":9090")
+	otelShutdown, err := tracer.InitOtelProviders("WanderWiseAI", ":9090")
 	if err != nil {
 		logger.Error("Failed to initialize OpenTelemetry providers", slog.Any("error", err))
 		os.Exit(1)
@@ -68,23 +69,23 @@ func main() {
 	defer cancel() // Ensure cancel is called eventually
 
 	// --- Initialize Container ---
-	c, err := container.NewContainer(&cfg, logger)
+	c, err := container.NewContainer(cfg, logger)
 	if err != nil {
 		logger.Error("Failed to initialize container", slog.Any("error", err))
 		os.Exit(1)
 	}
 	defer c.Close()
 
-	// --- Wait for Database ---
-	if !c.WaitForDB(ctx) {
-		logger.Error("Database not ready after waiting, exiting.")
+	// --- Run Migrations ---
+	dbConfig, err := database.NewDatabaseConfig(cfg, logger)
+	if err != nil {
+		logger.Error("Failed to generate database config", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	// --- Run Migrations ---
-	dbConfig, err := database.NewDatabaseConfig(&cfg, logger)
-	if err != nil {
-		logger.Error("Failed to generate database config", slog.Any("error", err))
+	// --- Wait for Database ---
+	if !c.WaitForDB(ctx) {
+		logger.Error("Database not ready after waiting, exiting.")
 		os.Exit(1)
 	}
 

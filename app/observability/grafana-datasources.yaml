@@ -1,0 +1,48 @@
+# observability/grafana-datasources.yaml
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090 # URL of Prometheus service inside Docker network
+    isDefault: true
+
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200 # URL of Tempo service inside Docker network
+    basicAuth: false
+    jsonData:
+      tracesToLogs: # Optional: Link traces to logs in Loki
+        datasourceUid: "loki" # Must match Loki datasource UID if configured
+        tags: ["job", "instance", "pod", "namespace"] # Example tags to use for linking
+        spanStartTimeShift: "1h"
+        spanEndTimeShift: "1h"
+        filterByTraceID: true
+        filterBySpanID: false
+      tracesToMetrics: # Link traces to metrics in Prometheus
+        datasourceUid: "prometheus" # UID of the Prometheus datasource
+        tags: [{ key: "service.name", value: "service" }, { key: "job" }]
+        queries:
+          - name: "Service graph"
+            query: "rate(traces_spanmetrics_calls_total{$$__tags}[5m])"
+          - name: "Request rate"
+            query: "rate(traces_spanmetrics_latency_count{$$__tags}[5m])"
+          - name: "Error rate"
+            query: 'rate(traces_spanmetrics_latency_count{$$__tags, status_code="error"}[5m])'
+          - name: "Request latency"
+            query: "histogram_quantile(0.9, sum(rate(traces_spanmetrics_latency_bucket{$$__tags}[5m])) by (le))"
+      serviceMap:
+        datasourceUid: "prometheus"
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      derivedFields: # Extract TraceID from logs for linking
+        - datasourceUid: tempo # UID of Tempo datasource
+          matcherRegex: "traceID=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"

@@ -72,7 +72,7 @@ type Config struct {
 	} `mapstructure:"server"`
 }
 
-func InitConfig() (Config, error) {
+func InitConfig() (*Config, error) {
 	var config Config
 	v := viper.New()
 
@@ -82,6 +82,7 @@ func InitConfig() (Config, error) {
 	v.AddConfigPath("/app/config")
 	v.AddConfigPath("/usr/local/bin")
 	v.AddConfigPath("/usr/local/bin/inkme")
+	v.AutomaticEnv()
 
 	v.SetConfigName("config")
 	v.SetConfigType("yml")
@@ -91,14 +92,25 @@ func InitConfig() (Config, error) {
 	if err != nil {
 		fmt.Printf("Warning: Failed to find file-based config: %s. Falling back to embedded config.\n", err)
 		if err = v.ReadConfig(bytes.NewReader(embeddedConfig)); err != nil {
-			return Config{}, fmt.Errorf("failed to read embedded config: %s", err)
+			return nil, fmt.Errorf("failed to read embedded config: %s", err)
 		}
 	}
 
 	// Unmarshal the config into the Config struct
 	if err = v.Unmarshal(&config); err != nil {
-		return Config{}, fmt.Errorf("failed to unmarshal config: %s", err)
+		return nil, fmt.Errorf("failed to unmarshal config: %s", err)
 	}
+
+	if config.JWT.SecretKey == "" {
+		return nil, fmt.Errorf("JWT_SECRET_KEY environment variable is required")
+	}
+	if config.JWT.AccessTokenTTL == 0 {
+		return nil, fmt.Errorf("JWT_ACCESS_TOKEN_TTL environment variable is required and must be a valid duration (e.g., 15m)")
+	}
+	if config.JWT.RefreshTokenTTL == 0 {
+		return nil, fmt.Errorf("JWT_REFRESH_TOKEN_TTL environment variable is required and must be a valid duration (e.g., 168h)")
+	}
+
 	fmt.Println("Successfully loaded app configs...")
-	return config, nil
+	return &config, nil
 }

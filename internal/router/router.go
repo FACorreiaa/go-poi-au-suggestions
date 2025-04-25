@@ -1,14 +1,16 @@
-// internal/api/router.go
+// internal/router/router.go
 package api
 
 import (
 	"log/slog"
 	"net/http"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
-	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors" // Import CORS middleware if needed
+
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 )
 
 // Config contains dependencies needed for the router setup
@@ -18,7 +20,7 @@ type Config struct {
 	Logger                 *slog.Logger
 	// Add other handlers here as needed
 	// POIHandler *poi.Handler
-	// UserHandler *user.Handler
+	UserHandler            *user.UserHandler
 }
 
 // SetupRouter initializes and configures the main application router.
@@ -66,7 +68,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			//r.Post("/auth/invalidate-tokens", cfg.AuthHandler.InvalidateAllUserRefreshTokens) // Needs Auth
 
 			// Mount other protected resource routes
-			// r.Mount("/users", UserRoutes(cfg.UserHandler)) // Example for user routes
+			r.Mount("/user", UserRoutes(cfg.UserHandler)) // User routes
 			// r.Mount("/pois", POIRoutes(cfg.POIHandler))   // Example for POI routes
 		})
 
@@ -98,6 +100,31 @@ func SetupRouter(cfg *Config) chi.Router {
 		// ... (Apply Authenticate + Admin role check middleware) ...
 
 	})
+
+	return r
+}
+
+// UserRoutes creates a router for user-related endpoints
+func UserRoutes(handler *user.UserHandler) http.Handler {
+	r := chi.NewRouter()
+
+	// All user routes require authentication, handled at the parent router level
+
+	// User profile routes
+	r.Get("/profile", handler.GetUserProfile)         // GET http://localhost:8000/api/v1/user/profile
+	r.Put("/profile", handler.UpdateUserProfile)      // PUT http://localhost:8000/api/v1/user/profile
+
+	// User preferences routes
+	r.Get("/preferences", handler.GetUserPreferences) // GET http://localhost:8000/api/v1/user/preferences
+
+	// Interest routes
+	r.Get("/interests", handler.GetAllInterests)      // GET http://localhost:8000/api/v1/user/interests
+	r.Post("/interests", handler.AddUserInterest)     // POST http://localhost:8000/api/v1/user/interests
+	r.Delete("/interests/{interestID}", handler.RemoveUserInterest) // DELETE http://localhost:8000/api/v1/user/interests/{interestID}
+	r.Put("/interests/{interestID}/preference-level", handler.UpdateUserInterestPreferenceLevel) // PUT http://localhost:8000/api/v1/user/interests/{interestID}/preference-level
+
+	// Enhanced interests route
+	r.Get("/enhanced-interests", handler.GetUserEnhancedInterests) // GET http://localhost:8000/api/v1/user/enhanced-interests
 
 	return r
 }

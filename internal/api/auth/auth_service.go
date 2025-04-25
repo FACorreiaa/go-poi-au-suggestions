@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/config"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -29,7 +30,7 @@ type AuthService interface {
 	UpdatePassword(ctx context.Context, userID, oldPassword, newPassword string) error
 	InvalidateAllUserRefreshTokens(ctx context.Context, userID string) error
 	ValidateRefreshToken(ctx context.Context, refreshToken string) (string, error)
-	GetUserByID(ctx context.Context, userID string) (*User, error)
+	GetUserByID(ctx context.Context, userID string) (*api.UserAuth, error)
 	VerifyPassword(ctx context.Context, userID, password string) error
 }
 
@@ -56,20 +57,20 @@ func (s *AuthServiceImpl) Login(ctx context.Context, email, password string) (st
 	if err != nil {
 		l.WarnContext(ctx, "GetUserByEmail failed", slog.Any("error", err))
 		// Don't reveal if user exists or password is wrong
-		return "", "", fmt.Errorf("invalid credentials: %w", ErrUnauthenticated)
+		return "", "", fmt.Errorf("invalid credentials: %w", api.ErrUnauthenticated)
 	}
 
 	// 2. Compare submitted password with stored hash
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
 		l.WarnContext(ctx, "Password comparison failed", slog.String("userID", user.ID))
-		return "", "", fmt.Errorf("invalid credentials: %w", ErrUnauthenticated)
+		return "", "", fmt.Errorf("invalid credentials: %w", api.ErrUnauthenticated)
 	}
 
-	// --- Add Subscription Fetching Here Later ---
-	// sub, err := s.subsRepo.GetCurrentSubscriptionByUserID(ctx, user.ID) ...
+	// --- Add api.Subscription Fetching Here Later ---
+	// sub, err := s.subsRepo.GetCurrentapi.SubscriptionByUserID(ctx, user.ID) ...
 	// For now, create dummy/default sub info for token generation
-	sub := &Subscription{Plan: "free", Status: "active"} // Placeholder
+	sub := &api.Subscription{Plan: "free", Status: "active"} // Placeholder
 
 	// 3. Generate Tokens
 	accessToken, refreshToken, err := s.generateTokens(ctx, user, sub) // Pass user and sub
@@ -150,8 +151,8 @@ func (s *AuthServiceImpl) RefreshSession(ctx context.Context, refreshToken strin
 		return "", "", fmt.Errorf("internal error retrieving user during refresh")
 	}
 
-	// --- Fetch Subscription Here Later ---
-	sub := &Subscription{Plan: "free", Status: "active"} // Placeholder
+	// --- Fetch api.Subscription Here Later ---
+	sub := &api.Subscription{Plan: "free", Status: "active"} // Placeholder
 
 	// 3. Generate NEW tokens
 	newAccessToken, newRefreshToken, err := s.generateTokens(ctx, user, sub)
@@ -203,7 +204,7 @@ func (s *AuthServiceImpl) UpdatePassword(ctx context.Context, userID, oldPasswor
 	err := s.repo.VerifyPassword(ctx, userID, oldPassword)
 	if err != nil {
 		l.WarnContext(ctx, "Old password verification failed", slog.Any("error", err))
-		return fmt.Errorf("incorrect old password: %w", ErrUnauthenticated)
+		return fmt.Errorf("incorrect old password: %w", api.ErrUnauthenticated)
 	}
 
 	// 2. Hash the *new* password
@@ -245,7 +246,7 @@ func (s *AuthServiceImpl) InvalidateAllUserRefreshTokens(ctx context.Context, us
 	return nil
 }
 
-func (s *AuthServiceImpl) GetUserByID(ctx context.Context, userID string) (*User, error) {
+func (s *AuthServiceImpl) GetUserByID(ctx context.Context, userID string) (*api.UserAuth, error) {
 	l := s.logger.With(slog.String("method", "GetUserByID"), slog.String("userID", userID))
 	l.DebugContext(ctx, "Fetching user by ID")
 	user, err := s.repo.GetUserByID(ctx, userID)
@@ -258,7 +259,7 @@ func (s *AuthServiceImpl) GetUserByID(ctx context.Context, userID string) (*User
 }
 
 // --- Internal Helper: generateTokens ---
-func (s *AuthServiceImpl) generateTokens(ctx context.Context, user *User, sub *Subscription) (accessToken string, refreshToken string, err error) {
+func (s *AuthServiceImpl) generateTokens(ctx context.Context, user *api.UserAuth, sub *api.Subscription) (accessToken string, refreshToken string, err error) {
 	l := s.logger.With(slog.String("method", "generateTokens"), slog.String("userID", user.ID))
 
 	// --- Access Token ---
@@ -267,7 +268,7 @@ func (s *AuthServiceImpl) generateTokens(ctx context.Context, user *User, sub *S
 	audience := s.getAudience()
 	secretKeyBytes := []byte(s.getSecretKey())
 
-	accessClaims := &Claims{ // Use your Claims struct
+	accessClaims := &api.Claims{ // Use your Claims struct
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -279,8 +280,8 @@ func (s *AuthServiceImpl) generateTokens(ctx context.Context, user *User, sub *S
 		UserID:   user.ID,
 		Username: user.Username,
 		Email:    user.Email,
-		//SubscriptionPlan:   sub.Plan,   // Add from sub
-		//SubscriptionStatus: sub.Status, // Add from sub
+		//api.SubscriptionPlan:   sub.Plan,   // Add from sub
+		//api.SubscriptionStatus: sub.Status, // Add from sub
 	}
 	accessTokenJWT := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
 	accessToken, err = accessTokenJWT.SignedString(secretKeyBytes)
@@ -346,10 +347,10 @@ func (s *AuthServiceImpl) ValidateRefreshToken(ctx context.Context, refreshToken
 // Implement a dummy for now if needed for compilation
 type dummySubsRepo struct{}
 
-func (d *dummySubsRepo) GetCurrentSubscriptionByUserID(ctx context.Context, userID string) (*Subscription, error) {
-	return &Subscription{Plan: "free", Status: "active"}, nil // Always return free/active
+func (d *dummySubsRepo) GetCurrentSubscriptionByUserID(ctx context.Context, userID string) (*api.Subscription, error) {
+	return &api.Subscription{Plan: "free", Status: "active"}, nil // Always return free/active
 }
 func (d *dummySubsRepo) CreateDefaultSubscription(ctx context.Context, userID string) error {
 	return nil // Do nothing
 }
-func NewDummySubsRepo() SubscriptionRepository { return &dummySubsRepo{} }
+func NewDummySubsRepo() api.SubscriptionRepository { return &dummySubsRepo{} }

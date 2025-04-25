@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -41,7 +42,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l := h.logger.With(slog.String("handler", "Login"))
 
-	var req LoginRequest
+	var req api.LoginRequest
 	if err := DecodeJSONBody(w, r, &req); err != nil {
 		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
 		ErrorResponse(w, r, http.StatusBadRequest, "Invalid request format")
@@ -55,7 +56,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	accessToken, refreshToken, err := h.authService.Login(ctx, req.Email, req.Password)
 	if err != nil {
 		l.WarnContext(ctx, "Service login failed", slog.Any("error", err), slog.String("email", req.Email))
-		if errors.Is(err, ErrUnauthenticated) {
+		if errors.Is(err, api.ErrUnauthenticated) {
 			ErrorResponse(w, r, http.StatusUnauthorized, "Invalid email or password")
 		} else {
 			ErrorResponse(w, r, http.StatusInternalServerError, "Login failed")
@@ -75,7 +76,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Respond with access token only
-	resp := LoginResponse{
+	resp := api.LoginResponse{
 		AccessToken: accessToken,
 		Message:     "Login successful",
 	}
@@ -136,7 +137,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	})
 
 	l.InfoContext(ctx, "Logout processed")
-	WriteJSONResponse(w, r, http.StatusOK, Response{Success: true, Message: "Logged out successfully"})
+	WriteJSONResponse(w, r, http.StatusOK, api.Response{Success: true, Message: "Logged out successfully"})
 }
 
 // RefreshToken godoc
@@ -193,7 +194,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Respond with access token only
-	h.respondWithJSON(w, http.StatusOK, TokenResponse{
+	h.respondWithJSON(w, http.StatusOK, api.TokenResponse{
 		AccessToken: accessToken,
 	})
 }
@@ -222,7 +223,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	// Record start time for duration metric
 	//startTime := time.Now()
 
-	var req RegisterRequest
+	var req api.RegisterRequest
 	if err := DecodeJSONBody(w, r, &req); err != nil {
 		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
 		span.RecordError(err)
@@ -243,7 +244,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		l.ErrorContext(ctx, "Service registration failed", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Registration failed")
-		if errors.Is(err, ErrConflict) {
+		if errors.Is(err, api.ErrConflict) {
 			ErrorResponse(w, r, http.StatusConflict, "Email or username already exists")
 		} else {
 			ErrorResponse(w, r, http.StatusInternalServerError, "Registration failed")
@@ -258,12 +259,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	l.InfoContext(ctx, "User registered successfully", slog.String("email", req.Email))
 	span.SetStatus(codes.Ok, "User registered successfully")
-	WriteJSONResponse(w, r, http.StatusCreated, Response{Success: true, Message: "User registered successfully"})
+	WriteJSONResponse(w, r, http.StatusCreated, api.Response{Success: true, Message: "User registered successfully"})
 }
 
 // ValidateSession checks if a session is valid
 func (h *AuthHandler) ValidateSession(w http.ResponseWriter, r *http.Request) {
-	var req ValidateSessionRequest
+	var req api.ValidateSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondWithError(w, http.StatusBadRequest, "Invalid request payload")
 		return
@@ -279,7 +280,7 @@ func (h *AuthHandler) ValidateSession(w http.ResponseWriter, r *http.Request) {
 	userID, err := h.authService.ValidateRefreshToken(r.Context(), req.SessionID)
 	if err != nil {
 		h.logger.Error("Session validation failed", "error", err)
-		h.respondWithJSON(w, http.StatusOK, ValidateSessionResponse{
+		h.respondWithJSON(w, http.StatusOK, api.ValidateSessionResponse{
 			Valid: false,
 		})
 		return
@@ -288,14 +289,14 @@ func (h *AuthHandler) ValidateSession(w http.ResponseWriter, r *http.Request) {
 	user, err := h.authService.GetUserByID(r.Context(), userID)
 	if err != nil {
 		h.logger.Error("Failed to get user details", "error", err)
-		h.respondWithJSON(w, http.StatusOK, ValidateSessionResponse{
+		h.respondWithJSON(w, http.StatusOK, api.ValidateSessionResponse{
 			Valid: false,
 		})
 		return
 	}
 
 	// Respond with session info
-	h.respondWithJSON(w, http.StatusOK, ValidateSessionResponse{
+	h.respondWithJSON(w, http.StatusOK, api.ValidateSessionResponse{
 		Valid:    true,
 		UserID:   user.ID,
 		Username: user.Username,
@@ -329,7 +330,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	l = l.With(slog.String("userID", userID))
 
-	var req ChangePasswordRequest
+	var req api.ChangePasswordRequest
 	if err := DecodeJSONBody(w, r, &req); err != nil {
 		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
 		ErrorResponse(w, r, http.StatusBadRequest, "Invalid request format")
@@ -349,7 +350,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	err := h.authService.UpdatePassword(ctx, userID, req.OldPassword, req.NewPassword)
 	if err != nil {
 		l.ErrorContext(ctx, "Service password update failed", slog.Any("error", err))
-		if errors.Is(err, ErrUnauthenticated) { // Check if service returned this
+		if errors.Is(err, api.ErrUnauthenticated) { // Check if service returned this
 			ErrorResponse(w, r, http.StatusUnauthorized, "Incorrect old password")
 		} else {
 			ErrorResponse(w, r, http.StatusInternalServerError, "Failed to update password")
@@ -358,12 +359,12 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l.InfoContext(ctx, "Password updated successfully")
-	WriteJSONResponse(w, r, http.StatusOK, Response{Success: true, Message: "Password updated successfully"})
+	WriteJSONResponse(w, r, http.StatusOK, api.Response{Success: true, Message: "Password updated successfully"})
 }
 
 // ChangeEmail updates a user's email
 func (h *AuthHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) {
-	var req ChangeEmailRequest
+	var req api.ChangeEmailRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondWithError(w, http.StatusBadRequest, "Invalid request payload")
 		return
@@ -400,7 +401,7 @@ func (h *AuthHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) {
 // Helper functions for response handling
 
 func (h *AuthHandler) respondWithError(w http.ResponseWriter, code int, message string) {
-	h.respondWithJSON(w, code, Response{
+	h.respondWithJSON(w, code, api.Response{
 		Success: false,
 		Error:   message,
 	})
@@ -433,7 +434,7 @@ func (h *AuthHandler) RefreshSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l := h.logger.With(slog.String("handler", "RefreshSession"))
 
-	var req RefreshTokenRequest
+	var req api.RefreshTokenRequest
 	if err := DecodeJSONBody(w, r, &req); err != nil || req.RefreshToken == "" {
 		l.WarnContext(ctx, "Missing refresh token for refresh", slog.Any("error", err))
 		ErrorResponse(w, r, http.StatusBadRequest, "Refresh token required")
@@ -460,7 +461,7 @@ func (h *AuthHandler) RefreshSession(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   int((7 * 24 * time.Hour).Seconds()), // Match your refresh token TTL
 	})
 
-	resp := TokenResponse{
+	resp := api.TokenResponse{
 		AccessToken: newAccessToken,
 	}
 	l.InfoContext(ctx, "Token refresh successful")

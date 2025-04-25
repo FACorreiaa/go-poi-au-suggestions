@@ -4,7 +4,9 @@ CREATE TABLE interests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name CITEXT UNIQUE NOT NULL, -- 'History', 'Art', 'Foodie', 'Nightlife', 'Outdoors', 'Coffee', 'Museums', 'Shopping' etc.
     description TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    active bool,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ
     -- No updated_at needed if these are relatively static
 );
 

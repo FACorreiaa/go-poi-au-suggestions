@@ -29,7 +29,7 @@ services:
     container_name: postgres-wanderwise
     build:
       context: . 
-      dockerfile: Dockerfile.pg
+      dockerfile: postgres.Dockerfile
     env_file:
       - .env # Load .env for postgres container setup (POSTGRES_DB etc)
     environment:

@@ -37,6 +37,23 @@ CREATE TABLE user_interests (
 -- Index for finding users by interest or interests by user
 CREATE INDEX idx_user_interests_interest_id ON user_interests (interest_id);
 
+CREATE TABLE user_custom_interests (
+                                       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                                       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                                       name TEXT NOT NULL, -- Maybe CITEXT
+                                       description TEXT,
+                                       active BOOLEAN NOT NULL DEFAULT TRUE,
+    -- preference_level INTEGER DEFAULT 1 CHECK (preference_level >= 0), -- Store level here?
+                                       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                                       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Constraint to prevent duplicate names *per user*
+                                       CONSTRAINT unique_user_custom_interest_name UNIQUE (user_id, name)
+);
+CREATE INDEX idx_user_custom_interests_user_id ON user_custom_interests (user_id);
+
+CREATE TRIGGER trigger_set_user_custom_interests_updated_at
+    BEFORE UPDATE ON user_custom_interests
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- Join table for Users saving Points of Interest (Many-to-Many)
 CREATE TABLE saved_pois (

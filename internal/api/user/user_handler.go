@@ -589,3 +589,95 @@ type CreateInterestRequest struct {
 type UpdatePreferenceLevelRequest struct {
 	PreferenceLevel int `json:"preference_level" binding:"required" example:"2"`
 }
+
+type UpdateInterestRequest struct {
+	ID          string  `json:"interest_id" binding:"required" example:"d290f1ee-6c54-4b01-90e6-d701748f0851"`
+	Name        string  `json:"name" binding:"required" example:"Hiking"`
+	Description *string `json:"description,omitempty" example:"Outdoor hiking activities"`
+	Active      bool    `json:"active" example:"true"`
+}
+
+// UpdateInterest godoc
+// @Summary      Update Interest
+// @Description  Updates an existing interest with new details
+// @Tags         User
+// @Accept       json
+// @Produce      json
+// @Param        interest body UpdateInterestRequest true "Interest details to update"
+// @Success      200 {object} api.Response "Interest updated successfully"
+// @Failure      400 {object} api.Response "Invalid Input"
+// @Failure      401 {object} api.Response "Unauthorized"
+// @Failure      404 {object} api.Response "Interest Not Found"
+// @Failure      409 {object} api.Response "Interest Name Already Exists"
+// @Failure      500 {object} api.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /user/interests [put]
+//func (h *UserHandler) UpdateInterest(w http.ResponseWriter, r *http.Request) {
+//	ctx, span := otel.Tracer("UserHandler").Start(r.Context(), "UpdateInterest", trace.WithAttributes(
+//		semconv.HTTPRequestMethodKey.String(r.Method),
+//		semconv.HTTPRouteKey.String("/user/interests"),
+//	))
+//	defer span.End()
+//
+//	l := h.logger.With(slog.String("handler", "UpdateInterest"))
+//
+//	// Get UserID from context (set by Authenticate middleware)
+//	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+//	if !ok || userIDStr == "" {
+//		l.ErrorContext(ctx, "User ID not found in context")
+//		span.SetStatus(codes.Error, "User ID not found in context")
+//		auth.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+//		return
+//	}
+//
+//	// Parse request body
+//	var req UpdateInterestRequest
+//	if err := auth.DecodeJSONBody(w, r, &req); err != nil {
+//		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
+//		span.RecordError(err)
+//		span.SetStatus(codes.Error, "Failed to decode request")
+//		auth.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request format")
+//		return
+//	}
+//
+//	// Validate request
+//	if req.Name == "" {
+//		l.WarnContext(ctx, "Interest name is required")
+//		span.SetStatus(codes.Error, "Interest name is required")
+//		auth.ErrorResponse(w, r, http.StatusBadRequest, "Interest name is required")
+//		return
+//	}
+//
+//	interestIDStr := chi.URLParam(r, "interestID")
+//	interestID, err := uuid.Parse(interestIDStr)
+//	if err != nil {
+//		l.WarnContext(ctx, "Invalid interest ID format", slog.Any("error", err))
+//		span.RecordError(err)
+//		span.SetStatus(codes.Error, "Invalid interest ID format")
+//		auth.ErrorResponse(w, r, http.StatusBadRequest, "Invalid interest ID format")
+//		return
+//	}
+//
+//	// Call service to update interest
+//	err = h.userService.UpdateUserInterest(ctx, interestID, req.Name, req.Description, req.Active)
+//	if err != nil {
+//		l.ErrorContext(ctx, "Failed to update interest", slog.Any("error", err))
+//		span.RecordError(err)
+//		span.SetStatus(codes.Error, "Failed to update interest")
+//
+//		if errors.Is(err, api.ErrNotFound) {
+//			auth.ErrorResponse(w, r, http.StatusNotFound, "Interest not found")
+//		} else if errors.Is(err, api.ErrConflict) {
+//			auth.ErrorResponse(w, r, http.StatusConflict, "Interest with this name already exists")
+//		} else {
+//			auth.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to update interest")
+//		}
+//		return
+//	}
+//
+//	span.SetStatus(codes.Ok, "Interest updated successfully")
+//	auth.WriteJSONResponse(w, r, http.StatusOK, api.Response{
+//		Success: true,
+//		Message: "Interest updated successfully",
+//	})
+//}

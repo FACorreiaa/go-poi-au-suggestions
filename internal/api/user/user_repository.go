@@ -43,7 +43,7 @@ type UserRepo interface {
 	AddUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	GetAllInterests(ctx context.Context) ([]api.Interest, error) // Fetches from global interests table
-
+	// UpdateUserInterest(ctx context.Context, interestID uuid.UUID, name string, description *string, isActive bool) error
 	// UpdateUserInterestPreferenceLevel updates the preference level for a user interest
 	UpdateUserInterestPreferenceLevel(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, preferenceLevel int) error
 
@@ -555,6 +555,44 @@ func (r *PostgresUserRepo) GetAllInterests(ctx context.Context) ([]api.Interest,
 	span.SetStatus(codes.Ok, "Interests fetched")
 	return interests, nil
 }
+
+//func (r *PostgresUserRepo) UpdateUserInterest(ctx context.Context, interestID uuid.UUID, name string, description *string, isActive bool) error {
+//	// Add tracing/logging as needed
+//	l := r.logger.With(slog.String("method", "UpdateInterest"), slog.String("interestID", interestID.String()))
+//	l.DebugContext(ctx, "Updating global interest details")
+//
+//	if name == "" {
+//		return errors.New("interest name cannot be empty")
+//	}
+//
+//	query := `
+//        UPDATE interests
+//        SET name = $1,
+//            description = $2,
+//            active = $3,
+//            updated_at = NOW()
+//        WHERE id = $4`
+//
+//	tag, err := r.pgpool.Exec(ctx, query, name, description, isActive, interestID)
+//	if err != nil {
+//		// Check for unique constraint violation on name
+//		var pgErr *pgconn.PgError
+//		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+//			l.WarnContext(ctx, "Attempted to update interest with duplicate name", slog.Any("error", err))
+//			return fmt.Errorf("interest with name '%s' already exists: %w", name, api.ErrConflict)
+//		}
+//		l.ErrorContext(ctx, "Failed to update interest", slog.Any("error", err))
+//		return fmt.Errorf("database error updating interest: %w", err)
+//	}
+//
+//	if tag.RowsAffected() == 0 {
+//		l.WarnContext(ctx, "Interest not found for update")
+//		return fmt.Errorf("interest with ID %s not found: %w", interestID.String(), api.ErrNotFound)
+//	}
+//
+//	l.InfoContext(ctx, "Global interest updated successfully")
+//	return nil
+//}
 
 // UpdateUserInterestPreferenceLevel implements user.UserRepo.
 func (r *PostgresUserRepo) UpdateUserInterestPreferenceLevel(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, preferenceLevel int) error {

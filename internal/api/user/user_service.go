@@ -29,6 +29,7 @@ type UserService interface {
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	GetAllInterests(ctx context.Context) ([]api.Interest, error)
 	CreateInterest(ctx context.Context, name string, description *string, isActive bool) (*api.Interest, error)
+	// UpdateUserInterest(ctx context.Context, id uuid.UUID, name string, description *string, isActive bool) error
 	UpdateUserInterestPreferenceLevel(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, preferenceLevel int) error
 	GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]api.EnhancedInterest, error)
 
@@ -145,6 +146,29 @@ func (s *UserServiceImpl) CreateInterest(ctx context.Context, name string, descr
 	span.SetStatus(codes.Ok, "User interest created successfully")
 	return interest, nil
 }
+
+//func (s *UserServiceImpl) UpdateUserInterest(ctx context.Context, id uuid.UUID, name string, description *string, isActive bool) error {
+//	ctx, span := otel.Tracer("UserService").Start(ctx, "UpdateUserInterest", trace.WithAttributes(
+//		attribute.String("id", id.String()),
+//		attribute.String("name", name),
+//	))
+//	defer span.End()
+//
+//	l := s.logger.With(slog.String("method", "UpdateUserInterest"),
+//		slog.String("id", id.String()), slog.String("name", name))
+//	l.DebugContext(ctx, "Updating user interest")
+//
+//	err := s.repo.UpdateUserInterest(ctx, id, name, description, isActive)
+//	if err != nil {
+//		l.ErrorContext(ctx, "Failed to update user interest", slog.Any("error", err))
+//		span.RecordError(err)
+//		span.SetStatus(codes.Error, "Failed to update user interest")
+//		return fmt.Errorf("error updating user interest: %w", err)
+//	}
+//	l.InfoContext(ctx, "User interest updated successfully")
+//	span.SetStatus(codes.Ok, "User interest updated successfully")
+//	return nil
+//}
 
 // AddUserInterest adds an interest to a user's preferences.
 func (s *UserServiceImpl) AddUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {

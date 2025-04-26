@@ -116,9 +116,10 @@ func UserRoutes(handler *user.UserHandler) http.Handler {
 	r.Get("/preferences", handler.GetUserPreferences) // GET http://localhost:8000/api/v1/user/preferences
 
 	// Interest routes
-	r.Get("/interests", handler.GetAllInterests)                                                 // GET http://localhost:8000/api/v1/user/interests
-	r.Post("/interests", handler.AddUserInterest)                                                // POST http://localhost:8000/api/v1/user/interests
-	r.Post("/interests/create", handler.CreateInterest)                                          // POST http://localhost:8000/api/v1/user/interests/create
+	r.Get("/interests", handler.GetAllInterests)  // GET http://localhost:8000/api/v1/user/interests
+	r.Post("/interests", handler.AddUserInterest) // POST http://localhost:8000/api/v1/user/interests
+	r.Post("/interests/create", handler.CreateInterest)
+	//r.Put("/interests/{interestID}", handler.UpdateInterest)                                     // POST http://localhost:8000/api/v1/user/interests/create
 	r.Delete("/interests/{interestID}", handler.RemoveUserInterest)                              // DELETE http://localhost:8000/api/v1/user/interests/{interestID}
 	r.Put("/interests/{interestID}/preference-level", handler.UpdateUserInterestPreferenceLevel) // PUT http://localhost:8000/api/v1/user/interests/{interestID}/preference-level
 

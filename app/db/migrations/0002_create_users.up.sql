@@ -3,6 +3,12 @@ CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email CITEXT UNIQUE NOT NULL,           -- Login identifier, case-insensitive
     username CITEXT UNIQUE,                  -- Optional display name, case-insensitive
+    firstname CITEXT,
+    lastname CITEXT,
+    age int,
+    city CITEXT,
+    country CITEXT,
+    about_you TEXT,
     password_hash TEXT NOT NULL,            -- Store hashed passwords only!
     display_name TEXT,                      -- Fallback display name if username is null
     profile_image_url TEXT,                 -- URL to user's avatar

@@ -39,6 +39,7 @@ type UserRepo interface {
 	// GetUserPreferences --- Preferences / Interests ---
 
 	GetUserPreferences(ctx context.Context, userID uuid.UUID) ([]api.Interest, error) // Fetches from user_interests join
+	CreateInterest(ctx context.Context, name string, description *string, isActive bool) (*api.Interest, error)
 	AddUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	GetAllInterests(ctx context.Context) ([]api.Interest, error) // Fetches from global interests table
@@ -150,9 +151,24 @@ func (r *PostgresUserRepo) ChangePassword(ctx context.Context, email, oldPasswor
 
 func (r *PostgresUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*api.UserProfile, error) {
 	var user api.UserProfile
+	query := `
+		SELECT username, firstname, lastname, age, city, 
+		       country, email, display_name, profile_image_url, 
+		       email_verified_at, about_you FROM users WHERE id = $1
+	`
 	err := r.pgpool.QueryRow(ctx,
-		"SELECT username, email, display_name, profile_image_url, email_verified_at FROM users WHERE id = $1",
-		userID).Scan(&user.Username, &user.Email, &user.DisplayName, &user.ProfileImageURL, &user.EmailVerifiedAt)
+		query,
+		userID).Scan(&user.Username,
+		&user.Firstname,
+		&user.Lastname,
+		&user.Age,
+		&user.City,
+		&user.Country,
+		&user.Email,
+		&user.DisplayName,
+		&user.ProfileImageURL,
+		&user.EmailVerifiedAt,
+		&user.AboutYou)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
@@ -161,12 +177,135 @@ func (r *PostgresUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*
 }
 
 func (r *PostgresUserRepo) UpdateProfile(ctx context.Context, userID uuid.UUID, params api.UpdateProfileParams) error {
-	_, err := r.pgpool.Exec(ctx,
-		"UPDATE users SET username = $1, email = $2, display_name = $3, profile_image_url = $4, updated_at = $5 WHERE id = $6",
-		params.Username, params.Email, params.DisplayName, params.ProfileImageURL, time.Now(), userID)
-	if err != nil {
-		return fmt.Errorf("failed to update profile: %w", err)
+	ctx, span := otel.Tracer("UserRepo").Start(ctx, "UpdateProfile", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "UPDATE"),
+		attribute.String("db.sql.table", "users"),
+		attribute.String("db.user.id", userID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "UpdateProfile"), slog.String("userID", userID.String()))
+	l.DebugContext(ctx, "Updating user profile", slog.Any("params", params)) // Log incoming params
+
+	// Use squirrel or build query dynamically
+	var setClauses []string
+	var args []interface{}
+	argID := 1 // Argument counter for placeholders ($1, $2, ...)
+
+	// Check each field in params. If not nil, add to SET clause and args slice.
+	if params.Username != nil {
+		setClauses = append(setClauses, fmt.Sprintf("username = $%d", argID))
+		args = append(args, *params.Username)
+		argID++
+		span.SetAttributes(attribute.Bool("update.username", true)) // Add trace attribute
 	}
+	if params.Email != nil {
+		setClauses = append(setClauses, fmt.Sprintf("email = $%d", argID))
+		args = append(args, *params.Email)
+		argID++
+		span.SetAttributes(attribute.Bool("update.email", true))
+	}
+	if params.DisplayName != nil {
+		setClauses = append(setClauses, fmt.Sprintf("display_name = $%d", argID))
+		args = append(args, *params.DisplayName)
+		argID++
+		span.SetAttributes(attribute.Bool("update.display_name", true))
+	}
+	if params.ProfileImageURL != nil {
+		setClauses = append(setClauses, fmt.Sprintf("profile_image_url = $%d", argID))
+		args = append(args, *params.ProfileImageURL)
+		argID++
+		span.SetAttributes(attribute.Bool("update.profile_image_url", true))
+	}
+	if params.Firstname != nil {
+		setClauses = append(setClauses, fmt.Sprintf("firstname = $%d", argID))
+		args = append(args, *params.Firstname)
+		argID++
+		span.SetAttributes(attribute.Bool("update.firstname", true))
+	}
+	if params.Lastname != nil {
+		setClauses = append(setClauses, fmt.Sprintf("lastname = $%d", argID))
+		args = append(args, *params.Lastname)
+		argID++
+		span.SetAttributes(attribute.Bool("update.lastname", true))
+	}
+	if params.Age != nil {
+		setClauses = append(setClauses, fmt.Sprintf("age = $%d", argID))
+		args = append(args, *params.Age)
+		argID++
+		span.SetAttributes(attribute.Bool("update.age", true))
+	}
+	if params.City != nil {
+		setClauses = append(setClauses, fmt.Sprintf("city = $%d", argID))
+		args = append(args, *params.City)
+		argID++
+		span.SetAttributes(attribute.Bool("update.city", true))
+	}
+	if params.Country != nil {
+		setClauses = append(setClauses, fmt.Sprintf("country = $%d", argID))
+		args = append(args, *params.Country)
+		argID++
+		span.SetAttributes(attribute.Bool("update.country", true))
+	}
+	if params.AboutYou != nil {
+		setClauses = append(setClauses, fmt.Sprintf("about_you = $%d", argID))
+		args = append(args, *params.AboutYou)
+		argID++
+		span.SetAttributes(attribute.Bool("update.about_you", true))
+	}
+
+	// If no fields were provided to update, return early (or error?)
+	if len(setClauses) == 0 {
+		l.WarnContext(ctx, "UpdateProfile called with no fields to update")
+		span.SetStatus(codes.Ok, "No update fields provided") // Not an error, just no-op
+		return nil                                            // Or return specific error api.ErrBadRequest("no update fields provided")
+	}
+
+	// Add updated_at clause (always update this if other fields change)
+	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argID))
+	args = append(args, time.Now())
+	argID++
+
+	// Final WHERE clause argument
+	args = append(args, userID)
+
+	// Construct the final query
+	query := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d AND is_active = TRUE",
+		strings.Join(setClauses, ", "), // e.g., "username = $1, age = $2, updated_at = $3"
+		argID,                          // The placeholder for userID
+	)
+
+	l.DebugContext(ctx, "Executing dynamic update query", slog.String("query", query), slog.Int("arg_count", len(args)))
+
+	// Execute the dynamic query
+	tag, err := r.pgpool.Exec(ctx, query, args...)
+	if err != nil {
+		// Add specific error checking (e.g., unique constraint violations on email/username if updated)
+		l.ErrorContext(ctx, "Failed to execute update profile query", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB UPDATE failed")
+		return fmt.Errorf("database error updating profile: %w", err)
+	}
+
+	// Check if the user existed and was updated
+	if tag.RowsAffected() == 0 {
+		l.WarnContext(ctx, "User not found or no update occurred", slog.Int64("rows_affected", tag.RowsAffected()))
+		span.SetStatus(codes.Error, "User not found or no change")
+		// Check if user exists to differentiate "not found" vs "no effective change"
+		var exists bool
+		// Use a separate query or modify the UPDATE to return something on match
+		checkErr := r.pgpool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND is_active = TRUE)", userID).Scan(&exists)
+		if checkErr == nil && !exists {
+			return fmt.Errorf("user not found for update: %w", api.ErrNotFound)
+		}
+		// If user exists, maybe the provided values were the same as existing ones.
+		// Or maybe user was inactive. Treat as not found for simplicity for now.
+		return fmt.Errorf("user not found or update failed: %w", api.ErrNotFound)
+	}
+
+	l.InfoContext(ctx, "User profile updated successfully")
+	span.SetStatus(codes.Ok, "Profile updated")
 	return nil
 }
 
@@ -225,6 +364,66 @@ func (r *PostgresUserRepo) GetUserPreferences(ctx context.Context, userID uuid.U
 	return interests, nil
 }
 
+// CreateInterest implements user.CreateInterest
+func (r *PostgresUserRepo) CreateInterest(ctx context.Context, name string, description *string, isActive bool) (*api.Interest, error) {
+	ctx, span := otel.Tracer("UserRepo").Start(ctx, "CreateInterest", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "INSERT"),
+		attribute.String("db.sql.table", "interests"),
+		attribute.String("interest.name", name), // Add relevant attributes
+		attribute.Bool("interest.active", isActive),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "CreateInterest"), slog.String("name", name))
+	l.DebugContext(ctx, "Creating new global interest")
+
+	// Input validation basic check
+	if name == "" {
+		span.SetStatus(codes.Error, "Interest name cannot be empty")
+		return nil, fmt.Errorf("interest name cannot be empty: %w", api.ErrBadRequest) // Example domain error
+	}
+
+	var interest api.Interest
+	query := `
+        INSERT INTO interests (name, description, active, created_at, updated_at)
+        VALUES ($1, $2, $3, Now(), Now())
+        RETURNING id, name, description, active, created_at, updated_at`
+
+	// Note: Use current time for both created_at (via DEFAULT) and updated_at on insert
+	err := r.pgpool.QueryRow(ctx, query, name, description, isActive).Scan(
+		&interest.ID,
+		&interest.Name,
+		&interest.Description,
+		&interest.Active,
+		&interest.CreatedAt,
+		&interest.UpdatedAt, // Scan the updated_at timestamp set by the query
+	)
+
+	// TODO also add to user_interests
+
+	if err != nil {
+		// Check for unique constraint violation (name already exists)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // Unique violation
+			l.WarnContext(ctx, "Attempted to create interest with duplicate name", slog.Any("error", err))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Duplicate interest name")
+			return nil, fmt.Errorf("interest with name '%s' already exists: %w", name, api.ErrConflict)
+		}
+		// Handle other potential errors
+		l.ErrorContext(ctx, "Failed to insert new interest", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB INSERT failed")
+		return nil, fmt.Errorf("database error creating interest: %w", err)
+	}
+
+	l.InfoContext(ctx, "Global interest created successfully", slog.String("interestID", interest.ID.String()))
+	span.SetAttributes(attribute.String("db.interest.id", interest.ID.String()))
+	span.SetStatus(codes.Ok, "Interest created")
+	return &interest, nil
+}
+
 // AddUserInterest implements user.UserRepo.
 func (r *PostgresUserRepo) AddUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "AddUserInterest", trace.WithAttributes(
@@ -243,6 +442,7 @@ func (r *PostgresUserRepo) AddUserInterest(ctx context.Context, userID uuid.UUID
         INSERT INTO user_interests (user_id, interest_id)
         VALUES ($1, $2) ON CONFLICT (user_id, interest_id) DO NOTHING`
 
+	// TODO should I invalidate with an error message when a repeated interest_id is inserted or silently do nothing
 	tag, err := r.pgpool.Exec(ctx, query, userID, interestID)
 	if err != nil {
 		// Check for foreign key violation if interestID doesn't exist in 'interests' table
@@ -304,6 +504,7 @@ func (r *PostgresUserRepo) RemoveUserInterest(ctx context.Context, userID uuid.U
 	return nil
 }
 
+// GetAllInterests TODO does it make sense to only return the active interests ? Just mark active on the UI ?
 // GetAllInterests implements user.UserRepo.
 func (r *PostgresUserRepo) GetAllInterests(ctx context.Context) ([]api.Interest, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetAllInterests", trace.WithAttributes(
@@ -714,7 +915,7 @@ func (r *PostgresUserRepo) CreateUserPreferenceProfile(ctx context.Context, user
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	l.InfoContext(ctx, "User preference profile created successfully", slog.String("profileID", p.ID.String()))
 	span.SetStatus(codes.Ok, "Preference profile created")
 	return &p, nil

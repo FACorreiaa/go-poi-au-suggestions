@@ -16,6 +16,7 @@ var (
 	ErrConflict        = errors.New("item already exists or conflict")
 	ErrUnauthenticated = errors.New("authentication required or invalid credentials")
 	ErrForbidden       = errors.New("action forbidden")
+	ErrBadRequest      = errors.New("bad request")
 )
 
 // --- SECURITY WARNING ---
@@ -158,13 +159,25 @@ type UpdateProfileParams struct {
 	Email           *string
 	DisplayName     *string
 	ProfileImageURL *string
+	Firstname       *string `json:"firstname,omitempty"`
+	Lastname        *string `json:"lastname,omitempty"`
+	Age             *int    `json:"age,omitempty"`
+	City            *string `json:"city,omitempty"`
+	Country         *string `json:"country,omitempty"`
+	AboutYou        *string `json:"about_you,omitempty"`
 	// Add any other mutable fields like bio, location string etc.
 }
 
 type UserProfile struct {
 	ID              uuid.UUID  `json:"id"`
 	Email           string     `json:"email"`
-	Username        *string    `json:"username,omitempty"`          // Use pointer if nullable/optional unique
+	Username        *string    `json:"username,omitempty"` // Use pointer if nullable/optional unique
+	Firstname       *string    `json:"firstname,omitempty"`
+	Lastname        *string    `json:"lastname,omitempty"`
+	Age             *int       `json:"age,omitempty"`
+	City            *string    `json:"city,omitempty"`
+	Country         *string    `json:"country,omitempty"`
+	AboutYou        *string    `json:"about_you,omitempty"`
 	PasswordHash    string     `json:"-"`                           // Exclude from JSON responses
 	DisplayName     *string    `json:"display_name,omitempty"`      // Use pointer if nullable
 	ProfileImageURL *string    `json:"profile_image_url,omitempty"` // Use pointer if nullable
@@ -173,7 +186,6 @@ type UserProfile struct {
 	LastLoginAt     *time.Time `json:"last_login_at,omitempty"`     // Use pointer if nullable
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
-	Role            string     `json:"role"` // Add Role if fetching it here
 }
 
 type DayPreference string

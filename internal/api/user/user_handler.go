@@ -30,7 +30,7 @@ func NewUserHandler(userService UserService, logger *slog.Logger) *UserHandler {
 	if logger == nil {
 		panic("PANIC: Attempting to create UserHandler with nil logger!")
 	}
-	
+
 	return &UserHandler{
 		userService: userService,
 		logger:      logger,
@@ -336,7 +336,7 @@ func (h *UserHandler) RemoveUserInterest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	interestIDStr := chi.URLParam(r, "interestId")
+	interestIDStr := chi.URLParam(r, "interestID")
 	interestID, err := uuid.Parse(interestIDStr)
 	if err != nil {
 		l.WarnContext(ctx, "Invalid interest ID format", slog.Any("error", err))
@@ -408,7 +408,7 @@ func (h *UserHandler) UpdateUserInterestPreferenceLevel(w http.ResponseWriter, r
 		return
 	}
 
-	interestIDStr := chi.URLParam(r, "interestId")
+	interestIDStr := chi.URLParam(r, "interestID")
 	interestID, err := uuid.Parse(interestIDStr)
 	if err != nil {
 		l.WarnContext(ctx, "Invalid interest ID format", slog.Any("error", err))
@@ -453,6 +453,75 @@ func (h *UserHandler) UpdateUserInterestPreferenceLevel(w http.ResponseWriter, r
 		Success: true,
 		Message: "Preference level updated successfully",
 	})
+}
+
+// CreateInterest godoc
+// @Summary      Create New Interest
+// @Description  Creates a new interest in the system.
+// @Tags         User
+// @Accept       json
+// @Produce      json
+// @Param        interest body CreateInterestRequest true "Interest details to create"
+// @Success      201 {object} api.Interest "Created Interest"
+// @Failure      400 {object} api.Response "Invalid Input"
+// @Failure      401 {object} api.Response "Unauthorized"
+// @Failure      409 {object} api.Response "Interest Already Exists"
+// @Failure      500 {object} api.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /user/interests/create [post]
+func (h *UserHandler) CreateInterest(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("UserHandler").Start(r.Context(), "CreateInterest", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/user/interests/create"),
+	))
+	defer span.End()
+
+	l := h.logger.With(slog.String("handler", "CreateInterest"))
+
+	// Get UserID from context (set by Authenticate middleware)
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		span.SetStatus(codes.Error, "User ID not found in context")
+		auth.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	// Parse request body
+	var req CreateInterestRequest
+	if err := auth.DecodeJSONBody(w, r, &req); err != nil {
+		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to decode request")
+		auth.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request format")
+		return
+	}
+
+	// Validate request
+	if req.Name == "" {
+		l.WarnContext(ctx, "Interest name is required")
+		span.SetStatus(codes.Error, "Interest name is required")
+		auth.ErrorResponse(w, r, http.StatusBadRequest, "Interest name is required")
+		return
+	}
+
+	// Call service to create interest
+	interest, err := h.userService.CreateInterest(ctx, req.Name, req.Description, req.Active)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to create interest", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to create interest")
+
+		if errors.Is(err, api.ErrConflict) {
+			auth.ErrorResponse(w, r, http.StatusConflict, "Interest with this name already exists")
+		} else {
+			auth.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to create interest")
+		}
+		return
+	}
+
+	span.SetStatus(codes.Ok, "Interest created successfully")
+	auth.WriteJSONResponse(w, r, http.StatusCreated, interest)
 }
 
 // GetUserEnhancedInterests godoc
@@ -509,6 +578,12 @@ func (h *UserHandler) GetUserEnhancedInterests(w http.ResponseWriter, r *http.Re
 // Request and Response structures for the handlers
 type AddInterestRequest struct {
 	InterestID string `json:"interest_id" binding:"required" example:"d290f1ee-6c54-4b01-90e6-d701748f0851"`
+}
+
+type CreateInterestRequest struct {
+	Name        string  `json:"name" binding:"required" example:"Hiking"`
+	Description *string `json:"description,omitempty" example:"Outdoor hiking activities"`
+	Active      bool    `json:"active" example:"true"`
 }
 
 type UpdatePreferenceLevelRequest struct {

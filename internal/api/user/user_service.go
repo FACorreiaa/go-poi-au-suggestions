@@ -28,6 +28,7 @@ type UserService interface {
 	AddUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	GetAllInterests(ctx context.Context) ([]api.Interest, error)
+	CreateInterest(ctx context.Context, name string, description *string, isActive bool) (*api.Interest, error)
 	UpdateUserInterestPreferenceLevel(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, preferenceLevel int) error
 	GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]api.EnhancedInterest, error)
 
@@ -118,6 +119,31 @@ func (s *UserServiceImpl) GetUserPreferences(ctx context.Context, userID uuid.UU
 	l.InfoContext(ctx, "User preferences fetched successfully", slog.Int("count", len(preferences)))
 	span.SetStatus(codes.Ok, "User preferences fetched successfully")
 	return preferences, nil
+}
+
+// CreateInterest create user interest
+func (s *UserServiceImpl) CreateInterest(ctx context.Context, name string, description *string, isActive bool) (*api.Interest, error) {
+	ctx, span := otel.Tracer("UserService").Start(ctx, "CreateUserInterest", trace.WithAttributes(
+		attribute.String("name", name),
+		attribute.String("description", *description),
+	))
+	defer span.End()
+
+	l := s.logger.With(slog.String("method", "CreateUserInterest"),
+		slog.String("name", name), slog.String("description", *description))
+	l.DebugContext(ctx, "Adding user interest")
+
+	interest, err := s.repo.CreateInterest(ctx, name, description, isActive)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to add user interest", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to add user interest")
+		return nil, fmt.Errorf("error adding user interest: %w", err)
+	}
+
+	l.InfoContext(ctx, "User interest created successfully")
+	span.SetStatus(codes.Ok, "User interest created successfully")
+	return interest, nil
 }
 
 // AddUserInterest adds an interest to a user's preferences.

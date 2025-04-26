@@ -105,8 +105,8 @@ func (r *PostgresAuthRepo) Register(ctx context.Context, username, email, hashed
 	//startTime := time.Now()
 
 	var userID string
-	query := `INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id`
-	err := r.pgpool.QueryRow(ctx, query, username, email, hashedPassword).Scan(&userID)
+	query := `INSERT INTO users (username, email, password_hash, created_at) VALUES ($1, $2, $3, $4) RETURNING id`
+	err := r.pgpool.QueryRow(ctx, query, username, email, hashedPassword, time.Now()).Scan(&userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Database error")

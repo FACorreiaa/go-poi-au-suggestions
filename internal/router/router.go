@@ -18,8 +18,6 @@ type Config struct {
 	AuthHandler            *auth.AuthHandler
 	AuthenticateMiddleware func(http.Handler) http.Handler // Function signature for auth middleware
 	Logger                 *slog.Logger
-	// Add other handlers here as needed
-	// POIHandler *poi.Handler
 	UserHandler            *user.UserHandler
 }
 
@@ -111,16 +109,16 @@ func UserRoutes(handler *user.UserHandler) http.Handler {
 	// All user routes require authentication, handled at the parent router level
 
 	// User profile routes
-	r.Get("/profile", handler.GetUserProfile)         // GET http://localhost:8000/api/v1/user/profile
-	r.Put("/profile", handler.UpdateUserProfile)      // PUT http://localhost:8000/api/v1/user/profile
+	r.Get("/profile", handler.GetUserProfile)    // GET http://localhost:8000/api/v1/user/profile
+	r.Put("/profile", handler.UpdateUserProfile) // PUT http://localhost:8000/api/v1/user/profile
 
 	// User preferences routes
 	r.Get("/preferences", handler.GetUserPreferences) // GET http://localhost:8000/api/v1/user/preferences
 
 	// Interest routes
-	r.Get("/interests", handler.GetAllInterests)      // GET http://localhost:8000/api/v1/user/interests
-	r.Post("/interests", handler.AddUserInterest)     // POST http://localhost:8000/api/v1/user/interests
-	r.Delete("/interests/{interestID}", handler.RemoveUserInterest) // DELETE http://localhost:8000/api/v1/user/interests/{interestID}
+	r.Get("/interests", handler.GetAllInterests)                                                 // GET http://localhost:8000/api/v1/user/interests
+	r.Post("/interests", handler.AddUserInterest)                                                // POST http://localhost:8000/api/v1/user/interests
+	r.Delete("/interests/{interestID}", handler.RemoveUserInterest)                              // DELETE http://localhost:8000/api/v1/user/interests/{interestID}
 	r.Put("/interests/{interestID}/preference-level", handler.UpdateUserInterestPreferenceLevel) // PUT http://localhost:8000/api/v1/user/interests/{interestID}/preference-level
 
 	// Enhanced interests route

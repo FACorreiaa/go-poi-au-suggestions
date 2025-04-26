@@ -12,8 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/FACorreiaa/go-poi-au-suggestions/docs" // Import for swagger docs
 	httpSwagger "github.com/swaggo/http-swagger/v2"
+
+	_ "github.com/FACorreiaa/go-poi-au-suggestions/docs" // Import for swagger docs
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/app/observability/metrics"
 	"github.com/FACorreiaa/go-poi-au-suggestions/app/observability/tracer"
@@ -121,6 +122,7 @@ func main() {
 	// --- Router Setup ---
 	routerConfig := &router.Config{
 		AuthHandler:            c.AuthHandler,
+		UserHandler:            c.UserHandler,
 		AuthenticateMiddleware: authenticateMiddleware,
 		Logger:                 logger,
 	}

@@ -104,7 +104,7 @@ type PostgresUserRepo struct {
 	pgpool *pgxpool.Pool
 }
 
-func NewPostgresAuthRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresUserRepo {
+func NewPostgresUserRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresUserRepo {
 	return &PostgresUserRepo{
 		logger: logger,
 		pgpool: pgxpool,
@@ -609,6 +609,12 @@ func (r *PostgresUserRepo) CreateUserPreferenceProfile(ctx context.Context, user
 	))
 	defer span.End()
 
+	tx, err := r.pgpool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	l := r.logger.With(slog.String("method", "CreateUserPreferenceProfile"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Creating user preference profile", slog.String("profileName", params.ProfileName))
 
@@ -681,7 +687,7 @@ func (r *PostgresUserRepo) CreateUserPreferenceProfile(ctx context.Context, user
                    created_at, updated_at`
 
 	var p api.UserPreferenceProfile
-	err := r.pgpool.QueryRow(ctx, query,
+	err = tx.QueryRow(ctx, query,
 		userID, params.ProfileName, isDefault, searchRadiusKm, preferredTime,
 		budgetLevel, preferredPace, preferAccessiblePOIs, preferOutdoorSeating,
 		preferDogFriendly, preferredVibes, preferredTransport, dietaryNeeds,
@@ -705,6 +711,10 @@ func (r *PostgresUserRepo) CreateUserPreferenceProfile(ctx context.Context, user
 		return nil, fmt.Errorf("database error creating preference profile: %w", err)
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	
 	l.InfoContext(ctx, "User preference profile created successfully", slog.String("profileID", p.ID.String()))
 	span.SetStatus(codes.Ok, "Preference profile created")
 	return &p, nil

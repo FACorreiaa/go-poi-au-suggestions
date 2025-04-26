@@ -4,10 +4,12 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	database "github.com/FACorreiaa/go-poi-au-suggestions/app/db"
 	"github.com/FACorreiaa/go-poi-au-suggestions/config"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 )
 
 // Container holds all application dependencies
@@ -16,6 +18,7 @@ type Container struct {
 	Logger      *slog.Logger
 	Pool        *pgxpool.Pool
 	AuthHandler *auth.AuthHandler
+	UserHandler *user.UserHandler
 	// Add other handlers, services, and repositories as needed
 }
 
@@ -43,12 +46,17 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	// Initialize handlers
 	authHandler := auth.NewAuthHandler(authService, logger)
 
+	//
+	userRepo := user.NewPostgresUserRepo(pool, logger)
+	userService := user.NewUserService(userRepo, logger)
+	userHandler := user.NewUserHandler(userService, logger)
 	// Create and return the container
 	return &Container{
 		Config:      cfg,
 		Logger:      logger,
 		Pool:        pool,
 		AuthHandler: authHandler,
+		UserHandler: userHandler,
 		// Add other handlers, services, and repositories as needed
 	}, nil
 }

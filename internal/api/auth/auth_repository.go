@@ -2,13 +2,12 @@ package auth
 
 import (
 	"context"
-
 	"errors"
+
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,6 +17,8 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 )
 
 var _ AuthRepo = (*PostgresAuthRepo)(nil)
@@ -76,7 +77,7 @@ func (r *PostgresAuthRepo) GetUserByEmail(ctx context.Context, email string) (*a
 func (r *PostgresAuthRepo) GetUserByID(ctx context.Context, userID string) (*api.UserAuth, error) {
 	var user api.UserAuth
 	// Select fields needed by token generation or other logic
-	query := `SELECT id, username, email, role FROM users WHERE id = $1 AND is_active = TRUE`
+	query := `SELECT id, username, email FROM users WHERE id = $1 AND is_active = TRUE`
 	err := r.pgpool.QueryRow(ctx, query, userID).Scan(&user.ID, &user.Username, &user.Email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -110,7 +111,8 @@ func (r *PostgresAuthRepo) Register(ctx context.Context, username, email, hashed
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Database error")
 		//dbQueryErrorsTotal.Add(ctx, 1)
-		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return "", fmt.Errorf("email or username already exists: %w", api.ErrConflict)
 		}
 		r.logger.ErrorContext(ctx, "Error inserting user", slog.Any("error", err), slog.String("email", email))

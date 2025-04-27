@@ -123,6 +123,7 @@ func main() {
 	routerConfig := &router.Config{
 		AuthHandler:            c.AuthHandler,
 		UserHandler:            c.UserHandler,
+		UserInterestHandler:    c.UserInterestHandler,
 		AuthenticateMiddleware: authenticateMiddleware,
 		Logger:                 logger,
 	}

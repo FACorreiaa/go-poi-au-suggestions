@@ -317,3 +317,9 @@ type EnhancedInterest struct {
 	Interest
 	PreferenceLevel int `json:"preference_level"` // 0=Neutral/Nice-to-have, 1=Preferred, 2=Must-Have
 }
+
+type UpdateUserInterestParams struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Active      *bool   `json:"active,omitempty"`
+}

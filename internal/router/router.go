@@ -11,6 +11,7 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
+	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
 )
 
 // Config contains dependencies needed for the router setup
@@ -18,7 +19,8 @@ type Config struct {
 	AuthHandler            *auth.AuthHandler
 	AuthenticateMiddleware func(http.Handler) http.Handler // Function signature for auth middleware
 	Logger                 *slog.Logger
-	UserHandler            *user.UserHandler
+	UserHandler            *user.HandlerUser
+	UserInterestHandler    *userInterest.UserInterestHandler
 }
 
 // SetupRouter initializes and configures the main application router.
@@ -67,6 +69,7 @@ func SetupRouter(cfg *Config) chi.Router {
 
 			// Mount other protected resource routes
 			r.Mount("/user", UserRoutes(cfg.UserHandler)) // User routes
+			r.Mount("/user/interests", UserInterestRoutes(cfg.UserInterestHandler))
 			// r.Mount("/pois", POIRoutes(cfg.POIHandler))   // Example for POI routes
 		})
 
@@ -103,7 +106,7 @@ func SetupRouter(cfg *Config) chi.Router {
 }
 
 // UserRoutes creates a router for user-related endpoints
-func UserRoutes(handler *user.UserHandler) http.Handler {
+func UserRoutes(handler *user.HandlerUser) http.Handler {
 	r := chi.NewRouter()
 
 	// All user routes require authentication, handled at the parent router level
@@ -111,23 +114,40 @@ func UserRoutes(handler *user.UserHandler) http.Handler {
 	// User profile routes
 	r.Get("/profile", handler.GetUserProfile)    // GET http://localhost:8000/api/v1/user/profile
 	r.Put("/profile", handler.UpdateUserProfile) // PUT http://localhost:8000/api/v1/user/profile
-
-	// User preferences routes
-	r.Get("/preferences", handler.GetUserPreferences) // GET http://localhost:8000/api/v1/user/preferences
-
-	// Interest routes
-	r.Get("/interests", handler.GetAllInterests)  // GET http://localhost:8000/api/v1/user/interests
-	r.Post("/interests", handler.AddUserInterest) // POST http://localhost:8000/api/v1/user/interests
-	r.Post("/interests/create", handler.CreateInterest)
-	//r.Put("/interests/{interestID}", handler.UpdateInterest)                                     // POST http://localhost:8000/api/v1/user/interests/create
-	r.Delete("/interests/{interestID}", handler.RemoveUserInterest)                              // DELETE http://localhost:8000/api/v1/user/interests/{interestID}
-	r.Put("/interests/{interestID}/preference-level", handler.UpdateUserInterestPreferenceLevel) // PUT http://localhost:8000/api/v1/user/interests/{interestID}/preference-level
-
-	// Enhanced interests route
-	r.Get("/enhanced-interests", handler.GetUserEnhancedInterests) // GET http://localhost:8000/api/v1/user/enhanced-interests
-
 	return r
 }
+
+// TODO
+func UserInterestRoutes(handler *userInterest.UserInterestHandler) http.Handler {
+	r := chi.NewRouter()
+	// Interest routes
+	r.Get("/", handler.GetAllInterests) // GET http://localhost:8000/api/v1/user/interests
+	r.Post("/create", handler.CreateInterest)
+	r.Put("/{interestID}", handler.UpdateUserInterest)    // POST http://localhost:8000/api/v1/user/interests/create
+	r.Delete("/{interestID}", handler.RemoveUserInterest) // DELETE http://localhost:8000/api/v1/user/interests/{interestID}
+
+	// Enhanced interests route
+	//r.Get("/enhanced-interests", handler.GetUserEnhancedInterests) // GET http://localhost:8000/api/v1/user/enhanced-interests
+	return r
+}
+
+// TODO
+//func UserPreferencesRoutes(handler *user.HandlerUser) http.Handler {
+//	r := chi.NewRouter()
+//	// User preferences routes
+//	r.Get("/preferences", handler.GetUserPreferences) // GET http://localhost:8000/api/v1/user/preferences
+//
+//	return r
+//}
+
+// TODO
+//func UserPreferencesTags(handler *user.HandlerUser) http.Handler {
+//	r := chi.NewRouter()
+//	// User preferences routes
+//	r.Get("/preferences", handler.GetUserPreferences) // GET http://localhost:8000/api/v1/user/preferences
+//
+//	return r
+//}
 
 // Example of how you might structure feature-specific routes (optional)
 // func AuthRoutes(handler *auth.AuthHandler, authMiddleware func(http.Handler) http.Handler) http.Handler {

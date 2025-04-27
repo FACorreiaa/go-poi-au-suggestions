@@ -53,14 +53,14 @@ func Authenticate(logger *slog.Logger, jwtCfg config.JWTConfig) func(next http.H
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
 				l.WarnContext(ctx, "Missing Authorization header")
-				ErrorResponse(w, r, http.StatusUnauthorized, "Authorization header required")
+				api.ErrorResponse(w, r, http.StatusUnauthorized, "Authorization header required")
 				return
 			}
 
 			headerParts := strings.Split(authHeader, " ")
 			if len(headerParts) != 2 || strings.ToLower(headerParts[0]) != "bearer" {
 				l.WarnContext(ctx, "Invalid Authorization header format")
-				ErrorResponse(w, r, http.StatusUnauthorized, "Authorization header format must be Bearer {token}")
+				api.ErrorResponse(w, r, http.StatusUnauthorized, "Authorization header format must be Bearer {token}")
 				return
 			}
 			tokenString := headerParts[1]
@@ -83,31 +83,31 @@ func Authenticate(logger *slog.Logger, jwtCfg config.JWTConfig) func(next http.H
 				} else if errors.Is(err, jwt.ErrSignatureInvalid) {
 					errMsg = "Invalid token signature"
 				}
-				ErrorResponse(w, r, http.StatusUnauthorized, errMsg)
+				api.ErrorResponse(w, r, http.StatusUnauthorized, errMsg)
 				return
 			}
 
 			if !token.Valid {
 				l.WarnContext(ctx, "Token marked as invalid or claims are nil")
-				ErrorResponse(w, r, http.StatusUnauthorized, "Invalid token")
+				api.ErrorResponse(w, r, http.StatusUnauthorized, "Invalid token")
 				return
 			}
 
 			now := time.Now()
 			if claims.ExpiresAt == nil || now.Unix() > claims.ExpiresAt.Unix() {
 				l.WarnContext(ctx, "Token expiration claim check failed", slog.Time("now", now), slog.Time("exp", claims.ExpiresAt.Time))
-				ErrorResponse(w, r, http.StatusUnauthorized, "Token has expired")
+				api.ErrorResponse(w, r, http.StatusUnauthorized, "Token has expired")
 				return
 			}
 			if claims.Issuer != jwtCfg.Issuer {
 				l.WarnContext(ctx, "Token issuer mismatch", slog.String("expected", jwtCfg.Issuer), slog.String("actual", claims.Issuer))
-				ErrorResponse(w, r, http.StatusUnauthorized, "Invalid token issuer")
+				api.ErrorResponse(w, r, http.StatusUnauthorized, "Invalid token issuer")
 				return
 			}
 
-			if jwtCfg.Audience != "" && !verifyAudience(claims.Audience, jwtCfg.Audience) {
+			if jwtCfg.Audience != "" && !api.VerifyAudience(claims.Audience, jwtCfg.Audience) {
 				l.WarnContext(ctx, "Token audience mismatch", slog.String("expected", jwtCfg.Audience), slog.Any("actual", claims.Audience))
-				ErrorResponse(w, r, http.StatusUnauthorized, "Invalid token audience")
+				api.ErrorResponse(w, r, http.StatusUnauthorized, "Invalid token audience")
 				return
 			}
 
@@ -158,21 +158,21 @@ func RequirePlanStatus(logger *slog.Logger, allowedPlans []string, requiredStatu
 
 			if !planOk || !statusOk {
 				logger.ErrorContext(ctx, "Subscription claims missing from context", slog.String("plan_ok", fmt.Sprintf("%t", planOk)), slog.String("status_ok", fmt.Sprintf("%t", statusOk)))
-				ErrorResponse(w, r, http.StatusInternalServerError, "Cannot determine subscription status") // Or forbidden
+				api.ErrorResponse(w, r, http.StatusInternalServerError, "Cannot determine subscription status") // Or forbidden
 				return
 			}
 
 			// Check status first
 			if status != requiredStatus {
 				logger.WarnContext(ctx, "Subscription status check failed", slog.String("required_status", requiredStatus), slog.String("actual_status", status))
-				ErrorResponse(w, r, http.StatusForbidden, fmt.Sprintf("Subscription status must be '%s'", requiredStatus))
+				api.ErrorResponse(w, r, http.StatusForbidden, fmt.Sprintf("Subscription status must be '%s'", requiredStatus))
 				return
 			}
 
 			// Check if the user's plan is in the allowed list
 			if _, allowed := planMap[plan]; !allowed {
 				logger.WarnContext(ctx, "Subscription plan check failed", slog.Any("allowed_plans", allowedPlans), slog.String("actual_plan", plan))
-				ErrorResponse(w, r, http.StatusForbidden, "Access denied for your current subscription plan.")
+				api.ErrorResponse(w, r, http.StatusForbidden, "Access denied for your current subscription plan.")
 				return
 			}
 

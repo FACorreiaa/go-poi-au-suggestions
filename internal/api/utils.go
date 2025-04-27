@@ -1,4 +1,4 @@
-package auth // Or your chosen package name
+package api
 
 import (
 	"encoding/json"
@@ -122,7 +122,7 @@ func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}) err
 	return nil
 }
 
-func verifyAudience(claimsAudience jwt.ClaimStrings, expectedAudience string) bool {
+func VerifyAudience(claimsAudience jwt.ClaimStrings, expectedAudience string) bool {
 	// If no audience is expected, validation passes (or fails, depending on policy)
 	if expectedAudience == "" {
 		return true // Or false if audience is mandatory

@@ -19,8 +19,7 @@ var _ UserInterestService = (*UserInterestServiceImpl)(nil)
 
 // UserInterestService defines the business logic contract for user operations.
 type UserInterestService interface {
-	//GetUserPreferences User Preferences
-	GetUserPreferences(ctx context.Context, userID uuid.UUID) ([]api.Interest, error)
+	//RemoveUserInterest remove interests
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	GetAllInterests(ctx context.Context) ([]api.Interest, error)
 	CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*api.Interest, error)
@@ -39,29 +38,6 @@ func NewUserInterestService(repo UserInterestRepo, logger *slog.Logger) *UserInt
 		logger: logger,
 		repo:   repo,
 	}
-}
-
-// GetUserPreferences retrieves a user's preferences.
-func (s *UserInterestServiceImpl) GetUserPreferences(ctx context.Context, userID uuid.UUID) ([]api.Interest, error) {
-	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "GetUserPreferences", trace.WithAttributes(
-		attribute.String("user.id", userID.String()),
-	))
-	defer span.End()
-
-	l := s.logger.With(slog.String("method", "GetUserPreferences"), slog.String("userID", userID.String()))
-	l.DebugContext(ctx, "Fetching user preferences")
-
-	preferences, err := s.repo.GetUserPreferences(ctx, userID)
-	if err != nil {
-		l.ErrorContext(ctx, "Failed to fetch user preferences", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to fetch user preferences")
-		return nil, fmt.Errorf("error fetching user preferences: %w", err)
-	}
-
-	l.InfoContext(ctx, "User preferences fetched successfully", slog.Int("count", len(preferences)))
-	span.SetStatus(codes.Ok, "User preferences fetched successfully")
-	return preferences, nil
 }
 
 // CreateInterest create user interest

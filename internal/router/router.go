@@ -12,6 +12,7 @@ import (
 	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
+	userSettings "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_settings"
 )
 
 // Config contains dependencies needed for the router setup
@@ -21,6 +22,7 @@ type Config struct {
 	Logger                 *slog.Logger
 	UserHandler            *user.HandlerUser
 	UserInterestHandler    *userInterest.UserInterestHandler
+	UserSettingsHandler    *userSettings.UserSettingsHandler
 }
 
 // SetupRouter initializes and configures the main application router.
@@ -70,6 +72,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			// Mount other protected resource routes
 			r.Mount("/user", UserRoutes(cfg.UserHandler)) // User routes
 			r.Mount("/user/interests", UserInterestRoutes(cfg.UserInterestHandler))
+			r.Mount("/user/preferences", UserPreferencesRoutes(cfg.UserSettingsHandler))
 			// r.Mount("/pois", POIRoutes(cfg.POIHandler))   // Example for POI routes
 		})
 
@@ -125,20 +128,18 @@ func UserInterestRoutes(handler *userInterest.UserInterestHandler) http.Handler 
 	r.Post("/create", handler.CreateInterest)
 	r.Put("/{interestID}", handler.UpdateUserInterest)    // POST http://localhost:8000/api/v1/user/interests/create
 	r.Delete("/{interestID}", handler.RemoveUserInterest) // DELETE http://localhost:8000/api/v1/user/interests/{interestID}
-
-	// Enhanced interests route
-	//r.Get("/enhanced-interests", handler.GetUserEnhancedInterests) // GET http://localhost:8000/api/v1/user/enhanced-interests
 	return r
 }
 
-// TODO
-//func UserPreferencesRoutes(handler *user.HandlerUser) http.Handler {
-//	r := chi.NewRouter()
-//	// User preferences routes
-//	r.Get("/preferences", handler.GetUserPreferences) // GET http://localhost:8000/api/v1/user/preferences
-//
-//	return r
-//}
+// UserPreferencesRoutes ..
+func UserPreferencesRoutes(handler *userSettings.UserSettingsHandler) http.Handler {
+	r := chi.NewRouter()
+	// User preferences routes
+
+	r.Get("/", handler.GetUserPreferences) // GET http://localhost:8000/api/v1/user/preferences
+
+	return r
+}
 
 // TODO
 //func UserPreferencesTags(handler *user.HandlerUser) http.Handler {

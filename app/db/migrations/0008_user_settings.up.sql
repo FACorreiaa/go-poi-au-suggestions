@@ -14,6 +14,13 @@ CREATE TYPE search_pace_enum AS ENUM (
     'fast'      -- Pack in many activities
     );
 
+CREATE TYPE transport_preference_enum AS ENUM (
+    'any',
+    'walk',     -- Prefer easily walkable distances/areas
+    'public',   -- Prefer locations easily accessible by public transport
+    'car'       -- Assume user has a car, parking might be relevant
+    );
+
 -- Table to store user's default settings/preferences
 CREATE TABLE user_settings (
                                user_id UUID PRIMARY KEY NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -28,6 +35,7 @@ CREATE TABLE user_settings (
     -- Other potential flags or preferences
                                prefer_accessible_pois BOOLEAN DEFAULT FALSE, -- Default preference for accessibility info
                                prefer_outdoor_seating BOOLEAN DEFAULT FALSE, -- Example preference
+                               preferred_transport_mode transport_preference_enum DEFAULT 'walk',
                                prefer_dog_friendly    BOOLEAN DEFAULT FALSE, -- Example preference
     -- Foreign key ensures this record is tied to a valid user
                                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

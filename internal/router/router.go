@@ -22,7 +22,7 @@ type Config struct {
 	Logger                 *slog.Logger
 	UserHandler            *user.HandlerUser
 	UserInterestHandler    *userInterest.UserInterestHandler
-	UserSettingsHandler    *userSettings.UserSettingsHandler
+	UserSettingsHandler    *userSettings.SettingsHandler
 }
 
 // SetupRouter initializes and configures the main application router.
@@ -132,11 +132,11 @@ func UserInterestRoutes(handler *userInterest.UserInterestHandler) http.Handler 
 }
 
 // UserPreferencesRoutes ..
-func UserPreferencesRoutes(handler *userSettings.UserSettingsHandler) http.Handler {
+func UserPreferencesRoutes(handler *userSettings.SettingsHandler) http.Handler {
 	r := chi.NewRouter()
 	// User preferences routes
 
-	r.Get("/", handler.GetUserPreferences) // GET http://localhost:8000/api/v1/user/preferences
+	r.Get("/", handler.GetSettings) // GET http://localhost:8000/api/v1/user/preferences
 
 	return r
 }

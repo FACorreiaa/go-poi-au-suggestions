@@ -22,7 +22,7 @@ type Container struct {
 	AuthHandler         *auth.AuthHandler
 	UserHandler         *user.HandlerUser
 	UserInterestHandler *userInterest.UserInterestHandler
-	UserSettingsHandler *userSettings.UserSettingsHandler
+	UserSettingsHandler *userSettings.SettingsHandler
 	// Add other handlers, services, and repositories as needed
 }
 
@@ -61,7 +61,7 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 
 	userSettingsRepo := userSettings.NewPostgresUserSettingsRepo(pool, logger)
 	userSettingsService := userSettings.NewUserSettingsService(userSettingsRepo, logger)
-	userSettingsHandler := userSettings.NewUserSettingsHandler(userSettingsService, logger)
+	userSettingsHandler := userSettings.NewSettingsHandler(userSettingsService, logger)
 
 	// Create and return the container
 	return &Container{

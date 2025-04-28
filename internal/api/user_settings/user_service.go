@@ -3,37 +3,43 @@ package userSettings
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"log/slog"
+
+	"github.com/google/uuid"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 )
 
-var _ UserSettingsService = (*UserSettingsServiceImpl)(nil)
+var _ SettingsService = (*SettingsServiceImpl)(nil)
 
-type UserSettingsService interface {
-	GetUserPreferences(ctx context.Context, userID uuid.UUID) ([]*api.Interest, error) // Fetches from user_interests join
+type SettingsService interface {
+	// GetSettings retrieves the settings profile for a specific user.
+	// Returns ErrNotFound if no settings exist for the user (shouldn't happen if trigger works).
+	GetSettings(ctx context.Context, userID uuid.UUID) (*UserSettings, error)
+
+	// UpdateSettings updates specific fields in the user's settings profile.
+	// Uses pointers in params struct for partial updates. Ensures updated_at is set.
+	// Returns ErrNotFound if the user doesn't have a settings row (shouldn't happen).
+	UpdateSettings(ctx context.Context, userID uuid.UUID, params UpdateUserSettingsParams) error
 }
 
-type UserSettingsServiceImpl struct {
+type SettingsServiceImpl struct {
 	logger *slog.Logger
-	repo   UserSettingsRepository
+	repo   SettingsRepository
 }
 
 // NewUserInterestService creates a new user service instance.
-func NewUserSettingsService(repo UserSettingsRepository, logger *slog.Logger) *UserSettingsServiceImpl {
-	return &UserSettingsServiceImpl{
+func NewUserSettingsService(repo SettingsRepository, logger *slog.Logger) *SettingsServiceImpl {
+	return &SettingsServiceImpl{
 		logger: logger,
 		repo:   repo,
 	}
 }
 
-func (s *UserSettingsServiceImpl) GetUserPreferences(ctx context.Context, userID uuid.UUID) ([]*api.Interest, error) {
+func (s *SettingsServiceImpl) GetSettings(ctx context.Context, userID uuid.UUID) (*UserSettings, error) {
 	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "GetUserPreferences", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 	))
@@ -42,15 +48,24 @@ func (s *UserSettingsServiceImpl) GetUserPreferences(ctx context.Context, userID
 	l := s.logger.With(slog.String("method", "GetUserPreferences"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Fetching user preferences")
 
-	preferences, err := s.repo.GetUserPreferences(ctx, userID)
+	settings, err := s.repo.GetSettings(ctx, userID)
 	if err != nil {
-		l.ErrorContext(ctx, "Failed to fetch user preferences", slog.Any("error", err))
+		l.ErrorContext(ctx, "Failed to fetch user settings", slog.Any("error", err))
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to fetch user preferences")
-		return nil, fmt.Errorf("error fetching user preferences: %w", err)
+		span.SetStatus(codes.Error, "Failed to fetch user settings")
+		return nil, fmt.Errorf("error fetching user settings: %w", err)
 	}
 
-	l.InfoContext(ctx, "User preferences fetched successfully", slog.Int("count", len(preferences)))
-	span.SetStatus(codes.Ok, "User preferences fetched successfully")
-	return preferences, nil
+	l.InfoContext(ctx, "User settings fetched successfully")
+	span.SetStatus(codes.Ok, "User settings fetched successfully")
+	return settings, nil
+}
+
+func (s *SettingsServiceImpl) UpdateSettings(ctx context.Context, userID uuid.UUID, params UpdateUserSettingsParams) error {
+	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "UpdateUserPreferences", trace.WithAttributes(
+		attribute.String("user.id", userID.String()),
+	))
+	defer span.End()
+
+	return nil
 }

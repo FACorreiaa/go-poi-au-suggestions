@@ -15,26 +15,26 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 )
 
-type UserSettingsHandler struct {
-	userSettingsService UserSettingsService
-	logger              *slog.Logger
+type SettingsHandler struct {
+	SettingsService SettingsService
+	logger          *slog.Logger
 }
 
-// NewUserSettingsHandler creates a new user handler instance.
-func NewUserSettingsHandler(userInterestService UserSettingsService, logger *slog.Logger) *UserSettingsHandler {
+// NewSettingsHandler creates a new user handler instance.
+func NewSettingsHandler(userInterestService SettingsService, logger *slog.Logger) *SettingsHandler {
 	instanceAddress := fmt.Sprintf("%p", logger)
 	slog.Info("Creating NewUserInterestHandler", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
 	if logger == nil {
 		panic("PANIC: Attempting to create UserInterestHandler with nil logger!")
 	}
 
-	return &UserSettingsHandler{
-		userSettingsService: userInterestService,
-		logger:              logger,
+	return &SettingsHandler{
+		SettingsService: userInterestService,
+		logger:          logger,
 	}
 }
 
-// GetUserPreferences godoc
+// GetSettings godoc
 // @Summary      Get User Preferences
 // @Description  Retrieves the authenticated user's preferences (interests).
 // @Tags         User
@@ -45,7 +45,7 @@ func NewUserSettingsHandler(userInterestService UserSettingsService, logger *slo
 // @Failure      500 {object} api.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/preferences [get]
-func (h *UserSettingsHandler) GetUserPreferences(w http.ResponseWriter, r *http.Request) {
+func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "GetUserPreferences", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/preferences"),
@@ -72,7 +72,7 @@ func (h *UserSettingsHandler) GetUserPreferences(w http.ResponseWriter, r *http.
 		return
 	}
 
-	preferences, err := h.userSettingsService.GetUserPreferences(ctx, userID)
+	preferences, err := h.SettingsService.GetSettings(ctx, userID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to get user preferences", slog.Any("error", err))
 		span.RecordError(err)

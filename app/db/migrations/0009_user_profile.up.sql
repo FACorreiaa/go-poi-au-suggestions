@@ -1,13 +1,5 @@
 -- +migrate Up
 
--- ENUM type for transport preferences
-CREATE TYPE transport_preference_enum AS ENUM (
-    'any',
-    'walk',     -- Prefer easily walkable distances/areas
-    'public',   -- Prefer locations easily accessible by public transport
-    'car'       -- Assume user has a car, parking might be relevant
-    );
-
 -- Table for user-defined preference profiles
 CREATE TABLE user_preference_profiles (
                                           id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

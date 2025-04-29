@@ -1,4 +1,23 @@
 -- +migrate Up
+CREATE TYPE search_pace_enum AS ENUM (
+    'any',      -- No preference
+    'relaxed',  -- Fewer, longer activities
+    'moderate', -- Standard pace
+    'fast'      -- Pack in many activities
+    );
+
+CREATE TYPE transport_preference_enum AS ENUM (
+    'any',
+    'walk',     -- Prefer easily walkable distances/areas
+    'public',   -- Prefer locations easily accessible by public transport
+    'car'       -- Assume user has a car, parking might be relevant
+    );
+
+CREATE TYPE day_preference_enum AS ENUM (
+    'any',      -- No specific preference
+    'day',      -- Primarily daytime activities (e.g., 8am - 6pm)
+    'night'     -- Primarily evening/night activities (e.g., 6pm - 2am)
+    );
 
 -- Table for user-defined preference profiles
 CREATE TABLE user_preference_profiles (

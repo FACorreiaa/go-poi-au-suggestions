@@ -1,27 +1,5 @@
 -- +migrate Up
-
--- Optional: Create ENUM types for settings with fixed options
-CREATE TYPE day_preference_enum AS ENUM (
-    'any',      -- No specific preference
-    'day',      -- Primarily daytime activities (e.g., 8am - 6pm)
-    'night'     -- Primarily evening/night activities (e.g., 6pm - 2am)
-    );
-
-CREATE TYPE search_pace_enum AS ENUM (
-    'any',      -- No preference
-    'relaxed',  -- Fewer, longer activities
-    'moderate', -- Standard pace
-    'fast'      -- Pack in many activities
-    );
-
-CREATE TYPE transport_preference_enum AS ENUM (
-    'any',
-    'walk',     -- Prefer easily walkable distances/areas
-    'public',   -- Prefer locations easily accessible by public transport
-    'car'       -- Assume user has a car, parking might be relevant
-    );
-
--- Table to store user's default settings/preferences
+-- Table to store user_settings default settings/preferences
 CREATE TABLE user_settings (
                                user_id UUID PRIMARY KEY NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     -- Default search radius in kilometers (or miles, be consistent)

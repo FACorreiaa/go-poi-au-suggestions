@@ -59,8 +59,11 @@ func (r *PostgresSettingsRepo) GetSettings(ctx context.Context, userID uuid.UUID
 	l.DebugContext(ctx, "Fetching user settings")
 
 	query := `
-		SELECT default_search_radius_km, preferred_time, default_budget_level, preferred_pace, prefer_accessible_pois,
-		prefer_outdoor_seating, preferred_transport_mode, prefer_dog_friendly, created_at, updated_at FROM user_settings
+		SELECT default_search_radius_km, preferred_time, default_budget_level, 
+		       preferred_pace, prefer_accessible_pois,
+			   prefer_outdoor_seating, preferred_transport_mode, prefer_dog_friendly, 
+			   created_at, updated_at FROM user_settings
+		WHERE user_id = $1
 	`
 
 	err := r.pgpool.QueryRow(ctx, query, userID).Scan(

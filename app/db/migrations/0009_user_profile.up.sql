@@ -41,9 +41,9 @@ CREATE TABLE user_preference_profiles (
                                           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                                           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- Ensure a user can't have two profiles with the same name
-                                          CONSTRAINT unique_user_profile_name UNIQUE (user_id, profile_name)
+                                          CONSTRAINT unique_user_profile_name UNIQUE (user_id, profile_name),
     -- Ensure only one profile can be the default per user (using a partial unique index)
-                                          --CONSTRAINT unique_default_profile UNIQUE (user_id) WHERE (is_default = TRUE)
+                                          CONSTRAINT unique_default_profile UNIQUE (user_id) WHERE (is_default = TRUE)
 );
 
 -- Index for finding profiles by user, and the default profile quickly
@@ -105,7 +105,23 @@ CREATE TRIGGER trigger_create_user_profile_after_insert
     AFTER INSERT ON users
                     FOR EACH ROW EXECUTE FUNCTION create_initial_user_profile();
 
--- Drop the old user_settings table and its trigger function/trigger
-DROP TRIGGER IF EXISTS trigger_create_user_settings_after_insert ON users;
-DROP FUNCTION IF EXISTS create_default_user_settings();
-DROP TABLE IF EXISTS user_settings;
+-- -- Drop the old user_settings table and its trigger function/trigger
+-- DROP TRIGGER IF EXISTS trigger_create_user_settings_after_insert ON users;
+-- DROP FUNCTION IF EXISTS create_default_user_settings();
+-- DROP TABLE IF EXISTS user_settings;
+
+-- Recreate user_interests to link PROFILE to INTEREST with a PREFERENCE LEVEL
+CREATE TABLE user_profile_interests (
+                                        profile_id UUID NOT NULL REFERENCES user_preference_profiles(id) ON DELETE CASCADE,
+                                        interest_id UUID NOT NULL REFERENCES interests(id) ON DELETE CASCADE,
+    -- Preference level for this interest WITHIN this specific profile
+                                        preference_level INTEGER DEFAULT 1 NOT NULL CHECK (preference_level >= 0 AND preference_level <= 2), -- Example: 0=Nice, 1=Like, 2=Must-Have
+                                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Each profile can only have a specific interest listed once
+                                        PRIMARY KEY (profile_id, interest_id)
+);
+
+CREATE INDEX idx_user_profile_interests_profile_id ON user_profile_interests (profile_id);
+CREATE INDEX idx_user_profile_interests_interest_id ON user_profile_interests (interest_id);
+
+

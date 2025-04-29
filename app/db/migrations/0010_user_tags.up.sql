@@ -25,16 +25,12 @@ INSERT INTO global_tags (name, tag_type, description) VALUES
     ON CONFLICT (name) DO NOTHING;
 
 
--- Join table for Many-to-Many relationship between users and tags they want to AVOID
-CREATE TABLE user_avoid_tags (
-                                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                                 tag_id UUID NOT NULL REFERENCES global_tags(id) ON DELETE CASCADE,
-                                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                                 PRIMARY KEY (user_id, tag_id) -- Ensure user can't avoid same tag twice
+CREATE TABLE user_profile_avoid_tags (
+                                         profile_id UUID NOT NULL REFERENCES user_preference_profiles(id) ON DELETE CASCADE,
+                                         tag_id UUID NOT NULL REFERENCES global_tags(id) ON DELETE CASCADE,
+                                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                                         PRIMARY KEY (profile_id, tag_id)
 );
 
--- Index for finding users by avoided tag or tags avoided by user
-CREATE INDEX idx_user_avoid_tags_tag_id ON user_avoid_tags (tag_id);
-
--- Also add an index on user_interests user_id now that it's modified
-CREATE INDEX idx_user_interests_user_id ON user_interests (user_id);
+CREATE INDEX idx_user_profile_avoid_tags_profile_id ON user_profile_avoid_tags (profile_id);
+CREATE INDEX idx_user_profile_avoid_tags_tag_id ON user_profile_avoid_tags (tag_id);

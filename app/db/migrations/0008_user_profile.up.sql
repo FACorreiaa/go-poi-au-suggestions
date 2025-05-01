@@ -23,38 +23,34 @@ CREATE TYPE day_preference_enum AS ENUM (
 CREATE TABLE user_preference_profiles (
                                           id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                                           user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                                          profile_name TEXT NOT NULL,                      -- e.g., "Weekend Getaway", "Default", "Business Lunch"
-                                          is_default BOOLEAN NOT NULL DEFAULT FALSE,     -- Indicates if this is the user's default profile (only one should be true)
-    -- Settings columns (mirroring the previous user_settings, but now per profile)
+                                          profile_name TEXT NOT NULL,
+                                          is_default BOOLEAN NOT NULL DEFAULT FALSE,
                                           search_radius_km NUMERIC(5, 1) DEFAULT 5.0 CHECK (search_radius_km > 0),
-                                          preferred_time day_preference_enum DEFAULT 'any', -- Reuse enum from previous migration
+                                          preferred_time day_preference_enum DEFAULT 'any',
                                           budget_level INTEGER DEFAULT 0 CHECK (budget_level >= 0 AND budget_level <= 4),
-                                          preferred_pace search_pace_enum DEFAULT 'any',   -- Reuse enum from previous migration
+                                          preferred_pace search_pace_enum DEFAULT 'any',
                                           prefer_accessible_pois BOOLEAN DEFAULT FALSE,
                                           prefer_outdoor_seating BOOLEAN DEFAULT FALSE,
                                           prefer_dog_friendly    BOOLEAN DEFAULT FALSE,
-    -- New advanced preferences
-                                          preferred_vibes TEXT[] DEFAULT '{}',             -- Array of text tags: {'lively', 'quiet', 'romantic'}
+                                          preferred_vibes TEXT[] DEFAULT '{}',
                                           preferred_transport transport_preference_enum DEFAULT 'any',
-                                          dietary_needs TEXT[] DEFAULT '{}',               -- Array of text tags: {'vegetarian', 'gluten_free'}
-
+                                          dietary_needs TEXT[] DEFAULT '{}',
                                           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                                           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    -- Ensure a user can't have two profiles with the same name
-                                          CONSTRAINT unique_user_profile_name UNIQUE (user_id, profile_name),
-    -- Ensure only one profile can be the default per user (using a partial unique index)
-                                          CONSTRAINT unique_default_profile UNIQUE (user_id) WHERE (is_default = TRUE)
+    -- Constraint for unique profile name per user
+                                          CONSTRAINT unique_user_profile_name UNIQUE (user_id, profile_name)
+    -- NO unique constraint with WHERE clause here
 );
+
+-- *** SEPARATE PARTIAL UNIQUE INDEX for is_default ***
+-- This enforces the rule: only one row per user_id can have is_default = TRUE
+CREATE UNIQUE INDEX idx_user_preference_profiles_user_id_default
+    ON user_preference_profiles (user_id)
+    WHERE is_default = TRUE;
 
 -- Index for finding profiles by user, and the default profile quickly
 -- Index for finding profiles by user
 CREATE INDEX idx_user_preference_profiles_user_id ON user_preference_profiles (user_id);
-
--- *** ADD SEPARATE PARTIAL UNIQUE INDEX for is_default ***
--- Ensures only one profile can be the default per user
-CREATE UNIQUE INDEX idx_user_preference_profiles_user_id_default
-    ON user_preference_profiles (user_id)
-    WHERE is_default = TRUE;
 
 -- Trigger to update 'updated_at' timestamp
 CREATE TRIGGER trigger_set_user_preference_profiles_updated_at

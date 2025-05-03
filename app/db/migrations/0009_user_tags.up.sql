@@ -25,12 +25,20 @@ INSERT INTO global_tags (name, tag_type, description) VALUES
     ON CONFLICT (name) DO NOTHING;
 
 
-CREATE TABLE user_profile_avoid_tags (
-                                         profile_id UUID NOT NULL REFERENCES user_preference_profiles(id) ON DELETE CASCADE,
-                                         tag_id UUID NOT NULL REFERENCES global_tags(id) ON DELETE CASCADE,
-                                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                                         PRIMARY KEY (profile_id, tag_id)
+CREATE TABLE user_personal_tags (
+                                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                                    profile_id UUID NULL REFERENCES user_preference_profiles(id) ON DELETE CASCADE, -- Optional: Link to profile? Or just user?
+                                    name TEXT NOT NULL,
+                                    tag_type TEXT DEFAULT 'personal', -- Differentiate from global
+                                    description TEXT,
+                                    active bool DEFAULT true,
+                                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                                    updated_at TIMESTAMPTZ,
+                                    CONSTRAINT unique_user_personal_tag_name UNIQUE (user_id, name) -- Unique per user
 );
 
-CREATE INDEX idx_user_profile_avoid_tags_profile_id ON user_profile_avoid_tags (profile_id);
-CREATE INDEX idx_user_profile_avoid_tags_tag_id ON user_profile_avoid_tags (tag_id);
+
+
+CREATE INDEX idx_user_personal_tags_profile_id ON user_personal_tags (profile_id);
+CREATE INDEX idx_user_personal_tags_tags_tag_id ON user_personal_tags (id);

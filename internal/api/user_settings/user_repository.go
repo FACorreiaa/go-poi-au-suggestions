@@ -24,14 +24,14 @@ import (
 var _ SettingsRepository = (*PostgresSettingsRepo)(nil)
 
 type SettingsRepository interface {
-	// GetSettings retrieves the settings profile for a specific user.
+	// Get retrieves the settings profile for a specific user.
 	// Returns ErrNotFound if no settings exist for the user (shouldn't happen if trigger works).
-	GetSettings(ctx context.Context, userID uuid.UUID) (*UserSettings, error)
+	Get(ctx context.Context, userID uuid.UUID) (*UserSettings, error)
 
-	// UpdateSettings updates specific fields in the user's settings profile.
+	// Update updates specific fields in the user's settings profile.
 	// Uses pointers in params struct for partial updates. Ensures updated_at is set.
 	// Returns ErrNotFound if the user doesn't have a settings row (shouldn't happen).
-	UpdateSettings(ctx context.Context, userID uuid.UUID, params UpdateUserSettingsParams) error
+	Update(ctx context.Context, userID, profileID uuid.UUID, params UpdateUserSettingsParams) error
 }
 
 type PostgresSettingsRepo struct {
@@ -46,11 +46,11 @@ func NewPostgresUserSettingsRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *Po
 	}
 }
 
-func (r *PostgresSettingsRepo) GetSettings(ctx context.Context, userID uuid.UUID) (*UserSettings, error) {
+func (r *PostgresSettingsRepo) Get(ctx context.Context, userID uuid.UUID) (*UserSettings, error) {
 	var settings UserSettings
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserSettings", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
-		attribute.String("db.sql.table", "user_settings"),
+		attribute.String("db.sql.table", "user_preference_profiles"),
 		attribute.String("db.user.id", userID.String()),
 	))
 	defer span.End()
@@ -59,21 +59,21 @@ func (r *PostgresSettingsRepo) GetSettings(ctx context.Context, userID uuid.UUID
 	l.DebugContext(ctx, "Fetching user settings")
 
 	query := `
-		SELECT default_search_radius_km, preferred_time, default_budget_level, 
+		SELECT search_radius_km, preferred_time, budget_level, 
 		       preferred_pace, prefer_accessible_pois,
-			   prefer_outdoor_seating, preferred_transport_mode, prefer_dog_friendly, 
-			   created_at, updated_at FROM user_settings
+			   prefer_outdoor_seating, preferred_transport, prefer_dog_friendly, 
+			   created_at, updated_at FROM user_preference_profiles
 		WHERE user_id = $1
 	`
 
 	err := r.pgpool.QueryRow(ctx, query, userID).Scan(
-		&settings.DefaultSearchRadiusKm,
+		&settings.SearchRadius,
 		&settings.PreferredTime,
-		&settings.DefaultBudgetLevel,
+		&settings.BudgetLevel,
 		&settings.PreferredPace,
 		&settings.PreferAccessiblePOIs,
 		&settings.PreferOutdoorSeating,
-		&settings.PreferTransportMode,
+		&settings.PreferredTransport,
 		&settings.PreferDogFriendly,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
@@ -98,11 +98,11 @@ func (r *PostgresSettingsRepo) GetSettings(ctx context.Context, userID uuid.UUID
 	return &settings, nil
 }
 
-func (r *PostgresSettingsRepo) UpdateSettings(ctx context.Context, userID uuid.UUID, params UpdateUserSettingsParams) error {
+func (r *PostgresSettingsRepo) Update(ctx context.Context, userID, profileID uuid.UUID, params UpdateUserSettingsParams) error {
 	ctx, span := otel.Tracer("SettingsRepo").Start(ctx, "UpdateUserSettings", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),
-		attribute.String("db.sql.table", "user_settings"),
+		attribute.String("db.sql.table", "user_preference_profiles"),
 		attribute.String("db.user.id", userID.String()),
 	))
 	defer span.End()
@@ -116,27 +116,27 @@ func (r *PostgresSettingsRepo) UpdateSettings(ctx context.Context, userID uuid.U
 	argID := 1 // Start placeholders at $1
 
 	// Check each field in params
-	if params.DefaultSearchRadiusKm != nil {
+	if params.SearchRadius != nil {
 		setClauses = append(setClauses, fmt.Sprintf("default_search_radius_km = $%d", argID))
-		args = append(args, *params.DefaultSearchRadiusKm)
+		args = append(args, *params.SearchRadius)
 		argID++
 		span.SetAttributes(attribute.Bool("update.radius", true))
 	}
 	if params.PreferredTime != nil {
 		setClauses = append(setClauses, fmt.Sprintf("preferred_time = $%d", argID))
-		args = append(args, *params.PreferredTime) // Pass ENUM value directly
+		args = append(args, *params.PreferredTime)
 		argID++
 		span.SetAttributes(attribute.Bool("update.time", true))
 	}
-	if params.DefaultBudgetLevel != nil {
+	if params.BudgetLevel != nil {
 		setClauses = append(setClauses, fmt.Sprintf("default_budget_level = $%d", argID))
-		args = append(args, *params.DefaultBudgetLevel)
+		args = append(args, *params.BudgetLevel)
 		argID++
 		span.SetAttributes(attribute.Bool("update.budget", true))
 	}
 	if params.PreferredPace != nil {
 		setClauses = append(setClauses, fmt.Sprintf("preferred_pace = $%d", argID))
-		args = append(args, *params.PreferredPace) // Pass ENUM value directly
+		args = append(args, *params.PreferredPace)
 		argID++
 		span.SetAttributes(attribute.Bool("update.pace", true))
 	}
@@ -158,6 +158,12 @@ func (r *PostgresSettingsRepo) UpdateSettings(ctx context.Context, userID uuid.U
 		argID++
 		span.SetAttributes(attribute.Bool("update.dog_friendly", true))
 	}
+	if params.IsDefault != nil {
+		setClauses = append(setClauses, fmt.Sprintf("is_default = $%d", argID))
+		args = append(args, *params.IsDefault)
+		argID++
+		span.SetAttributes(attribute.Bool("update.is_default", true))
+	}
 
 	// If no fields were provided to update, return successfully
 	if len(setClauses) == 0 {
@@ -171,13 +177,16 @@ func (r *PostgresSettingsRepo) UpdateSettings(ctx context.Context, userID uuid.U
 	args = append(args, time.Now())
 	argID++
 
-	// Add the userID for the WHERE clause as the last argument
-	args = append(args, userID)
+	// Define placeholders for WHERE clause
+	whereIDPlaceholder := argID
+	whereUserIDPlaceholder := argID + 1
+	args = append(args, profileID, userID)
 
-	// Construct the final query
-	query := fmt.Sprintf(`UPDATE user_settings SET %s WHERE user_id = $%d`,
+	// Construct the query
+	query := fmt.Sprintf(`UPDATE user_preference_profiles SET %s WHERE id = $%d AND user_id = $%d`,
 		strings.Join(setClauses, ", "),
-		argID, // Placeholder for user_id in WHERE clause
+		whereIDPlaceholder,
+		whereUserIDPlaceholder,
 	)
 
 	l.DebugContext(ctx, "Executing dynamic user settings update query", slog.String("query", query), slog.Int("arg_count", len(args)))
@@ -185,7 +194,6 @@ func (r *PostgresSettingsRepo) UpdateSettings(ctx context.Context, userID uuid.U
 	// Execute the dynamic query
 	tag, err := r.pgpool.Exec(ctx, query, args...)
 	if err != nil {
-		// Add specific error checking if needed (e.g., CHECK constraint violations)
 		l.ErrorContext(ctx, "Failed to execute update user settings query", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "DB UPDATE failed")

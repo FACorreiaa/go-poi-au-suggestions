@@ -3,6 +3,7 @@ package userProfiles
 import (
 	"fmt"
 	"log/slog"
+	"net/http"
 )
 
 // UserHandler handles HTTP requests related to user operations.
@@ -23,4 +24,12 @@ func NewUserHandler(userService UserProfilesService, logger *slog.Logger) *UserP
 		userService: userService,
 		logger:      logger,
 	}
+}
+
+func (u *UserProfilesHandler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	l := u.logger.With(slog.String("handler", "GetUserProfile"))
+	l.DebugContext(ctx, "Fetching user profile")
+
+	return
 }

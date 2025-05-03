@@ -125,7 +125,7 @@ type Claims struct {
 	SubscriptionPlan     string `json:"pln,omitempty"`   // Custom claim for Subscription Plan (e.g., 'free', 'premium').
 	SubscriptionStatus   string `json:"sts,omitempty"`   // Custom claim for Subscription Status (e.g., 'active', 'trialing').
 	Scope                string `json:"scope,omitempty"` // Optional scope information.
-	jwt.RegisteredClaims        // Embed standard claims (ExpiresAt, IssuedAt, Subject, etc.).
+	jwt.RegisteredClaims                                 // Embed standard claims (ExpiresAt, IssuedAt, Subject, etc.).
 }
 
 // SubscriptionRepository defines methods for accessing subscription data.
@@ -298,18 +298,10 @@ type GlobalTag struct {
 	ID          uuid.UUID `json:"id"`
 	Name        string    `json:"name"`
 	Description *string   `json:"description,omitempty"`
-	TagType     string    `json:"tag_type"`
-	Active      bool      `json:"active"`
-	CreatedAt   time.Time `json:"created_at"`
-}
-
-// UserAvoidTag represents a tag that a user wants to avoid
-type UserAvoidTag struct {
-	UserID    uuid.UUID `json:"user_id"`
-	TagID     uuid.UUID `json:"tag_id"`
-	TagName   string    `json:"tag_name"`
-	TagType   string    `json:"tag_type"`
-	CreatedAt time.Time `json:"created_at"`
+	TagType     string    `json:"tag_type,omitempty"`
+	Active      bool      `json:"active,omitempty"`
+	Source      string    `json:"source,omitempty"`
+	CreatedAt   time.Time `json:"created_at,omitempty"`
 }
 
 // EnhancedInterest represents an interest with a preference level

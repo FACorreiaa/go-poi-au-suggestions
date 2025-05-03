@@ -1,13 +1,12 @@
-package user
+package userTags
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -20,20 +19,23 @@ import (
 
 var _ UserTagsRepo = (*PostgresUserTagsRepo)(nil)
 
-// UserRepo defines the contract for user data persistence.
+// UserTagsRepo defines the contract for user data persistence.
 type UserTagsRepo interface {
-	// GetAllGlobalTags --- Global Tags & User Avoid Tags ---
-	// GetAllGlobalTags retrieves all global tags
-	GetAllGlobalTags(ctx context.Context) ([]api.GlobalTag, error)
+	// GetAll --- Global Tags & User Avoid Tags ---
+	// GetAll retrieves all global tags
+	GetAll(ctx context.Context, userID uuid.UUID) ([]api.GlobalTag, error)
 
-	// GetUserAvoidTags retrieves all avoid tags for a user
-	GetUserAvoidTags(ctx context.Context, userID uuid.UUID) ([]api.UserAvoidTag, error)
+	// Get retrieves all avoid tags for a user
+	Get(ctx context.Context, userID, tagID uuid.UUID) (*api.GlobalTag, error)
 
-	// AddUserAvoidTag adds an avoid tag for a user
-	AddUserAvoidTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error
+	// Create adds an avoid tag for a user
+	Create(ctx context.Context, userID uuid.UUID, params CreatePersonalTagParams) (*PersonalTag, error)
 
-	// RemoveUserAvoidTag removes an avoid tag for a user
-	RemoveUserAvoidTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error
+	// Delete removes an avoid tag for a user
+	Delete(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error
+
+	// Update updates on tag
+	Update(ctx context.Context, userID, tagsID uuid.UUID, params UpdatePersonalTagParams) error
 }
 
 type PostgresUserTagsRepo struct {
@@ -48,8 +50,8 @@ func NewPostgresUserTagsRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *Postgr
 	}
 }
 
-// GetAllGlobalTags implements user.UserRepo.
-func (r *PostgresUserTagsRepo) GetAllGlobalTags(ctx context.Context) ([]api.GlobalTag, error) {
+// GetAll implements user.UserRepo.
+func (r *PostgresUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]api.GlobalTag, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetAllGlobalTags", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "global_tags"),
@@ -60,12 +62,32 @@ func (r *PostgresUserTagsRepo) GetAllGlobalTags(ctx context.Context) ([]api.Glob
 	l.DebugContext(ctx, "Fetching all active global tags")
 
 	query := `
-        SELECT id, name, description, tag_type, active, created_at
-        FROM global_tags
-        WHERE active = TRUE
+        SELECT
+            g.id,
+            g.name,
+            g.description,
+            g.tag_type,
+            'global' AS source, 
+            g.created_at        
+        FROM global_tags g
+        WHERE g.active = TRUE
+
+        UNION ALL
+
+        -- Select User Personal Tags
+        SELECT
+            upt.id,
+            upt.name,
+            NULL AS description, 
+            upt.tag_type,
+            'personal' AS source, 
+            upt.created_at
+        FROM user_personal_tags upt 
+        WHERE upt.user_id = $1
+
         ORDER BY name`
 
-	rows, err := r.pgpool.Query(ctx, query)
+	rows, err := r.pgpool.Query(ctx, query, userID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to query global tags", slog.Any("error", err))
 		span.RecordError(err)
@@ -78,7 +100,12 @@ func (r *PostgresUserTagsRepo) GetAllGlobalTags(ctx context.Context) ([]api.Glob
 	for rows.Next() {
 		var t api.GlobalTag
 		err := rows.Scan(
-			&t.ID, &t.Name, &t.Description, &t.TagType, &t.Active, &t.CreatedAt,
+			&t.ID,
+			&t.Name,
+			&t.Description,
+			&t.TagType,
+			&t.Source,
+			&t.CreatedAt,
 		)
 		if err != nil {
 			l.ErrorContext(ctx, "Failed to scan global tag row", slog.Any("error", err))
@@ -99,8 +126,9 @@ func (r *PostgresUserTagsRepo) GetAllGlobalTags(ctx context.Context) ([]api.Glob
 	return tags, nil
 }
 
-// GetUserAvoidTags implements user.UserRepo.
-func (r *PostgresUserTagsRepo) GetUserAvoidTags(ctx context.Context, userID uuid.UUID) ([]api.UserAvoidTag, error) {
+// Get implements user.UserRepo.
+func (r *PostgresUserTagsRepo) Get(ctx context.Context, userID, tagID uuid.UUID) (*api.GlobalTag, error) {
+	var tag api.GlobalTag
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserAvoidTags", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "user_avoid_tags, global_tags"),
@@ -112,122 +140,228 @@ func (r *PostgresUserTagsRepo) GetUserAvoidTags(ctx context.Context, userID uuid
 	l.DebugContext(ctx, "Fetching user avoid tags")
 
 	query := `
-        SELECT uat.user_id, uat.tag_id, gt.name, gt.tag_type, uat.created_at
-        FROM user_avoid_tags uat
-        JOIN global_tags gt ON uat.tag_id = gt.id
-        WHERE uat.user_id = $1 AND gt.active = TRUE
-        ORDER BY gt.name`
+        SELECT
+            g.id,
+            g.name,
+            g.description,
+            g.tag_type,
+            'global' AS source, 
+            g.created_at        
+        FROM global_tags g
+        WHERE g.active = TRUE
 
-	rows, err := r.pgpool.Query(ctx, query, userID)
+        UNION ALL
+
+        -- Select User Personal Tags
+        SELECT
+            upt.id,
+            upt.name,
+            NULL AS description, 
+            upt.tag_type,
+            'personal' AS source, 
+            upt.created_at
+        FROM user_personal_tags upt 
+        WHERE upt.user_id = $1 AND upt.id = $2
+
+        ORDER BY name`
+
+	err := r.pgpool.QueryRow(ctx, query, userID, tagID).Scan(
+		&tag.ID,
+		&tag.Name,
+		&tag.Description,
+		&tag.TagType,
+		&tag.Source,
+		&tag.CreatedAt,
+	)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to query user avoid tags", slog.Any("error", err))
-		span.RecordError(err)
 		span.SetStatus(codes.Error, "DB query failed")
 		return nil, fmt.Errorf("database error fetching avoid tags: %w", err)
 	}
-	defer rows.Close()
 
-	var tags []api.UserAvoidTag
-	for rows.Next() {
-		var t api.UserAvoidTag
-		err := rows.Scan(
-			&t.UserID, &t.TagID, &t.TagName, &t.TagType, &t.CreatedAt,
-		)
-		if err != nil {
-			l.ErrorContext(ctx, "Failed to scan avoid tag row", slog.Any("error", err))
-			span.RecordError(err)
-			return nil, fmt.Errorf("database error scanning avoid tag: %w", err)
-		}
-		tags = append(tags, t)
-	}
-
-	if err = rows.Err(); err != nil {
-		l.ErrorContext(ctx, "Error iterating avoid tag rows", slog.Any("error", err))
-		span.RecordError(err)
-		return nil, fmt.Errorf("database error reading avoid tags: %w", err)
-	}
-
-	l.DebugContext(ctx, "Fetched user avoid tags successfully", slog.Int("count", len(tags)))
+	l.DebugContext(ctx, "Fetched user avoid tags successfully")
 	span.SetStatus(codes.Ok, "Avoid tags fetched")
-	return tags, nil
+	return &tag, nil
 }
 
-// AddUserAvoidTag implements user.UserRepo.
-func (r *PostgresUserTagsRepo) AddUserAvoidTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
-	ctx, span := otel.Tracer("UserRepo").Start(ctx, "AddUserAvoidTag", trace.WithAttributes(
+// Create creates a new personal tag for a specific user.
+func (r *PostgresUserTagsRepo) Create(ctx context.Context, userID uuid.UUID, params CreatePersonalTagParams) (*PersonalTag, error) {
+	ctx, span := otel.Tracer("UserTagsRepo").Start(ctx, "CreatePersonalTag", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
-		attribute.String("db.sql.table", "user_avoid_tags"),
+		attribute.String("db.sql.table", "user_personal_tags"),
 		attribute.String("db.user.id", userID.String()),
-		attribute.String("db.tag.id", tagID.String()),
 	))
 	defer span.End()
 
-	l := r.logger.With(slog.String("method", "AddUserAvoidTag"), slog.String("userID", userID.String()), slog.String("tagID", tagID.String()))
-	l.DebugContext(ctx, "Adding user avoid tag")
+	tx, err := r.pgpool.Begin(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Begin transaction failed")
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) // Rollback if commit is not successful
+
+	l := r.logger.With(
+		slog.String("method", "CreatePersonalTag"),
+		slog.String("userID", userID.String()),
+		slog.String("tagName", params.Name),
+		slog.String("tagType", params.TagType),
+	)
+	l.DebugContext(ctx, "Creating user personal tag")
+
+	newTagID := uuid.New()
+	now := time.Now()
+
+	tag := &PersonalTag{
+		ID:      newTagID,
+		UserID:  userID,
+		Name:    params.Name,
+		TagType: params.TagType,
+		//Description: &params.Description,
+		Source:    "personal",
+		CreatedAt: now,
+	}
 
 	query := `
-        INSERT INTO user_avoid_tags (user_id, tag_id)
-        VALUES ($1, $2)
-        ON CONFLICT (user_id, tag_id) DO NOTHING`
+        INSERT INTO user_personal_tags (id, user_id, name, tag_type, created_at)
+        VALUES ($1, $2, $3, $4, $5)
+    `
+	// Note: No ON CONFLICT here. We expect a unique constraint (user_id, name)
+	// on the table and will handle the specific error if it occurs.
 
-	tag, err := r.pgpool.Exec(ctx, query, userID, tagID)
+	_, err = tx.Exec(ctx, query, tag.ID, tag.UserID, tag.Name, tag.TagType, tag.CreatedAt)
 	if err != nil {
-		// Check for foreign key violation if tagID doesn't exist in 'global_tags' table
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" { // Foreign key violation
-			l.WarnContext(ctx, "Attempted to add non-existent tag to user", slog.Any("error", err))
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "Foreign key violation")
-			return fmt.Errorf("tag ID %s does not exist: %w", tagID.String(), api.ErrNotFound)
-		}
-		l.ErrorContext(ctx, "Failed to insert user avoid tag", slog.Any("error", err))
 		span.RecordError(err)
+
+		l.ErrorContext(ctx, "Failed to insert user personal tag", slog.Any("error", err))
 		span.SetStatus(codes.Error, "DB INSERT failed")
-		return fmt.Errorf("database error adding avoid tag: %w", err)
+		return nil, fmt.Errorf("database error creating personal tag: %w", err)
 	}
 
-	if tag.RowsAffected() == 0 {
-		l.DebugContext(ctx, "User avoid tag association already exists")
-		// Not an error in this case due to ON CONFLICT DO NOTHING
-	} else {
-		l.InfoContext(ctx, "User avoid tag added successfully")
+	err = tx.Commit(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Commit transaction failed")
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	span.SetStatus(codes.Ok, "Avoid tag added or already exists")
+
+	l.InfoContext(ctx, "User personal tag created successfully", slog.String("tagID", tag.ID.String()))
+	span.SetStatus(codes.Ok, "Personal tag created")
+	return tag, nil
+}
+
+// Update updates the name and/or type of an existing personal tag for a specific user.
+func (r *PostgresUserTagsRepo) Update(ctx context.Context, userID, tagsID uuid.UUID, params UpdatePersonalTagParams) error {
+	ctx, span := otel.Tracer("UserTagsRepo").Start(ctx, "UpdatePersonalTag", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "UPDATE"),
+		attribute.String("db.sql.table", "user_personal_tags"),
+	))
+	defer span.End()
+
+	tx, err := r.pgpool.Begin(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Begin transaction failed")
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	l := r.logger.With(
+		slog.String("method", "UpdatePersonalTag"),
+		slog.String("userID", userID.String()),
+		slog.String("tagID", tagsID.String()),
+		slog.String("newName", params.Name),
+		slog.String("newTagType", params.TagType),
+	)
+	l.DebugContext(ctx, "Updating user personal tag")
+
+	query := `
+        UPDATE user_personal_tags
+        SET name = $1, tag_type = $2
+        WHERE id = $3 AND user_id = $4
+        AND tag_type = 'personal'
+    `
+	now := time.Now()
+
+	cmdTag, err := tx.Exec(ctx, query, params.Name, params.TagType, now, userID, tagsID)
+	if err != nil {
+		span.RecordError(err)
+		l.ErrorContext(ctx, "Failed to update user personal tag", slog.Any("error", err))
+		span.SetStatus(codes.Error, "DB UPDATE failed")
+		return fmt.Errorf("database error updating personal tag: %w", err)
+	}
+
+	if cmdTag.RowsAffected() == 0 {
+		l.WarnContext(ctx, "Attempted to update non-existent or unauthorized personal tag")
+		span.SetStatus(codes.Error, "Tag not found or not owned by user")
+		// It didn't exist OR didn't belong to the user, return NotFound
+		return fmt.Errorf("personal tag not found or not owned by user: %w", api.ErrNotFound)
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Commit transaction failed")
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	l.InfoContext(ctx, "User personal tag updated successfully")
+	span.SetStatus(codes.Ok, "Personal tag updated")
 	return nil
 }
 
-// RemoveUserAvoidTag implements user.UserRepo.
-func (r *PostgresUserTagsRepo) RemoveUserAvoidTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
-	ctx, span := otel.Tracer("UserRepo").Start(ctx, "RemoveUserAvoidTag", trace.WithAttributes(
+// Delete deletes a specific personal tag belonging to a user.
+func (r *PostgresUserTagsRepo) Delete(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
+	ctx, span := otel.Tracer("UserTagsRepo").Start(ctx, "DeletePersonalTag", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "DELETE"),
-		attribute.String("db.sql.table", "user_avoid_tags"),
+		attribute.String("db.sql.table", "user_personal_tags"),
 		attribute.String("db.user.id", userID.String()),
 		attribute.String("db.tag.id", tagID.String()),
 	))
 	defer span.End()
 
-	l := r.logger.With(slog.String("method", "RemoveUserAvoidTag"), slog.String("userID", userID.String()), slog.String("tagID", tagID.String()))
-	l.DebugContext(ctx, "Removing user avoid tag")
-
-	query := "DELETE FROM user_avoid_tags WHERE user_id = $1 AND tag_id = $2"
-	tag, err := r.pgpool.Exec(ctx, query, userID, tagID)
+	tx, err := r.pgpool.Begin(ctx)
 	if err != nil {
-		l.ErrorContext(ctx, "Failed to delete user avoid tag", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Begin transaction failed")
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	l := r.logger.With(slog.String("method", "DeletePersonalTag"), slog.String("userID", userID.String()), slog.String("tagID", tagID.String()))
+	l.DebugContext(ctx, "Deleting user personal tag")
+
+	query := `
+        DELETE FROM user_personal_tags
+        WHERE id = $1 AND user_id = $2
+    `
+	cmdTag, err := tx.Exec(ctx, query, tagID, userID)
+	if err != nil {
+		// Note: DELETE typically won't cause unique or foreign key violations unless triggers exist.
+		l.ErrorContext(ctx, "Failed to delete user personal tag", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "DB DELETE failed")
-		return fmt.Errorf("database error removing avoid tag: %w", err)
+		return fmt.Errorf("database error deleting personal tag: %w", err)
 	}
 
-	if tag.RowsAffected() == 0 {
-		l.WarnContext(ctx, "Attempted to remove non-existent user avoid tag association")
-		// Return an error so the service/handler knows the operation didn't change anything
-		span.SetStatus(codes.Error, "Association not found")
-		return fmt.Errorf("avoid tag association not found: %w", api.ErrNotFound)
+	if cmdTag.RowsAffected() == 0 {
+		l.WarnContext(ctx, "Attempted to delete non-existent or unauthorized personal tag")
+		span.SetStatus(codes.Error, "Tag not found or not owned by user")
+		// It didn't exist OR didn't belong to the user
+		return fmt.Errorf("personal tag not found or not owned by user: %w", api.ErrNotFound)
 	}
 
-	l.InfoContext(ctx, "User avoid tag removed successfully")
-	span.SetStatus(codes.Ok, "Avoid tag removed")
+	err = tx.Commit(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Commit transaction failed")
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	l.InfoContext(ctx, "User personal tag deleted successfully")
+	span.SetStatus(codes.Ok, "Personal tag deleted")
 	return nil
 }

@@ -132,27 +132,28 @@ func (s TransportPreference) Value() (driver.Value, error) {
 // UserSettings represents the user's default preferences and settings.
 // This struct mirrors the 'user_settings' database table.
 type UserSettings struct {
-	UserID                uuid.UUID           `json:"user_id"`                  // Primary Key, Foreign Key to users
-	DefaultSearchRadiusKm float64             `json:"default_search_radius_km"` // Default search radius in kilometers
-	PreferredTime         DayPreference       `json:"preferred_time"`           // Preferred time of day ('any', 'day', 'night')
-	DefaultBudgetLevel    int                 `json:"default_budget_level"`     // Preferred budget (0-4, 0=any)
-	PreferredPace         SearchPace          `json:"preferred_pace"`           // Preferred pace ('any', 'relaxed', 'moderate', 'fast')
-	PreferAccessiblePOIs  bool                `json:"prefer_accessible_pois"`   // Preference for accessible places
-	PreferOutdoorSeating  bool                `json:"prefer_outdoor_seating"`   // Preference for outdoor seating
-	PreferTransportMode   TransportPreference `json:"prefer_transport_mode"`
-	PreferDogFriendly     bool                `json:"prefer_dog_friendly"` // Preference for dog-friendly places
-	CreatedAt             time.Time           `json:"created_at"`          // Timestamp of creation
-	UpdatedAt             time.Time           `json:"updated_at"`          // Timestamp of last update
+	UserID               uuid.UUID           `json:"user_id"`                // Primary Key, Foreign Key to users
+	SearchRadius         float64             `json:"search_radius_km"`       // Default search radius in kilometers
+	PreferredTime        DayPreference       `json:"preferred_time"`         // Preferred time of day ('any', 'day', 'night')
+	BudgetLevel          int                 `json:"budget_level"`           // Preferred budget (0-4, 0=any)
+	PreferredPace        SearchPace          `json:"preferred_pace"`         // Preferred pace ('any', 'relaxed', 'moderate', 'fast')
+	PreferAccessiblePOIs bool                `json:"prefer_accessible_pois"` // Preference for accessible places
+	PreferOutdoorSeating bool                `json:"prefer_outdoor_seating"` // Preference for outdoor seating
+	PreferredTransport   TransportPreference `json:"preferred_transport"`
+	PreferDogFriendly    bool                `json:"prefer_dog_friendly"` // Preference for dog-friendly places
+	CreatedAt            time.Time           `json:"created_at"`          // Timestamp of creation
+	UpdatedAt            time.Time           `json:"updated_at"`          // Timestamp of last update
 }
 
 // UpdateUserSettingsParams defines the fields allowed for updating user settings.
 // Pointers are used to allow partial updates (only provided fields are updated).
 type UpdateUserSettingsParams struct {
-	DefaultSearchRadiusKm *float64       `json:"default_search_radius_km,omitempty"`
-	PreferredTime         *DayPreference `json:"preferred_time,omitempty"`
-	DefaultBudgetLevel    *int           `json:"default_budget_level,omitempty"` // Use pointer even for int if 0 is a valid non-default value user might set
-	PreferredPace         *SearchPace    `json:"preferred_pace,omitempty"`
-	PreferAccessiblePOIs  *bool          `json:"prefer_accessible_pois,omitempty"`
-	PreferOutdoorSeating  *bool          `json:"prefer_outdoor_seating,omitempty"`
-	PreferDogFriendly     *bool          `json:"prefer_dog_friendly,omitempty"`
+	SearchRadius         *float64       `json:"search_radius_km,omitempty"`
+	PreferredTime        *DayPreference `json:"preferred_time,omitempty"`
+	BudgetLevel          *int           `json:"budget_level,omitempty"` // Use pointer even for int if 0 is a valid non-default value user might set
+	PreferredPace        *SearchPace    `json:"preferred_pace,omitempty"`
+	PreferAccessiblePOIs *bool          `json:"prefer_accessible_pois,omitempty"`
+	PreferOutdoorSeating *bool          `json:"prefer_outdoor_seating,omitempty"`
+	PreferDogFriendly    *bool          `json:"prefer_dog_friendly,omitempty"`
+	IsDefault            *bool          `json:"is_default,omitempty"`
 }

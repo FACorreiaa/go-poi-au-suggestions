@@ -3,8 +3,9 @@ package userProfiles
 import (
 	"database/sql/driver"
 	"fmt"
-	"github.com/google/uuid"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // --- ENUM Types ---
@@ -179,4 +180,10 @@ type UpdateUserPreferenceProfileParams struct {
 	PreferredVibes       []string             `json:"preferred_vibes"` // Allow setting empty slice `[]`
 	PreferredTransport   *TransportPreference `json:"preferred_transport,omitempty"`
 	DietaryNeeds         []string             `json:"dietary_needs"` // Allow setting empty slice `[]`
+}
+
+type UpdateUserInterestParams struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Active      *bool   `json:"active,omitempty"`
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
 	userSettings "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_settings"
+	userTags "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_tags"
 )
 
 // Container holds all application dependencies
@@ -23,6 +24,7 @@ type Container struct {
 	UserHandler         *user.HandlerUser
 	UserInterestHandler *userInterest.UserInterestHandler
 	UserSettingsHandler *userSettings.SettingsHandler
+	UserTagsHandler     *userTags.UserTagsHandler
 	// Add other handlers, services, and repositories as needed
 }
 
@@ -63,6 +65,9 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	userSettingsService := userSettings.NewUserSettingsService(userSettingsRepo, logger)
 	userSettingsHandler := userSettings.NewSettingsHandler(userSettingsService, logger)
 
+	userTagsRepo := userTags.NewPostgresUserTagsRepo(pool, logger)
+	userTagsService := userTags.NewUserTagsService(userTagsRepo, logger)
+	userTagsHandler := userTags.NewUserTagsHandler(userTagsService, logger)
 	// Create and return the container
 	return &Container{
 		Config:              cfg,
@@ -72,6 +77,7 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 		UserHandler:         userHandler,
 		UserInterestHandler: userInterestHandler,
 		UserSettingsHandler: userSettingsHandler,
+		UserTagsHandler:     userTagsHandler,
 		// Add other handlers, services, and repositories as needed
 	}, nil
 }

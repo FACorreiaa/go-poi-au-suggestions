@@ -306,7 +306,7 @@ func (h *UserInterestHandler) UpdateUserInterest(w http.ResponseWriter, r *http.
 	l = l.With(slog.String("userID", userID.String())) // Add userID to logger
 	span.SetAttributes(attribute.String("user.id", userID.String()))
 
-	// 2. Get InterestID from path parameter
+	// 2. Get profileID from path parameter
 	interestIDStr := chi.URLParam(r, "interestID")
 	interestID, err := uuid.Parse(interestIDStr)
 	if err != nil {

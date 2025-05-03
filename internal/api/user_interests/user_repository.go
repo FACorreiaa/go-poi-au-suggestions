@@ -24,7 +24,7 @@ var _ UserInterestRepo = (*PostgresUserInterestRepo)(nil)
 
 // UserInterestRepo defines the contract for user data persistence.
 type UserInterestRepo interface {
-	// GetUserPreferences ---  / Interests ---
+	// CreateInterest ---  / Interests ---
 	CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*api.Interest, error)
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	GetAllInterests(ctx context.Context) ([]api.Interest, error)

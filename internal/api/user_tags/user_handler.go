@@ -1,8 +1,19 @@
-package user
+package userTags
 
 import (
 	"fmt"
 	"log/slog"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 )
 
 // UserTagsHandler handles HTTP requests related to user operations.
@@ -23,4 +34,238 @@ func NewUserTagsHandler(userService UserTagsService, logger *slog.Logger) *UserT
 		userTagsService: userService,
 		logger:          logger,
 	}
+}
+
+func (u *UserTagsHandler) GetTags(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("GetTagsHandler").Start(r.Context(), "GetTags", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/user/tags"),
+	))
+	defer span.End()
+
+	l := u.logger.With(slog.String("handler", "GetTags"))
+	l.DebugContext(ctx, "Fetching user tags")
+
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.WarnContext(ctx, "User ID not found in context")
+		span.SetStatus(codes.Error, "Authentication required")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil { // Should ideally not happen if JWT sub is always valid UUID
+		l.ErrorContext(ctx, "Invalid user ID format in context", slog.String("user_id_str", userIDStr), slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid User ID in token")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Invalid user session")
+		return
+	}
+
+	tags, err := u.userTagsService.GetTags(ctx, userID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to get user tags", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get user tags")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to retrieve user tags")
+	}
+	span.SetStatus(codes.Ok, "Tags retrieved successfully")
+	api.WriteJSONResponse(w, r, http.StatusOK, tags)
+}
+
+func (u *UserTagsHandler) GetTag(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("GetTagHandler").Start(r.Context(), "GetTag", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/user/tags"),
+	))
+	defer span.End()
+
+	l := u.logger.With(slog.String("handler", "GetTag"))
+	l.DebugContext(ctx, "Fetching user tag")
+
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		span.SetStatus(codes.Error, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid user ID format")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+
+	tagIDStr := chi.URLParam(r, "tagID")
+	tagID, err := uuid.Parse(tagIDStr)
+	if err != nil {
+		l.WarnContext(ctx, "Invalid tag ID format", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid tag ID format")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid tag ID format")
+		return
+	}
+
+	tag, err := u.userTagsService.GetTag(ctx, userID, tagID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to get user tag", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get user tag")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to retrieve user tag")
+	}
+	span.SetStatus(codes.Ok, "Tag retrieved successfully")
+	api.WriteJSONResponse(w, r, http.StatusOK, tag)
+}
+
+func (u *UserTagsHandler) CreateTag(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("CreateTagHandler").Start(r.Context(), "CreateTag", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/user/tags"),
+	))
+	defer span.End()
+
+	l := u.logger.With(slog.String("handler", "CreateTag"))
+	l.DebugContext(ctx, "Creating user tag")
+
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		span.SetStatus(codes.Error, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid user ID format")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+	}
+
+	var req CreatePersonalTagParams
+	if err := api.DecodeJSONBody(w, r, &req); err != nil {
+		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to decode request")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request format")
+		return
+	}
+
+	tag, err := u.userTagsService.CreateTag(ctx, userID, req)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to create user tag", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to create user tag")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to create user tag")
+	}
+	span.SetStatus(codes.Ok, "Tag created successfully")
+	api.WriteJSONResponse(w, r, http.StatusOK, tag)
+}
+
+func (u *UserTagsHandler) DeleteTag(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("DeleteTagHandler").Start(r.Context(), "DeleteTag", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/user/tags"),
+	))
+	defer span.End()
+
+	l := u.logger.With(slog.String("handler", "DeleteTag"))
+	l.DebugContext(ctx, "Deleting user tag")
+
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		span.SetStatus(codes.Error, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid user ID format")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+	}
+
+	tagIDStr := chi.URLParam(r, "tagID")
+	tagID, err := uuid.Parse(tagIDStr)
+	if err != nil {
+		l.WarnContext(ctx, "Invalid tag ID format", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid tag ID format")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid tag ID format")
+	}
+
+	err = u.userTagsService.DeleteTag(ctx, userID, tagID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to delete user tag", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to delete user tag")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to delete user tag")
+	}
+	span.SetStatus(codes.Ok, "Tag deleted successfully")
+	api.WriteJSONResponse(w, r, http.StatusOK, nil)
+}
+
+func (u *UserTagsHandler) UpdateTag(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("UpdateTagHandler").Start(r.Context(), "UpdateTag", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/user/tags"),
+	))
+	defer span.End()
+
+	l := u.logger.With(slog.String("handler", "UpdateTag"))
+	l.DebugContext(ctx, "Updating user tag")
+
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		span.SetStatus(codes.Error, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid user ID format")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+	}
+
+	tagIDStr := chi.URLParam(r, "tagID")
+	tagID, err := uuid.Parse(tagIDStr)
+
+	if err != nil {
+		l.WarnContext(ctx, "Invalid tag ID format", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid tag ID format")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid tag ID format")
+	}
+
+	var req UpdatePersonalTagParams
+	if err = api.DecodeJSONBody(w, r, &req); err != nil {
+		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to decode request")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request format")
+		return
+	}
+
+	err = u.userTagsService.Update(ctx, userID, tagID, req)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to update user tag", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to update user tag")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to update user tag")
+	}
+	span.SetStatus(codes.Ok, "Tag updated successfully")
+	api.WriteJSONResponse(w, r, http.StatusOK, nil)
 }

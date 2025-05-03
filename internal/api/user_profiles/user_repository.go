@@ -23,7 +23,7 @@ import (
 
 var _ UserProfilesRepo = (*PostgresUserProfilesRepo)(nil)
 
-// UserRepo defines the contract for user data persistence.
+// UserProfilesRepo defines the contract for user data persistence.
 type UserProfilesRepo interface {
 	// GetUserPreferenceProfiles --- User Preference Profiles ---
 	// GetUserPreferenceProfiles retrieves all preference profiles for a user
@@ -53,6 +53,17 @@ func NewPostgresUserRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresUs
 		pgpool: pgxpool,
 	}
 }
+
+//SELECT upp.profile_name, upp.is_default, upp.search_radius_km,
+//upp.preferred_time, upp.budget_level, upp.preferred_pace,
+//upp.prefer_accessible_pois, prefer_outdoor_seating,
+//upp.prefer_dog_friendly, upp.preferred_vibes,
+//upp.preferred_transport, upp.dietary_needs,
+//ucc.name, ucc.description ,ucc.active
+//FROM user_preference_profiles upp
+//JOIN user_custom_interests ucc ON ucc.user_id = upp.user_id
+//WHERE upp.user_id = 'f835199b-7d87-4450-841c-b94fcf9706b0'
+//ORDER BY upp.profile_name
 
 // GetUserPreferenceProfiles implements user.UserRepo.
 func (r *PostgresUserProfilesRepo) GetUserPreferenceProfiles(ctx context.Context, userID uuid.UUID) ([]api.UserPreferenceProfile, error) {

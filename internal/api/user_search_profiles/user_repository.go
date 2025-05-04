@@ -1,4 +1,4 @@
-package userProfiles
+package userSearchProfile
 
 import (
 	"context"
@@ -18,38 +18,37 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-var _ UserProfilesRepo = (*PostgresUserProfilesRepo)(nil)
+var _ UserSearchProfilesRepo = (*PostgresUserSearchProfilesRepo)(nil)
 
-// UserProfilesRepo defines the contract for user data persistence.
-type UserProfilesRepo interface {
+// UserSearchProfilesRepo defines the contract for user data persistence.
+type UserSearchProfilesRepo interface {
 	// GetProfiles --- User Preference Profiles ---
 	// GetProfiles retrieves all preference profiles for a user
-	GetProfiles(ctx context.Context, userID uuid.UUID) ([]api.UserPreferenceProfile, error)
+	GetProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error)
 	// GetProfile retrieves a specific preference profile by ID
-	GetProfile(ctx context.Context, profileID uuid.UUID) (*api.UserPreferenceProfile, error)
+	GetProfile(ctx context.Context, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error)
 	// GetDefaultProfile retrieves the default preference profile for a user
-	GetDefaultProfile(ctx context.Context, userID uuid.UUID) (*api.UserPreferenceProfile, error)
+	GetDefaultProfile(ctx context.Context, userID uuid.UUID) (*types.UserPreferenceProfileResponse, error)
 	// CreateProfile creates a new preference profile for a user
-	CreateProfile(ctx context.Context, userID uuid.UUID, params api.CreateUserPreferenceProfileParams) (*api.UserPreferenceProfile, error)
+	CreateProfile(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error)
 	// UpdateProfile updates a preference profile
-	UpdateProfile(ctx context.Context, profileID uuid.UUID, params api.UpdateUserPreferenceProfileParams) error
+	UpdateProfile(ctx context.Context, profileID uuid.UUID, params types.UpdateUserPreferenceProfileParams) error
 	// DeleteProfile deletes a preference profile
 	DeleteProfile(ctx context.Context, profileID uuid.UUID) error
 	// SetDefaultProfile sets a profile as the default for a user
 	SetDefaultProfile(ctx context.Context, profileID uuid.UUID) error
 }
 
-type PostgresUserProfilesRepo struct {
+type PostgresUserSearchProfilesRepo struct {
 	logger *slog.Logger
 	pgpool *pgxpool.Pool
 }
 
-func NewPostgresUserRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresUserProfilesRepo {
-	return &PostgresUserProfilesRepo{
+func NewPostgresUserRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresUserSearchProfilesRepo {
+	return &PostgresUserSearchProfilesRepo{
 		logger: logger,
 		pgpool: pgxpool,
 	}
@@ -67,7 +66,7 @@ func NewPostgresUserRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresUs
 //ORDER BY upp.profile_name
 
 // GetProfiles implements user.UserRepo.
-func (r *PostgresUserProfilesRepo) GetProfiles(ctx context.Context, userID uuid.UUID) ([]api.UserPreferenceProfile, error) {
+func (r *PostgresUserSearchProfilesRepo) GetProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserPreferenceProfiles", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "user_preference_profiles"),
@@ -96,9 +95,9 @@ func (r *PostgresUserProfilesRepo) GetProfiles(ctx context.Context, userID uuid.
 	}
 	defer rows.Close()
 
-	var profiles []api.UserPreferenceProfile
+	var profiles []types.UserPreferenceProfileResponse
 	for rows.Next() {
-		var p api.UserPreferenceProfile
+		var p types.UserPreferenceProfileResponse
 		err := rows.Scan(
 			&p.ID, &p.UserID, &p.ProfileName, &p.IsDefault, &p.SearchRadiusKm, &p.PreferredTime,
 			&p.BudgetLevel, &p.PreferredPace, &p.PreferAccessiblePOIs, &p.PreferOutdoorSeating,
@@ -125,7 +124,7 @@ func (r *PostgresUserProfilesRepo) GetProfiles(ctx context.Context, userID uuid.
 }
 
 // GetProfile implements user.UserRepo.
-func (r *PostgresUserProfilesRepo) GetProfile(ctx context.Context, profileID uuid.UUID) (*api.UserPreferenceProfile, error) {
+func (r *PostgresUserSearchProfilesRepo) GetProfile(ctx context.Context, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "user_preference_profiles"),
@@ -144,7 +143,7 @@ func (r *PostgresUserProfilesRepo) GetProfile(ctx context.Context, profileID uui
         FROM user_preference_profiles
         WHERE id = $1`
 
-	var p api.UserPreferenceProfile
+	var p types.UserPreferenceProfileResponse
 	err := r.pgpool.QueryRow(ctx, query, profileID).Scan(
 		&p.ID, &p.UserID, &p.ProfileName, &p.IsDefault, &p.SearchRadiusKm, &p.PreferredTime,
 		&p.BudgetLevel, &p.PreferredPace, &p.PreferAccessiblePOIs, &p.PreferOutdoorSeating,
@@ -164,7 +163,7 @@ func (r *PostgresUserProfilesRepo) GetProfile(ctx context.Context, profileID uui
 }
 
 // GetDefaultProfile implements user.UserRepo.
-func (r *PostgresUserProfilesRepo) GetDefaultProfile(ctx context.Context, userID uuid.UUID) (*api.UserPreferenceProfile, error) {
+func (r *PostgresUserSearchProfilesRepo) GetDefaultProfile(ctx context.Context, userID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetDefaultUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "user_preference_profiles"),
@@ -183,7 +182,7 @@ func (r *PostgresUserProfilesRepo) GetDefaultProfile(ctx context.Context, userID
         FROM user_preference_profiles
         WHERE user_id = $1 AND is_default = TRUE`
 
-	var p api.UserPreferenceProfile
+	var p types.UserPreferenceProfileResponse
 	err := r.pgpool.QueryRow(ctx, query, userID).Scan(
 		&p.ID, &p.UserID, &p.ProfileName, &p.IsDefault, &p.SearchRadiusKm, &p.PreferredTime,
 		&p.BudgetLevel, &p.PreferredPace, &p.PreferAccessiblePOIs, &p.PreferOutdoorSeating,
@@ -203,7 +202,7 @@ func (r *PostgresUserProfilesRepo) GetDefaultProfile(ctx context.Context, userID
 }
 
 // CreateProfile implements user.UserRepo.
-func (r *PostgresUserProfilesRepo) CreateProfile(ctx context.Context, userID uuid.UUID, params api.CreateUserPreferenceProfileParams) (*api.UserPreferenceProfile, error) {
+func (r *PostgresUserSearchProfilesRepo) CreateProfile(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "CreateUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
@@ -232,7 +231,7 @@ func (r *PostgresUserProfilesRepo) CreateProfile(ctx context.Context, userID uui
 		searchRadiusKm = *params.SearchRadiusKm
 	}
 
-	preferredTime := api.DayPreferenceAny
+	preferredTime := types.DayPreferenceAny
 	if params.PreferredTime != nil {
 		preferredTime = *params.PreferredTime
 	}
@@ -242,7 +241,7 @@ func (r *PostgresUserProfilesRepo) CreateProfile(ctx context.Context, userID uui
 		budgetLevel = *params.BudgetLevel
 	}
 
-	preferredPace := api.SearchPaceAny
+	preferredPace := types.SearchPaceAny
 	if params.PreferredPace != nil {
 		preferredPace = *params.PreferredPace
 	}
@@ -267,7 +266,7 @@ func (r *PostgresUserProfilesRepo) CreateProfile(ctx context.Context, userID uui
 		preferredVibes = []string{}
 	}
 
-	preferredTransport := api.TransportPreferenceAny
+	preferredTransport := types.TransportPreferenceAny
 	if params.PreferredTransport != nil {
 		preferredTransport = *params.PreferredTransport
 	}
@@ -275,119 +274,6 @@ func (r *PostgresUserProfilesRepo) CreateProfile(ctx context.Context, userID uui
 	dietaryNeeds := params.DietaryNeeds
 	if dietaryNeeds == nil {
 		dietaryNeeds = []string{}
-	}
-
-	// Process tags if provided
-	if params.Tags != nil && len(params.Tags) > 0 {
-		l.DebugContext(ctx, "Processing tags for profile", slog.Int("tagCount", len(params.Tags)))
-
-		// For each tag, check if it exists, and if not, create it
-		for _, tagPtr := range params.Tags {
-			if tagPtr == nil {
-				continue
-			}
-
-			tagName := *tagPtr
-
-			// Check if tag exists
-			var tagID uuid.UUID
-			tagQuery := `
-				SELECT id FROM global_tags 
-				WHERE name = $1 AND active = TRUE
-
-				UNION ALL
-
-				SELECT id FROM user_personal_tags 
-				WHERE name = $1 AND user_id = $2
-			`
-
-			err := tx.QueryRow(ctx, tagQuery, tagName, userID).Scan(&tagID)
-			if err != nil {
-				// Tag doesn't exist, create it
-				if errors.Is(err, pgx.ErrNoRows) {
-					l.DebugContext(ctx, "Creating new tag", slog.String("tagName", tagName))
-
-					newTagID := uuid.New()
-					description := ""
-					tagType := "preference" // Default tag type
-					now := time.Now()
-
-					createTagQuery := `
-						INSERT INTO user_personal_tags (id, user_id, name, tag_type, description, created_at)
-						VALUES ($1, $2, $3, $4, $5, $6)
-					`
-
-					_, err = tx.Exec(ctx, createTagQuery,
-						newTagID, userID, tagName, tagType, description, now)
-
-					if err != nil {
-						l.ErrorContext(ctx, "Failed to create tag", slog.String("tagName", tagName), slog.Any("error", err))
-						span.RecordError(err)
-						return nil, fmt.Errorf("failed to create tag %s: %w", tagName, err)
-					}
-				} else {
-					l.ErrorContext(ctx, "Failed to check if tag exists", slog.String("tagName", tagName), slog.Any("error", err))
-					span.RecordError(err)
-					return nil, fmt.Errorf("failed to check if tag %s exists: %w", tagName, err)
-				}
-			}
-		}
-	}
-
-	// Process interests if provided
-	if params.Interests != nil && len(params.Interests) > 0 {
-		l.DebugContext(ctx, "Processing interests for profile", slog.Int("interestCount", len(params.Interests)))
-
-		// For each interest, check if it exists, and if not, create it
-		for _, interestPtr := range params.Interests {
-			if interestPtr == nil {
-				continue
-			}
-
-			interestName := *interestPtr
-
-			// Check if interest exists
-			var interestID uuid.UUID
-			interestQuery := `
-				SELECT id FROM interests 
-				WHERE name = $1 AND active = TRUE
-
-				UNION ALL
-
-				SELECT id FROM user_custom_interests 
-				WHERE name = $1 AND user_id = $2
-			`
-
-			err := tx.QueryRow(ctx, interestQuery, interestName, userID).Scan(&interestID)
-			if err != nil {
-				// Interest doesn't exist, create it
-				if errors.Is(err, pgx.ErrNoRows) {
-					l.DebugContext(ctx, "Creating new interest", slog.String("interestName", interestName))
-
-					description := ""
-					isActive := true
-					now := time.Now()
-
-					createInterestQuery := `
-						INSERT INTO user_custom_interests (name, description, active, created_at, updated_at, user_id)
-						VALUES ($1, $2, $3, $4, $5, $6)
-					`
-
-					_, err = tx.Exec(ctx, createInterestQuery,
-						interestName, description, isActive, now, now, userID)
-
-					if err != nil {
-						l.ErrorContext(ctx, "Failed to create interest", slog.String("interestName", interestName), slog.Any("error", err))
-						span.RecordError(err)
-						return nil, fmt.Errorf("failed to create interest %s: %w", interestName, err)
-					}
-				} else {
-					l.ErrorContext(ctx, "Failed to check if interest exists", slog.String("interestName", interestName), slog.Any("error", err))
-					span.RecordError(err)
-					return nil, fmt.Errorf("failed to check if interest %s exists: %w", interestName, err)
-				}
-			}
-		}
 	}
 
 	query := `
@@ -402,7 +288,7 @@ func (r *PostgresUserProfilesRepo) CreateProfile(ctx context.Context, userID uui
                    prefer_dog_friendly, preferred_vibes, preferred_transport, dietary_needs, 
                    created_at, updated_at`
 
-	var p api.UserPreferenceProfile
+	var p types.UserPreferenceProfileResponse
 	err = tx.QueryRow(ctx, query,
 		userID, params.ProfileName, isDefault, searchRadiusKm, preferredTime,
 		budgetLevel, preferredPace, preferAccessiblePOIs, preferOutdoorSeating,
@@ -437,7 +323,7 @@ func (r *PostgresUserProfilesRepo) CreateProfile(ctx context.Context, userID uui
 }
 
 // UpdateProfile implements user.UserRepo.
-func (r *PostgresUserProfilesRepo) UpdateProfile(ctx context.Context, profileID uuid.UUID, params api.UpdateUserPreferenceProfileParams) error {
+func (r *PostgresUserSearchProfilesRepo) UpdateProfile(ctx context.Context, profileID uuid.UUID, params types.UpdateUserPreferenceProfileParams) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "UpdateUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),
@@ -456,9 +342,9 @@ func (r *PostgresUserProfilesRepo) UpdateProfile(ctx context.Context, profileID 
 
 	paramIdx := 2 // Start with $2
 
-	if params.ProfileName != nil {
+	if params.ProfileName != "" {
 		updates = append(updates, fmt.Sprintf("profile_name = $%d", paramIdx))
-		args = append(args, *params.ProfileName)
+		args = append(args, params.ProfileName)
 		paramIdx++
 	}
 
@@ -572,7 +458,7 @@ func (r *PostgresUserProfilesRepo) UpdateProfile(ctx context.Context, profileID 
 }
 
 // DeleteProfile implements user.UserRepo.
-func (r *PostgresUserProfilesRepo) DeleteProfile(ctx context.Context, profileID uuid.UUID) error {
+func (r *PostgresUserSearchProfilesRepo) DeleteProfile(ctx context.Context, profileID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "DeleteUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "DELETE"),
@@ -633,7 +519,7 @@ func (r *PostgresUserProfilesRepo) DeleteProfile(ctx context.Context, profileID 
 }
 
 // SetDefaultProfile implements user.UserRepo.
-func (r *PostgresUserProfilesRepo) SetDefaultProfile(ctx context.Context, profileID uuid.UUID) error {
+func (r *PostgresUserSearchProfilesRepo) SetDefaultProfile(ctx context.Context, profileID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "SetDefaultUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),

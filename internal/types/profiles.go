@@ -127,8 +127,8 @@ func (s TransportPreference) Value() (driver.Value, error) {
 	}
 }
 
-// UserPreferenceProfile represents a user's saved preference profile.
-type UserPreferenceProfile struct {
+// UserPreferenceProfileResponse represents a user's saved preference profile.
+type UserPreferenceProfileResponse struct {
 	ID                   uuid.UUID           `json:"id"`
 	UserID               uuid.UUID           `json:"user_id"` // Might omit in some API responses
 	ProfileName          string              `json:"profile_name"`
@@ -143,6 +143,8 @@ type UserPreferenceProfile struct {
 	PreferredVibes       []string            `json:"preferred_vibes"` // Assuming TEXT[] maps to []string
 	PreferredTransport   TransportPreference `json:"preferred_transport"`
 	DietaryNeeds         []string            `json:"dietary_needs"` // Assuming TEXT[] maps to []string
+	Interests            []Interests         `json:"interests"`     // Interests linked to this profile
+	AvoidTags            []Tags              `json:"avoid_tags"`    // Tags to avoid for this profile
 	CreatedAt            time.Time           `json:"created_at"`
 	UpdatedAt            time.Time           `json:"updated_at"`
 }
@@ -163,8 +165,8 @@ type CreateUserPreferenceProfileParams struct {
 	PreferredVibes       []string             `json:"preferred_vibes,omitempty"` // Use empty slice if not provided?
 	PreferredTransport   *TransportPreference `json:"preferred_transport,omitempty"`
 	DietaryNeeds         []string             `json:"dietary_needs,omitempty"`
-	Tags                 []*string            `json:"tags,omitempty"`
-	Interests            []*string            `json:"interests,omitempty"`
+	Tags                 []uuid.UUID          `json:"tags,omitempty"`
+	Interests            []uuid.UUID          `json:"interests,omitempty"`
 }
 
 type Tags struct {

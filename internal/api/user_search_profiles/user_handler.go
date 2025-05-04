@@ -1,4 +1,4 @@
-package userProfiles
+package userSearchProfile
 
 import (
 	"fmt"
@@ -18,26 +18,26 @@ import (
 )
 
 // UserHandler handles HTTP requests related to user operations.
-type UserProfilesHandler struct {
-	userService UserProfilesService
+type UserSearchProfileHandler struct {
+	userService UserSearchProfilesService
 	logger      *slog.Logger
 }
 
 // NewUserHandler creates a new user handler instance.
-func NewUserHandler(userService UserProfilesService, logger *slog.Logger) *UserProfilesHandler {
+func NewUserHandler(userService UserSearchProfilesService, logger *slog.Logger) *UserSearchProfileHandler {
 	instanceAddress := fmt.Sprintf("%p", logger)
 	slog.Info("Creating NewUserHandler", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
 	if logger == nil {
 		panic("PANIC: Attempting to create UserHandler with nil logger!")
 	}
 
-	return &UserProfilesHandler{
+	return &UserSearchProfileHandler{
 		userService: userService,
 		logger:      logger,
 	}
 }
 
-func (u *UserProfilesHandler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
+func (u *UserSearchProfileHandler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l := u.logger.With(slog.String("handler", "GetUserProfile"))
 	l.DebugContext(ctx, "Fetching user profile")
@@ -58,7 +58,7 @@ func (u *UserProfilesHandler) GetUserProfile(w http.ResponseWriter, r *http.Requ
 // @Failure      500 {object} api.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles [post]
-func (u *UserProfilesHandler) CreateProfile(w http.ResponseWriter, r *http.Request) {
+func (u *UserSearchProfileHandler) CreateProfile(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("UserProfilesHandler").Start(r.Context(), "CreateProfile", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/profiles"),
@@ -103,7 +103,7 @@ func (u *UserProfilesHandler) CreateProfile(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	profile, err := u.userService.CreateUserPreferenceProfile(ctx, userID, params)
+	profile, err := u.userService.CreateProfile(ctx, userID, params)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to create user preference profile", slog.Any("error", err))
 		span.RecordError(err)

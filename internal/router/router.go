@@ -12,7 +12,7 @@ import (
 	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
-	userProfiles "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_profiles"
+	userProfiles "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_search_profiles"
 	userSettings "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_settings"
 	userTags "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_tags"
 )
@@ -163,7 +163,7 @@ func UserPreferencesRoutes(handler *userSettings.SettingsHandler) http.Handler {
 func UserProfileRoutes(handler *userProfiles.UserProfilesHandler) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", handler.GetUserProfile)
-	r.Post("/", handler.CreateProfile)  // POST http://localhost:8000/api/v1/user/profile
+	r.Post("/", handler.CreateProfile) // POST http://localhost:8000/api/v1/user/profile
 
 	return r
 }

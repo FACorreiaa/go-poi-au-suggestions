@@ -1,4 +1,4 @@
-package userProfiles
+package userSearchProfile
 
 import (
 	"context"

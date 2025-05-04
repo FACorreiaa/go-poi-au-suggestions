@@ -183,43 +183,23 @@ type UpdateUserSettingsParams struct {
 	PreferDogFriendly     *bool          `json:"prefer_dog_friendly,omitempty"`
 }
 
-// UserPreferenceProfile represents a user's preference profile
-type UserPreferenceProfile struct {
-	ID                   uuid.UUID           `json:"id"`
-	UserID               uuid.UUID           `json:"user_id"`
-	ProfileName          string              `json:"profile_name"`
-	IsDefault            bool                `json:"is_default"`
-	SearchRadiusKm       float64             `json:"search_radius_km"`
-	PreferredTime        DayPreference       `json:"preferred_time"`
-	BudgetLevel          int                 `json:"budget_level"`
-	PreferredPace        SearchPace          `json:"preferred_pace"`
-	PreferAccessiblePOIs bool                `json:"prefer_accessible_pois"`
-	PreferOutdoorSeating bool                `json:"prefer_outdoor_seating"`
-	PreferDogFriendly    bool                `json:"prefer_dog_friendly"`
-	PreferredVibes       []string            `json:"preferred_vibes"`
-	PreferredTransport   TransportPreference `json:"preferred_transport"`
-	DietaryNeeds         []string            `json:"dietary_needs"`
-	CreatedAt            time.Time           `json:"created_at"`
-	UpdatedAt            time.Time           `json:"updated_at"`
-}
-
 // CreateUserPreferenceProfileParams is used for creating a new user preference profile
-type CreateUserPreferenceProfileParams struct {
-	ProfileName          string               `json:"profile_name" binding:"required"`
-	IsDefault            *bool                `json:"is_default,omitempty"`
-	SearchRadiusKm       *float64             `json:"search_radius_km,omitempty"`
-	PreferredTime        *DayPreference       `json:"preferred_time,omitempty"`
-	BudgetLevel          *int                 `json:"budget_level,omitempty"`
-	PreferredPace        *SearchPace          `json:"preferred_pace,omitempty"`
-	PreferAccessiblePOIs *bool                `json:"prefer_accessible_pois,omitempty"`
-	PreferOutdoorSeating *bool                `json:"prefer_outdoor_seating,omitempty"`
-	PreferDogFriendly    *bool                `json:"prefer_dog_friendly,omitempty"`
-	PreferredVibes       []string             `json:"preferred_vibes,omitempty"`
-	PreferredTransport   *TransportPreference `json:"preferred_transport,omitempty"`
-	DietaryNeeds         []string             `json:"dietary_needs,omitempty"`
-	Tags                 []*string            `json:"tags,omitempty"`
-	Interests            []*string            `json:"interests,omitempty"`
-}
+//type CreateUserPreferenceProfileParams struct {
+//	ProfileName          string               `json:"profile_name" binding:"required"`
+//	IsDefault            *bool                `json:"is_default,omitempty"`
+//	SearchRadiusKm       *float64             `json:"search_radius_km,omitempty"`
+//	PreferredTime        *DayPreference       `json:"preferred_time,omitempty"`
+//	BudgetLevel          *int                 `json:"budget_level,omitempty"`
+//	PreferredPace        *SearchPace          `json:"preferred_pace,omitempty"`
+//	PreferAccessiblePOIs *bool                `json:"prefer_accessible_pois,omitempty"`
+//	PreferOutdoorSeating *bool                `json:"prefer_outdoor_seating,omitempty"`
+//	PreferDogFriendly    *bool                `json:"prefer_dog_friendly,omitempty"`
+//	PreferredVibes       []string             `json:"preferred_vibes,omitempty"`
+//	PreferredTransport   *TransportPreference `json:"preferred_transport,omitempty"`
+//	DietaryNeeds         []string             `json:"dietary_needs,omitempty"`
+//	Tags                 []string             `json:"tags,omitempty"`
+//	Interests            []string             `json:"interests,omitempty"`
+//}
 
 // UpdateUserPreferenceProfileParams is used for updating a user preference profile
 type UpdateUserPreferenceProfileParams struct {

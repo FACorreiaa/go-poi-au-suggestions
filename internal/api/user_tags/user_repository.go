@@ -2,11 +2,13 @@ package userTags
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -37,6 +39,12 @@ type UserTagsRepo interface {
 
 	// Update updates on tag
 	Update(ctx context.Context, userID, tagsID uuid.UUID, params UpdatePersonalTagParams) error
+
+	// GetTagByName retrieves a tag by name
+	GetTagByName(ctx context.Context, name string) (*api.GlobalTag, error)
+
+	// AddTagToProfile links a tag to a profile
+	AddTagToProfile(ctx context.Context, profileID uuid.UUID, tagID uuid.UUID) error
 }
 
 type PostgresUserTagsRepo struct {
@@ -366,5 +374,80 @@ func (r *PostgresUserTagsRepo) Delete(ctx context.Context, userID uuid.UUID, tag
 
 	l.InfoContext(ctx, "User personal tag deleted successfully")
 	span.SetStatus(codes.Ok, "Personal tag deleted")
+	return nil
+}
+
+// GetTagByName retrieves a tag by name
+func (r *PostgresUserTagsRepo) GetTagByName(ctx context.Context, name string) (*api.GlobalTag, error) {
+	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetTagByName", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "global_tags"),
+		attribute.String("tag.name", name),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetTagByName"), slog.String("name", name))
+	l.DebugContext(ctx, "Fetching tag by name")
+
+	query := `
+        SELECT id, name, description, tag_type, created_at
+        FROM global_tags
+        WHERE name = $1 AND active = TRUE`
+
+	var tag api.GlobalTag
+	err := r.pgpool.QueryRow(ctx, query, name).Scan(
+		&tag.ID,
+		&tag.Name,
+		&tag.Description,
+		&tag.TagType,
+		&tag.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			l.WarnContext(ctx, "Tag not found", slog.String("name", name))
+			span.SetStatus(codes.Error, "Tag not found")
+			return nil, types.ErrNotFound
+		}
+		l.ErrorContext(ctx, "Failed to fetch tag by name", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB query failed")
+		return nil, fmt.Errorf("database error fetching tag: %w", err)
+	}
+
+	l.DebugContext(ctx, "Fetched tag by name successfully", slog.String("tagID", tag.ID.String()))
+	span.SetStatus(codes.Ok, "Tag fetched")
+	return &tag, nil
+}
+
+// AddTagToProfile links a tag to a profile
+func (r *PostgresUserTagsRepo) AddTagToProfile(ctx context.Context, profileID, tagID uuid.UUID) error {
+	ctx, span := otel.Tracer("UserRepo").Start(ctx, "AddTagToProfile", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "INSERT"),
+		attribute.String("db.sql.table", "user_profile_avoid_tags"),
+		attribute.String("db.profile.id", profileID.String()),
+		attribute.String("db.tag.id", tagID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "AddTagToProfile"), slog.String("profileID", profileID.String()), slog.String("tagID", tagID.String()))
+	l.DebugContext(ctx, "Linking tag to profile")
+
+	query := `
+        INSERT INTO user_personal_tags (profile_id, tag_id)
+        VALUES ($1, $2)
+        ON CONFLICT DO NOTHING`
+
+	_, err := r.pgpool.Exec(ctx, query, profileID, tagID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to link tag to profile", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB INSERT failed")
+		return fmt.Errorf("database error linking tag to profile: %w", err)
+	}
+
+	l.DebugContext(ctx, "Tag linked to profile successfully")
+	span.SetStatus(codes.Ok, "Tag linked")
 	return nil
 }

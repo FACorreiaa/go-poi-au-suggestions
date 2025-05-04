@@ -29,7 +29,9 @@ type UserInterestRepo interface {
 	CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*api.Interest, error)
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	GetAllInterests(ctx context.Context) ([]api.Interest, error)
+	GetInterest(ctx context.Context, interestID uuid.UUID) (*api.Interest, error)
 	UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params api.UpdateUserInterestParams) error
+	AddInterestToProfile(ctx context.Context, profileID, interestID uuid.UUID) error
 	// GetUserEnhancedInterests retrieves all interests for a user with their preference levels
 	//GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]api.EnhancedInterest, error)
 }
@@ -353,5 +355,69 @@ func (r *PostgresUserInterestRepo) UpdateUserInterest(ctx context.Context, userI
 
 	l.InfoContext(ctx, "User custom interest updated successfully")
 	span.SetStatus(codes.Ok, "Custom interest updated")
+	return nil
+}
+
+func (r *PostgresUserInterestRepo) GetInterest(ctx context.Context, interestID uuid.UUID) (*api.Interest, error) {
+	var interest api.Interest
+	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetInterest", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.sql.table", "interests"),
+		attribute.String("db.interest.id", interestID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetInterest"), slog.String("interestID", interestID.String()))
+	l.DebugContext(ctx, "Fetching interest")
+
+	query := `
+        SELECT id, name, description, active, created_at, updated_at
+        FROM interests
+        WHERE id = $1`
+
+	err := r.pgpool.QueryRow(ctx, query, interestID).Scan(
+		&interest.ID,
+		&interest.Name,
+		&interest.Description,
+		&interest.Active,
+		&interest.CreatedAt,
+		&interest.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("database error fetching interest: %w", err)
+	}
+
+	return &interest, nil
+}
+
+func (r *PostgresUserInterestRepo) AddInterestToProfile(ctx context.Context, profileID, interestID uuid.UUID) error {
+	ctx, span := otel.Tracer("UserRepo").Start(ctx, "AddInterestToProfile", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "INSERT"),
+		attribute.String("db.sql.table", "user_profile_interests"),
+		attribute.String("db.profile.id", profileID.String()),
+		attribute.String("db.interest.id", interestID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "AddInterestToProfile"), slog.String("profileID", profileID.String()), slog.String("interestID", interestID.String()))
+	l.DebugContext(ctx, "Linking interest to profile")
+
+	query := `
+        INSERT INTO user_profile_interests (profile_id, interest_id, preference_level)
+        VALUES ($1, $2, $3)
+        ON CONFLICT DO NOTHING`
+
+	_, err := r.pgpool.Exec(ctx, query, profileID, interestID, 1) // Default preference_level = 1
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to link interest to profile", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB INSERT failed")
+		return fmt.Errorf("database error linking interest to profile: %w", err)
+	}
+
+	l.DebugContext(ctx, "Interest linked to profile successfully")
+	span.SetStatus(codes.Ok, "Interest linked")
 	return nil
 }

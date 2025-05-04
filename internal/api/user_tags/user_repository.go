@@ -16,7 +16,6 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
@@ -26,10 +25,10 @@ var _ UserTagsRepo = (*PostgresUserTagsRepo)(nil)
 type UserTagsRepo interface {
 	// GetAll --- Global Tags & User Avoid Tags ---
 	// GetAll retrieves all global tags
-	GetAll(ctx context.Context, userID uuid.UUID) ([]api.GlobalTag, error)
+	GetAll(ctx context.Context, userID uuid.UUID) ([]types.Tags, error)
 
 	// Get retrieves all avoid tags for a user
-	Get(ctx context.Context, userID, tagID uuid.UUID) (*api.GlobalTag, error)
+	Get(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error)
 
 	// Create adds an avoid tag for a user
 	Create(ctx context.Context, userID uuid.UUID, params CreatePersonalTagParams) (*PersonalTag, error)
@@ -41,7 +40,7 @@ type UserTagsRepo interface {
 	Update(ctx context.Context, userID, tagsID uuid.UUID, params UpdatePersonalTagParams) error
 
 	// GetTagByName retrieves a tag by name
-	GetTagByName(ctx context.Context, name string) (*api.GlobalTag, error)
+	GetTagByName(ctx context.Context, name string) (*types.Tags, error)
 
 	// AddTagToProfile links a tag to a profile
 	AddTagToProfile(ctx context.Context, profileID uuid.UUID, tagID uuid.UUID) error
@@ -63,7 +62,7 @@ func NewPostgresUserTagsRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *Postgr
 }
 
 // GetAll implements user.UserRepo.
-func (r *PostgresUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]api.GlobalTag, error) {
+func (r *PostgresUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]types.Tags, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetAllGlobalTags", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "global_tags"),
@@ -108,15 +107,14 @@ func (r *PostgresUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]
 	}
 	defer rows.Close()
 
-	var tags []api.GlobalTag
+	var tags []types.Tags
 	for rows.Next() {
-		var t api.GlobalTag
+		var t types.Tags
 		err := rows.Scan(
 			&t.ID,
 			&t.Name,
 			&t.Description,
 			&t.TagType,
-			&t.Source,
 			&t.CreatedAt,
 		)
 		if err != nil {
@@ -139,8 +137,8 @@ func (r *PostgresUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]
 }
 
 // Get implements user.UserRepo.
-func (r *PostgresUserTagsRepo) Get(ctx context.Context, userID, tagID uuid.UUID) (*api.GlobalTag, error) {
-	var tag api.GlobalTag
+func (r *PostgresUserTagsRepo) Get(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error) {
+	var tag types.Tags
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserAvoidTags", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "user_avoid_tags, global_tags"),
@@ -184,7 +182,6 @@ func (r *PostgresUserTagsRepo) Get(ctx context.Context, userID, tagID uuid.UUID)
 		&tag.Name,
 		&tag.Description,
 		&tag.TagType,
-		&tag.Source,
 		&tag.CreatedAt,
 	)
 	if err != nil {
@@ -381,7 +378,7 @@ func (r *PostgresUserTagsRepo) Delete(ctx context.Context, userID uuid.UUID, tag
 }
 
 // GetTagByName retrieves a tag by name
-func (r *PostgresUserTagsRepo) GetTagByName(ctx context.Context, name string) (*api.GlobalTag, error) {
+func (r *PostgresUserTagsRepo) GetTagByName(ctx context.Context, name string) (*types.Tags, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetTagByName", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "SELECT"),
@@ -398,7 +395,7 @@ func (r *PostgresUserTagsRepo) GetTagByName(ctx context.Context, name string) (*
         FROM global_tags
         WHERE name = $1 AND active = TRUE`
 
-	var tag api.GlobalTag
+	var tag types.Tags
 	err := r.pgpool.QueryRow(ctx, query, name).Scan(
 		&tag.ID,
 		&tag.Name,
@@ -438,7 +435,7 @@ func (r *PostgresUserTagsRepo) AddTagToProfile(ctx context.Context, profileID, t
 	l.DebugContext(ctx, "Linking tag to profile")
 
 	query := `
-        INSERT INTO user_profile_avoid_tags (profile_id, tag_id)
+        INSERT INTO user_personal_tags (profile_id, id)
         VALUES ($1, $2)
         ON CONFLICT DO NOTHING`
 
@@ -469,9 +466,9 @@ func (r *PostgresUserTagsRepo) GetTagsForProfile(ctx context.Context, profileID 
 	l.DebugContext(ctx, "Fetching tags for profile")
 
 	query := `
-        SELECT g.id, g.name, g.tag_type, g.description, g.created_at, g.updated_at
+        SELECT g.id, g.name, g.tag_type, g.description, g.created_at
         FROM global_tags g
-        JOIN user_profile_avoid_tags upt ON g.id = upt.tag_id
+        JOIN user_personal_tags upt ON g.id = upt.id
         WHERE upt.profile_id = $1`
 
 	rows, err := r.pgpool.Query(ctx, query, profileID)

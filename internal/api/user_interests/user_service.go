@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 // Ensure implementation satisfies the interface
@@ -21,8 +22,8 @@ var _ UserInterestService = (*UserInterestServiceImpl)(nil)
 type UserInterestService interface {
 	//RemoveUserInterest remove interests
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
-	GetAllInterests(ctx context.Context) ([]api.Interest, error)
-	CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*api.Interest, error)
+	GetAllInterests(ctx context.Context) ([]types.Interest, error)
+	CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error)
 	UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params api.UpdateUserInterestParams) error
 }
 
@@ -41,7 +42,7 @@ func NewUserInterestService(repo UserInterestRepo, logger *slog.Logger) *UserInt
 }
 
 // CreateInterest create user interest
-func (s *UserInterestServiceImpl) CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*api.Interest, error) {
+func (s *UserInterestServiceImpl) CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error) {
 	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "CreateUserInterest", trace.WithAttributes(
 		attribute.String("name", name),
 		attribute.String("description", *description),
@@ -90,7 +91,7 @@ func (s *UserInterestServiceImpl) RemoveUserInterest(ctx context.Context, userID
 }
 
 // GetAllInterests retrieves all available interests.
-func (s *UserInterestServiceImpl) GetAllInterests(ctx context.Context) ([]api.Interest, error) {
+func (s *UserInterestServiceImpl) GetAllInterests(ctx context.Context) ([]types.Interest, error) {
 	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "GetAllInterests")
 	defer span.End()
 

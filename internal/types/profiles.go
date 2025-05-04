@@ -143,7 +143,7 @@ type UserPreferenceProfileResponse struct {
 	PreferredVibes       []string            `json:"preferred_vibes"` // Assuming TEXT[] maps to []string
 	PreferredTransport   TransportPreference `json:"preferred_transport"`
 	DietaryNeeds         []string            `json:"dietary_needs"` // Assuming TEXT[] maps to []string
-	Interests            []Interests         `json:"interests"`     // Interests linked to this profile
+	Interests            []Interest          `json:"interests"`     // Interests linked to this profile
 	Tags                 []Tags              `json:"tags"`          // Tags to avoid for this profile
 	CreatedAt            time.Time           `json:"created_at"`
 	UpdatedAt            time.Time           `json:"updated_at"`
@@ -176,13 +176,6 @@ type Tags struct {
 	Description *string    `json:"description"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   *time.Time `json:"updated_at"`
-}
-
-type Interests struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description"`
-	Active      bool      `json:"active"`
 }
 
 // UpdateUserPreferenceProfileParams defines fields allowed for updating a profile.

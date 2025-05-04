@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 // Ensure implementation satisfies the interface
@@ -19,8 +19,8 @@ var _ UserTagsService = (*UserTagsServiceImpl)(nil)
 
 // UserTagsService defines the business logic contract for user operations.
 type UserTagsService interface {
-	GetTags(ctx context.Context, userID uuid.UUID) ([]api.GlobalTag, error)
-	GetTag(ctx context.Context, userID, tagID uuid.UUID) (*api.GlobalTag, error)
+	GetTags(ctx context.Context, userID uuid.UUID) ([]types.Tags, error)
+	GetTag(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error)
 	CreateTag(ctx context.Context, userID uuid.UUID, params CreatePersonalTagParams) (*PersonalTag, error)
 	DeleteTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error
 	Update(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, params UpdatePersonalTagParams) error
@@ -41,7 +41,7 @@ func NewUserTagsService(repo UserTagsRepo, logger *slog.Logger) *UserTagsService
 }
 
 // GetTags retrieves all global tags.
-func (s *UserTagsServiceImpl) GetTags(ctx context.Context, userID uuid.UUID) ([]api.GlobalTag, error) {
+func (s *UserTagsServiceImpl) GetTags(ctx context.Context, userID uuid.UUID) ([]types.Tags, error) {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "GetAllGlobalTags")
 	defer span.End()
 
@@ -62,7 +62,7 @@ func (s *UserTagsServiceImpl) GetTags(ctx context.Context, userID uuid.UUID) ([]
 }
 
 // GetTag retrieves all avoid tags for a user.
-func (s *UserTagsServiceImpl) GetTag(ctx context.Context, userID, tagID uuid.UUID) (*api.GlobalTag, error) {
+func (s *UserTagsServiceImpl) GetTag(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error) {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "GetUserAvoidTags", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 	))

@@ -120,16 +120,6 @@ type Subscription struct {
 	Status string `json:"status"` // e.g., "active", "past_due".
 }
 
-// Interest defines the structure for an interest tag.
-type Interest struct {
-	ID          uuid.UUID  `json:"id"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description,omitempty"` // Use pointer if nullable
-	Active      bool       `json:"active"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   *time.Time `json:"updated_at"`
-}
-
 type DayPreference string
 
 const (
@@ -215,23 +205,6 @@ type UpdateUserPreferenceProfileParams struct {
 	PreferredVibes       []string             `json:"preferred_vibes,omitempty"`
 	PreferredTransport   *TransportPreference `json:"preferred_transport,omitempty"`
 	DietaryNeeds         []string             `json:"dietary_needs,omitempty"`
-}
-
-// GlobalTag represents a tag that can be used across the system
-type GlobalTag struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description,omitempty"`
-	TagType     string    `json:"tag_type,omitempty"`
-	Active      bool      `json:"active,omitempty"`
-	Source      string    `json:"source,omitempty"`
-	CreatedAt   time.Time `json:"created_at,omitempty"`
-}
-
-// EnhancedInterest represents an interest with a preference level
-type EnhancedInterest struct {
-	Interest
-	PreferenceLevel int `json:"preference_level"` // 0=Neutral/Nice-to-have, 1=Preferred, 2=Must-Have
 }
 
 type UpdateUserInterestParams struct {

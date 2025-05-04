@@ -230,19 +230,19 @@ func (s *UserSearchProfilesServiceImpl) CreateProfile(ctx context.Context, userI
 	// After successful creation and linking, fetch the linked data to return the full response object.
 	// Can also run these concurrently.
 	gResp, respCtx := errgroup.WithContext(ctx)
-	var fetchedInterests []types.Interests
+	var fetchedInterests []types.Interest
 	var fetchedTags []types.Tags
 
 	gResp.Go(func() error {
 		var fetchErr error
-		fetchedInterests, fetchErr = s.intRepo.GetInterestsForProfile(respCtx, profileID)
+		fetchedInterests, fetchErr = s.intRepo.GetAllInterests(respCtx)
 		l.DebugContext(respCtx, "Fetched interests for response", slog.Int("count", len(fetchedInterests)), slog.Any("error", fetchErr)) // Log count and error
 		return fetchErr                                                                                                                  // Return error if fetching fails
 	})
 
 	gResp.Go(func() error {
 		var fetchErr error
-		fetchedTags, fetchErr = s.tagRepo.GetTagsForProfile(respCtx, profileID)
+		fetchedTags, fetchErr = s.tagRepo.GetAll(respCtx, userID)
 		l.DebugContext(respCtx, "Fetched tags for response", slog.Int("count", len(fetchedTags)), slog.Any("error", fetchErr)) // Log count and error
 		return fetchErr
 	})

@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 type AuthHandler struct {
@@ -57,7 +58,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	accessToken, refreshToken, err := h.authService.Login(ctx, req.Email, req.Password)
 	if err != nil {
 		l.WarnContext(ctx, "Service login failed", slog.Any("error", err), slog.String("email", req.Email))
-		if errors.Is(err, api.ErrUnauthenticated) {
+		if errors.Is(err, types.ErrUnauthenticated) {
 			api.ErrorResponse(w, r, http.StatusUnauthorized, "Invalid email or password")
 		} else {
 			api.ErrorResponse(w, r, http.StatusInternalServerError, "Login failed")
@@ -245,7 +246,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		l.ErrorContext(ctx, "Service registration failed", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Registration failed")
-		if errors.Is(err, api.ErrConflict) {
+		if errors.Is(err, types.ErrConflict) {
 			api.ErrorResponse(w, r, http.StatusConflict, "Email or username already exists")
 		} else {
 			api.ErrorResponse(w, r, http.StatusInternalServerError, "Registration failed")
@@ -351,7 +352,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	err := h.authService.UpdatePassword(ctx, userID, req.OldPassword, req.NewPassword)
 	if err != nil {
 		l.ErrorContext(ctx, "Service password update failed", slog.Any("error", err))
-		if errors.Is(err, api.ErrUnauthenticated) { // Check if service returned this
+		if errors.Is(err, types.ErrUnauthenticated) { // Check if service returned this
 			api.ErrorResponse(w, r, http.StatusUnauthorized, "Incorrect old password")
 		} else {
 			api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to update password")

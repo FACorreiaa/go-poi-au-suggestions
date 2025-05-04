@@ -126,6 +126,7 @@ func main() {
 		UserInterestHandler:    c.UserInterestHandler,
 		UserSettingsHandler:    c.UserSettingsHandler,
 		UserTagsHandler:        c.UserTagsHandler,
+		UserProfileHandler:     c.UserProfileHandler,
 		AuthenticateMiddleware: authenticateMiddleware,
 		Logger:                 logger,
 	}

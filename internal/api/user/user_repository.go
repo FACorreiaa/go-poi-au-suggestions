@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 var _ UserRepo = (*PostgresUserRepo)(nil)
@@ -26,14 +26,14 @@ var _ UserRepo = (*PostgresUserRepo)(nil)
 // UserRepo defines the contract for user data persistence.
 type UserRepo interface {
 	// GetUserByID retrieves a user's full profile by their unique ID.
-	// Returns api.ErrNotFound if the user doesn't exist or is inactive.
-	GetUserByID(ctx context.Context, userID uuid.UUID) (*api.UserProfile, error)
+	// Returns types.ErrNotFound if the user doesn't exist or is inactive.
+	GetUserByID(ctx context.Context, userID uuid.UUID) (*types.UserProfile, error)
 
 	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
 	// UpdateProfile updates mutable fields on a user's profile.
 	// It takes the userID and a struct containing only the fields to be updated (use pointers).
-	// Returns api.ErrNotFound if the user doesn't exist.
-	UpdateProfile(ctx context.Context, userID uuid.UUID, params api.UpdateProfileParams) error
+	// Returns types.ErrNotFound if the user doesn't exist.
+	UpdateProfile(ctx context.Context, userID uuid.UUID, params types.UpdateProfileParams) error
 
 	UpdateLastLogin(ctx context.Context, userID uuid.UUID) error
 
@@ -97,8 +97,8 @@ func (r *PostgresUserRepo) ChangePassword(ctx context.Context, email, oldPasswor
 	return nil
 }
 
-func (r *PostgresUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*api.UserProfile, error) {
-	var user api.UserProfile
+func (r *PostgresUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*types.UserProfile, error) {
+	var user types.UserProfile
 	query := `
 		SELECT username, firstname, lastname, age, city, 
 		       country, email, display_name, profile_image_url, 
@@ -124,7 +124,7 @@ func (r *PostgresUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*
 	return &user, nil
 }
 
-func (r *PostgresUserRepo) UpdateProfile(ctx context.Context, userID uuid.UUID, params api.UpdateProfileParams) error {
+func (r *PostgresUserRepo) UpdateProfile(ctx context.Context, userID uuid.UUID, params types.UpdateProfileParams) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "UpdateProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),
@@ -207,7 +207,7 @@ func (r *PostgresUserRepo) UpdateProfile(ctx context.Context, userID uuid.UUID, 
 	if len(setClauses) == 0 {
 		l.WarnContext(ctx, "UpdateProfile called with no fields to update")
 		span.SetStatus(codes.Ok, "No update fields provided") // Not an error, just no-op
-		return nil                                            // Or return specific error api.ErrBadRequest("no update fields provided")
+		return nil                                            // Or return specific error types.ErrBadRequest("no update fields provided")
 	}
 
 	// Add updated_at clause (always update this if other fields change)
@@ -245,11 +245,11 @@ func (r *PostgresUserRepo) UpdateProfile(ctx context.Context, userID uuid.UUID, 
 		// Use a separate query or modify the UPDATE to return something on match
 		checkErr := r.pgpool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND is_active = TRUE)", userID).Scan(&exists)
 		if checkErr == nil && !exists {
-			return fmt.Errorf("user not found for update: %w", api.ErrNotFound)
+			return fmt.Errorf("user not found for update: %w", types.ErrNotFound)
 		}
 		// If user exists, maybe the provided values were the same as existing ones.
 		// Or maybe user was inactive. Treat as not found for simplicity for now.
-		return fmt.Errorf("user not found or update failed: %w", api.ErrNotFound)
+		return fmt.Errorf("user not found or update failed: %w", types.ErrNotFound)
 	}
 
 	l.InfoContext(ctx, "User profile updated successfully")
@@ -285,7 +285,7 @@ func (r *PostgresUserRepo) UpdateLastLogin(ctx context.Context, userID uuid.UUID
 	}
 
 	if tag.RowsAffected() == 0 {
-		err := fmt.Errorf("user not found: %w", api.ErrNotFound)
+		err := fmt.Errorf("user not found: %w", types.ErrNotFound)
 		l.WarnContext(ctx, "Attempted to update last login for non-existent user")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "User not found")
@@ -336,7 +336,7 @@ func (r *PostgresUserRepo) MarkEmailAsVerified(ctx context.Context, userID uuid.
 		}
 
 		if !exists {
-			err := fmt.Errorf("user not found: %w", api.ErrNotFound)
+			err := fmt.Errorf("user not found: %w", types.ErrNotFound)
 			l.WarnContext(ctx, "Attempted to mark email as verified for non-existent user")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "User not found")
@@ -385,7 +385,7 @@ func (r *PostgresUserRepo) DeactivateUser(ctx context.Context, userID uuid.UUID)
 			l.WarnContext(ctx, "Attempted to deactivate non-existent user")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "User not found")
-			return fmt.Errorf("user not found: %w", api.ErrNotFound)
+			return fmt.Errorf("user not found: %w", types.ErrNotFound)
 		}
 		l.ErrorContext(ctx, "Failed to check user active status", slog.Any("error", err))
 		span.RecordError(err)
@@ -461,7 +461,7 @@ func (r *PostgresUserRepo) ReactivateUser(ctx context.Context, userID uuid.UUID)
 			l.WarnContext(ctx, "Attempted to reactivate non-existent user")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "User not found")
-			return fmt.Errorf("user not found: %w", api.ErrNotFound)
+			return fmt.Errorf("user not found: %w", types.ErrNotFound)
 		}
 		l.ErrorContext(ctx, "Failed to check user active status", slog.Any("error", err))
 		span.RecordError(err)

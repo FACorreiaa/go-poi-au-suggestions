@@ -18,7 +18,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 var _ SettingsRepository = (*PostgresSettingsRepo)(nil)
@@ -84,7 +84,7 @@ func (r *PostgresSettingsRepo) Get(ctx context.Context, userID uuid.UUID) (*User
 		if errors.Is(err, pgx.ErrNoRows) {
 			l.WarnContext(ctx, "User settings not found")
 			span.SetStatus(codes.Error, "Settings not found")
-			return nil, fmt.Errorf("user settings not found: %w", api.ErrNotFound)
+			return nil, fmt.Errorf("user settings not found: %w", types.ErrNotFound)
 		}
 		l.ErrorContext(ctx, "Failed to query user settings", slog.Any("error", err))
 		span.RecordError(err)
@@ -204,7 +204,7 @@ func (r *PostgresSettingsRepo) Update(ctx context.Context, userID, profileID uui
 	if tag.RowsAffected() == 0 {
 		l.WarnContext(ctx, "User settings not found for update (or no change needed)", slog.Int64("rows_affected", tag.RowsAffected()))
 		span.SetStatus(codes.Error, "User settings not found or no change")
-		return fmt.Errorf("user settings not found for user %s: %w", userID.String(), api.ErrNotFound)
+		return fmt.Errorf("user settings not found for user %s: %w", userID.String(), types.ErrNotFound)
 	}
 
 	l.InfoContext(ctx, "User settings updated successfully")

@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 // Ensure implementation satisfies the interface
@@ -16,8 +16,8 @@ var _ UserService = (*ServiceUserImpl)(nil)
 // UserService defines the business logic contract for user operations.
 type UserService interface {
 	// GetUserProfile Profile Management
-	GetUserProfile(ctx context.Context, userID uuid.UUID) (*api.UserProfile, error)
-	UpdateUserProfile(ctx context.Context, userID uuid.UUID, params api.UpdateProfileParams) error
+	GetUserProfile(ctx context.Context, userID uuid.UUID) (*types.UserProfile, error)
+	UpdateUserProfile(ctx context.Context, userID uuid.UUID, params types.UpdateProfileParams) error
 
 	// UpdateLastLogin Status & Activity
 	UpdateLastLogin(ctx context.Context, userID uuid.UUID) error
@@ -41,7 +41,7 @@ func NewUserService(repo UserRepo, logger *slog.Logger) *ServiceUserImpl {
 }
 
 // GetUserProfile retrieves a user's profile by ID.
-func (s *ServiceUserImpl) GetUserProfile(ctx context.Context, userID uuid.UUID) (*api.UserProfile, error) {
+func (s *ServiceUserImpl) GetUserProfile(ctx context.Context, userID uuid.UUID) (*types.UserProfile, error) {
 	l := s.logger.With(slog.String("method", "GetUserProfile"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Fetching user profile")
 
@@ -56,7 +56,7 @@ func (s *ServiceUserImpl) GetUserProfile(ctx context.Context, userID uuid.UUID) 
 }
 
 // UpdateUserProfile updates a user's profile.
-func (s *ServiceUserImpl) UpdateUserProfile(ctx context.Context, userID uuid.UUID, params api.UpdateProfileParams) error {
+func (s *ServiceUserImpl) UpdateUserProfile(ctx context.Context, userID uuid.UUID, params types.UpdateProfileParams) error {
 	l := s.logger.With(slog.String("method", "UpdateUserProfile"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Updating user profile")
 

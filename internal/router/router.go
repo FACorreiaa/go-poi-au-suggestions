@@ -74,10 +74,10 @@ func SetupRouter(cfg *Config) chi.Router {
 			//r.Post("/auth/invalidate-tokens", cfg.AuthHandler.InvalidateAllUserRefreshTokens) // Needs Auth
 
 			// Mount other protected resource routes
-			r.Mount("/user", UserRoutes(cfg.UserHandler)) // User routes
+			//r.Mount("/user", UserRoutes(cfg.UserHandler)) // User routes
 			r.Mount("/user/interests", UserInterestRoutes(cfg.UserInterestHandler))
 			r.Mount("/user/preferences", UserPreferencesRoutes(cfg.UserSettingsHandler))
-			r.Mount("/user/profile", UserPreferenceProfileRoutes(cfg.UserProfileHandler))
+			r.Mount("/user/profile", UserProfileRoutes(cfg.UserProfileHandler))
 			r.Mount("/user/tags", UserTagsRoutes(cfg.UserTagsHandler))
 			// r.Mount("/pois", POIRoutes(cfg.POIHandler))   // Example for POI routes
 		})
@@ -115,16 +115,16 @@ func SetupRouter(cfg *Config) chi.Router {
 }
 
 // UserRoutes creates a router for user-related endpoints
-func UserRoutes(handler *user.HandlerUser) http.Handler {
-	r := chi.NewRouter()
-
-	// All user routes require authentication, handled at the parent router level
-
-	// User profile routes
-	r.Get("/profile", handler.GetUserProfile)    // GET http://localhost:8000/api/v1/user/profile
-	r.Put("/profile", handler.UpdateUserProfile) // PUT http://localhost:8000/api/v1/user/profile
-	return r
-}
+//func UserRoutes(handler *user.HandlerUser) http.Handler {
+//	r := chi.NewRouter()
+//
+//	// All user routes require authentication, handled at the parent router level
+//
+//	// User profile routes
+//	r.Get("/profile", handler.GetUserProfile)    // GET http://localhost:8000/api/v1/user/profile
+//	r.Put("/profile", handler.UpdateUserProfile) // PUT http://localhost:8000/api/v1/user/profile
+//	return r
+//}
 
 func UserTagsRoutes(handler *userTags.UserTagsHandler) http.Handler {
 	r := chi.NewRouter()
@@ -160,9 +160,10 @@ func UserPreferencesRoutes(handler *userSettings.SettingsHandler) http.Handler {
 	return r
 }
 
-func UserPreferenceProfileRoutes(handler *userProfiles.UserProfilesHandler) http.Handler {
+func UserProfileRoutes(handler *userProfiles.UserProfilesHandler) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", handler.GetUserProfile)
+	r.Post("/", handler.CreateProfile)  // POST http://localhost:8000/api/v1/user/profile
 
 	return r
 }

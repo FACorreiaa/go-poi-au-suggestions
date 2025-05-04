@@ -53,7 +53,7 @@ func (s *UserProfilesServiceImpl) GetUserPreferenceProfiles(ctx context.Context,
 	l := s.logger.With(slog.String("method", "GetUserPreferenceProfiles"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Fetching user preference profiles")
 
-	profiles, err := s.repo.GetUserPreferenceProfiles(ctx, userID)
+	profiles, err := s.repo.GetProfiles(ctx, userID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch user preference profiles", slog.Any("error", err))
 		span.RecordError(err)
@@ -76,7 +76,7 @@ func (s *UserProfilesServiceImpl) GetUserPreferenceProfile(ctx context.Context, 
 	l := s.logger.With(slog.String("method", "GetUserPreferenceProfile"), slog.String("profileID", profileID.String()))
 	l.DebugContext(ctx, "Fetching user preference profile")
 
-	profile, err := s.repo.GetUserPreferenceProfile(ctx, profileID)
+	profile, err := s.repo.GetProfile(ctx, profileID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch user preference profile", slog.Any("error", err))
 		span.RecordError(err)
@@ -99,7 +99,7 @@ func (s *UserProfilesServiceImpl) GetDefaultUserPreferenceProfile(ctx context.Co
 	l := s.logger.With(slog.String("method", "GetDefaultUserPreferenceProfile"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Fetching default user preference profile")
 
-	profile, err := s.repo.GetDefaultUserPreferenceProfile(ctx, userID)
+	profile, err := s.repo.GetProfile(ctx, userID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch default user preference profile", slog.Any("error", err))
 		span.RecordError(err)
@@ -122,7 +122,7 @@ func (s *UserProfilesServiceImpl) CreateUserPreferenceProfile(ctx context.Contex
 	l := s.logger.With(slog.String("method", "CreateUserPreferenceProfile"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Creating user preference profile", slog.String("profileName", params.ProfileName))
 
-	profile, err := s.repo.CreateUserPreferenceProfile(ctx, userID, params)
+	profile, err := s.repo.CreateProfile(ctx, userID, params)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to create user preference profile", slog.Any("error", err))
 		span.RecordError(err)
@@ -145,7 +145,7 @@ func (s *UserProfilesServiceImpl) UpdateUserPreferenceProfile(ctx context.Contex
 	l := s.logger.With(slog.String("method", "UpdateUserPreferenceProfile"), slog.String("profileID", profileID.String()))
 	l.DebugContext(ctx, "Updating user preference profile")
 
-	err := s.repo.UpdateUserPreferenceProfile(ctx, profileID, params)
+	err := s.repo.UpdateProfile(ctx, profileID, params)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to update user preference profile", slog.Any("error", err))
 		span.RecordError(err)
@@ -168,7 +168,7 @@ func (s *UserProfilesServiceImpl) DeleteUserPreferenceProfile(ctx context.Contex
 	l := s.logger.With(slog.String("method", "DeleteUserPreferenceProfile"), slog.String("profileID", profileID.String()))
 	l.DebugContext(ctx, "Deleting user preference profile")
 
-	err := s.repo.DeleteUserPreferenceProfile(ctx, profileID)
+	err := s.repo.DeleteProfile(ctx, profileID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to delete user preference profile", slog.Any("error", err))
 		span.RecordError(err)
@@ -191,7 +191,7 @@ func (s *UserProfilesServiceImpl) SetDefaultUserPreferenceProfile(ctx context.Co
 	l := s.logger.With(slog.String("method", "SetDefaultUserPreferenceProfile"), slog.String("profileID", profileID.String()))
 	l.DebugContext(ctx, "Setting profile as default")
 
-	err := s.repo.SetDefaultUserPreferenceProfile(ctx, profileID)
+	err := s.repo.SetDefaultProfile(ctx, profileID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to set default user preference profile", slog.Any("error", err))
 		span.RecordError(err)

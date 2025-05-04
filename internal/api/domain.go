@@ -2,21 +2,11 @@ package api
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/golang-jwt/jwt/v5"
-)
-
-// Domain specific errors for authentication and authorization.
-var (
-	ErrNotFound        = errors.New("requested item not found")
-	ErrConflict        = errors.New("item already exists or conflict")
-	ErrUnauthenticated = errors.New("authentication required or invalid credentials")
-	ErrForbidden       = errors.New("action forbidden")
-	ErrBadRequest      = errors.New("bad request")
 )
 
 // --- SECURITY WARNING ---
@@ -97,18 +87,6 @@ type ValidateSessionResponse struct {
 	Email    string `json:"email,omitempty"`    // Email associated with the session/token.
 }
 
-// User represents the core user entity in the domain.
-type UserAuth struct {
-	ID        string    `json:"id" example:"d290f1ee-6c54-4b01-90e6-d701748f0851"` // Unique identifier (UUID).
-	Username  string    `json:"username" example:"johndoe"`                        // Optional unique username.
-	Email     string    `json:"email" example:"john.doe@example.com"`              // Unique email address used for login.
-	Password  string    `json:"-"`                                                 // Hashed password (never exposed).
-	Role      string    `json:"role" example:"user"`                               // User role (e.g., 'user', 'admin').
-	CreatedAt time.Time `json:"created_at"`                                        // Timestamp when the user was created.
-	UpdatedAt time.Time `json:"updated_at"`                                        // Timestamp when the user was last updated.
-	// DeletedAt *time.Time `json:"deleted_at,omitempty"`                         // Timestamp for soft deletes (if implemented).
-}
-
 // Session represents legacy session data (less common with JWT flow).
 type Session struct {
 	ID       string `json:"id"`       // User ID associated with the session.
@@ -125,7 +103,7 @@ type Claims struct {
 	SubscriptionPlan     string `json:"pln,omitempty"`   // Custom claim for Subscription Plan (e.g., 'free', 'premium').
 	SubscriptionStatus   string `json:"sts,omitempty"`   // Custom claim for Subscription Status (e.g., 'active', 'trialing').
 	Scope                string `json:"scope,omitempty"` // Optional scope information.
-	jwt.RegisteredClaims                                 // Embed standard claims (ExpiresAt, IssuedAt, Subject, etc.).
+	jwt.RegisteredClaims        // Embed standard claims (ExpiresAt, IssuedAt, Subject, etc.).
 }
 
 // SubscriptionRepository defines methods for accessing subscription data.
@@ -150,42 +128,6 @@ type Interest struct {
 	Active      bool       `json:"active"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   *time.Time `json:"updated_at"`
-}
-
-// UpdateProfileParams defines the fields allowed for profile updates.
-// Use pointers for optional fields, allowing partial updates.
-type UpdateProfileParams struct {
-	Username        *string // Pointer allows distinguishing between empty string and not provided
-	Email           *string
-	DisplayName     *string
-	ProfileImageURL *string
-	Firstname       *string `json:"firstname,omitempty"`
-	Lastname        *string `json:"lastname,omitempty"`
-	Age             *int    `json:"age,omitempty"`
-	City            *string `json:"city,omitempty"`
-	Country         *string `json:"country,omitempty"`
-	AboutYou        *string `json:"about_you,omitempty"`
-	// Add any other mutable fields like bio, location string etc.
-}
-
-type UserProfile struct {
-	ID              uuid.UUID  `json:"id"`
-	Email           string     `json:"email"`
-	Username        *string    `json:"username,omitempty"` // Use pointer if nullable/optional unique
-	Firstname       *string    `json:"firstname,omitempty"`
-	Lastname        *string    `json:"lastname,omitempty"`
-	Age             *int       `json:"age,omitempty"`
-	City            *string    `json:"city,omitempty"`
-	Country         *string    `json:"country,omitempty"`
-	AboutYou        *string    `json:"about_you,omitempty"`
-	PasswordHash    string     `json:"-"`                           // Exclude from JSON responses
-	DisplayName     *string    `json:"display_name,omitempty"`      // Use pointer if nullable
-	ProfileImageURL *string    `json:"profile_image_url,omitempty"` // Use pointer if nullable
-	IsActive        bool       `json:"is_active"`
-	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"` // Use pointer if nullable
-	LastLoginAt     *time.Time `json:"last_login_at,omitempty"`     // Use pointer if nullable
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 type DayPreference string
@@ -275,6 +217,8 @@ type CreateUserPreferenceProfileParams struct {
 	PreferredVibes       []string             `json:"preferred_vibes,omitempty"`
 	PreferredTransport   *TransportPreference `json:"preferred_transport,omitempty"`
 	DietaryNeeds         []string             `json:"dietary_needs,omitempty"`
+	Tags                 []*string            `json:"tags,omitempty"`
+	Interests            []*string            `json:"interests,omitempty"`
 }
 
 // UpdateUserPreferenceProfileParams is used for updating a user preference profile

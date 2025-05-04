@@ -1,4 +1,4 @@
-package userProfiles
+package types
 
 import (
 	"database/sql/driver"
@@ -150,8 +150,8 @@ type UserPreferenceProfile struct {
 // CreateUserPreferenceProfileParams defines required fields for creating a new profile.
 // Optional fields can be added here or assumed to use DB defaults.
 type CreateUserPreferenceProfileParams struct {
-	ProfileName string `json:"profile_name" binding:"required"`
-	// Optional settings - if nil/missing, DB defaults will be used
+	UserID               string               `json:"user_id" binding:"required,uuid"` // Added for clarity
+	ProfileName          string               `json:"profile_name" binding:"required"`
 	IsDefault            *bool                `json:"is_default,omitempty"` // Default is FALSE in DB
 	SearchRadiusKm       *float64             `json:"search_radius_km,omitempty"`
 	PreferredTime        *DayPreference       `json:"preferred_time,omitempty"`
@@ -162,14 +162,32 @@ type CreateUserPreferenceProfileParams struct {
 	PreferDogFriendly    *bool                `json:"prefer_dog_friendly,omitempty"`
 	PreferredVibes       []string             `json:"preferred_vibes,omitempty"` // Use empty slice if not provided?
 	PreferredTransport   *TransportPreference `json:"preferred_transport,omitempty"`
-	DietaryNeeds         []string             `json:"dietary_needs,omitempty"` // Use empty slice if not provided?
+	DietaryNeeds         []string             `json:"dietary_needs,omitempty"`
+	Tags                 []*string            `json:"tags,omitempty"`
+	Interests            []*string            `json:"interests,omitempty"`
+}
+
+type Tags struct {
+	ID          uuid.UUID  `json:"id"`
+	Name        string     `json:"name"`
+	TagType     string     `json:"tag_type"` // Consider using a specific enum type
+	Description *string    `json:"description"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   *time.Time `json:"updated_at"`
+}
+
+type Interests struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Description *string   `json:"description"`
+	Active      bool      `json:"active"`
 }
 
 // UpdateUserPreferenceProfileParams defines fields allowed for updating a profile.
 // Pointers allow partial updates.
 type UpdateUserPreferenceProfileParams struct {
-	ProfileName          *string              `json:"profile_name,omitempty"`
-	IsDefault            *bool                `json:"is_default,omitempty"` // Handle default logic carefully
+	ProfileName          string               `json:"profile_name" binding:"required"`
+	IsDefault            *bool                `json:"is_default,omitempty"` // Default is FALSE in DB
 	SearchRadiusKm       *float64             `json:"search_radius_km,omitempty"`
 	PreferredTime        *DayPreference       `json:"preferred_time,omitempty"`
 	BudgetLevel          *int                 `json:"budget_level,omitempty"`
@@ -177,9 +195,11 @@ type UpdateUserPreferenceProfileParams struct {
 	PreferAccessiblePOIs *bool                `json:"prefer_accessible_pois,omitempty"`
 	PreferOutdoorSeating *bool                `json:"prefer_outdoor_seating,omitempty"`
 	PreferDogFriendly    *bool                `json:"prefer_dog_friendly,omitempty"`
-	PreferredVibes       []string             `json:"preferred_vibes"` // Allow setting empty slice `[]`
+	PreferredVibes       []string             `json:"preferred_vibes,omitempty"` // Use empty slice if not provided?
 	PreferredTransport   *TransportPreference `json:"preferred_transport,omitempty"`
-	DietaryNeeds         []string             `json:"dietary_needs"` // Allow setting empty slice `[]`
+	DietaryNeeds         []string             `json:"dietary_needs,omitempty"`
+	Tags                 []*string            `json:"tags,omitempty"`
+	Interests            []*string            `json:"interests,omitempty"`
 }
 
 type UpdateUserInterestParams struct {

@@ -123,7 +123,7 @@ func TestLogin(t *testing.T) {
 		password := "password123"
 
 		// Set up expectations
-		mockRepo.On("GetUserByEmail", ctx, email).Return(nil, api.ErrNotFound).Once()
+		mockRepo.On("GetUserByEmail", ctx, email).Return(nil, types.ErrNotFound).Once()
 
 		// Call the service method
 		accessToken, refreshToken, err := service.Login(ctx, email, password)
@@ -207,14 +207,14 @@ func TestRegister(t *testing.T) {
 		password := "password123"
 
 		// Set up expectations
-		mockRepo.On("Register", ctx, username, email, mock.AnythingOfType("string")).Return("", api.ErrConflict).Once()
+		mockRepo.On("Register", ctx, username, email, mock.AnythingOfType("string")).Return("", types.ErrConflict).Once()
 
 		// Call the service method
 		err := service.Register(ctx, username, email, password, "user")
 
 		// Assert expectations
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, api.ErrConflict)
+		assert.ErrorIs(t, err, types.ErrConflict)
 		mockRepo.AssertExpectations(t)
 	})
 }

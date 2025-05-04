@@ -16,6 +16,7 @@ import (
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 // UserInterestHandler handles HTTP requests related to user operations.
@@ -125,7 +126,7 @@ func (h *UserInterestHandler) RemoveUserInterest(w http.ResponseWriter, r *http.
 		l.ErrorContext(ctx, "Failed to remove user interest", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to remove user interest")
-		if errors.Is(err, api.ErrNotFound) {
+		if errors.Is(err, types.ErrNotFound) {
 			api.ErrorResponse(w, r, http.StatusNotFound, "Interest association not found")
 		} else {
 			api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to remove interest")
@@ -197,7 +198,7 @@ func (h *UserInterestHandler) CreateInterest(w http.ResponseWriter, r *http.Requ
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to create interest")
 
-		if errors.Is(err, api.ErrConflict) {
+		if errors.Is(err, types.ErrConflict) {
 			api.ErrorResponse(w, r, http.StatusConflict, "Interest with this name already exists")
 		} else {
 			api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to create interest")
@@ -345,11 +346,11 @@ func (h *UserInterestHandler) UpdateUserInterest(w http.ResponseWriter, r *http.
 		span.SetStatus(codes.Error, "Service update failed")
 
 		// Map domain errors to HTTP status codes
-		if errors.Is(err, api.ErrNotFound) {
+		if errors.Is(err, types.ErrNotFound) {
 			api.ErrorResponse(w, r, http.StatusNotFound, "Custom interest not found or does not belong to user")
-		} else if errors.Is(err, api.ErrConflict) {
+		} else if errors.Is(err, types.ErrConflict) {
 			api.ErrorResponse(w, r, http.StatusConflict, "Custom interest with this name already exists")
-		} else if errors.Is(err, api.ErrBadRequest) {
+		} else if errors.Is(err, types.ErrBadRequest) {
 			api.ErrorResponse(w, r, http.StatusBadRequest, err.Error()) // Use specific message from error
 		} else {
 			api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to update custom interest")

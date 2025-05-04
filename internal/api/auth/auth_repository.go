@@ -18,16 +18,16 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 var _ AuthRepo = (*PostgresAuthRepo)(nil)
 
 type AuthRepo interface {
 	// GetUserByEmail fetches user details needed for validation/token generation.
-	GetUserByEmail(ctx context.Context, email string) (*api.UserAuth, error)
+	GetUserByEmail(ctx context.Context, email string) (*types.UserAuth, error)
 	// GetUserByID fetches user details by ID.
-	GetUserByID(ctx context.Context, userID string) (*api.UserAuth, error)
+	GetUserByID(ctx context.Context, userID string) (*types.UserAuth, error)
 	// Register stores a new user with a HASHED password. Returns new user ID.
 	Register(ctx context.Context, username, email, hashedPassword string) (string, error)
 	// VerifyPassword checks if the given password matches the hash for the userID.
@@ -59,13 +59,13 @@ func NewPostgresAuthRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresAu
 }
 
 // GetUserByEmail implements auth.AuthRepo.
-func (r *PostgresAuthRepo) GetUserByEmail(ctx context.Context, email string) (*api.UserAuth, error) {
-	var user api.UserAuth
+func (r *PostgresAuthRepo) GetUserByEmail(ctx context.Context, email string) (*types.UserAuth, error) {
+	var user types.UserAuth
 	query := `SELECT id, username, email, password_hash FROM users WHERE email = $1 AND is_active = TRUE`
 	err := r.pgpool.QueryRow(ctx, query, email).Scan(&user.ID, &user.Username, &user.Email, &user.Password)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("user with email %s not found: %w", email, api.ErrNotFound) // Use a domain error
+			return nil, fmt.Errorf("user with email %s not found: %w", email, types.ErrNotFound) // Use a domain error
 		}
 		r.logger.ErrorContext(ctx, "Error fetching user by email", slog.Any("error", err), slog.String("email", email))
 		return nil, fmt.Errorf("database error fetching user: %w", err)
@@ -74,14 +74,14 @@ func (r *PostgresAuthRepo) GetUserByEmail(ctx context.Context, email string) (*a
 }
 
 // GetUserByID implements auth.AuthRepo.
-func (r *PostgresAuthRepo) GetUserByID(ctx context.Context, userID string) (*api.UserAuth, error) {
-	var user api.UserAuth
+func (r *PostgresAuthRepo) GetUserByID(ctx context.Context, userID string) (*types.UserAuth, error) {
+	var user types.UserAuth
 	// Select fields needed by token generation or other logic
 	query := `SELECT id, username, email FROM users WHERE id = $1 AND is_active = TRUE`
 	err := r.pgpool.QueryRow(ctx, query, userID).Scan(&user.ID, &user.Username, &user.Email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("user with ID %s not found: %w", userID, api.ErrNotFound) // Use a domain error
+			return nil, fmt.Errorf("user with ID %s not found: %w", userID, types.ErrNotFound) // Use a domain error
 		}
 		r.logger.ErrorContext(ctx, "Error fetching user by ID", slog.Any("error", err), slog.String("userID", userID))
 		return nil, fmt.Errorf("database error fetching user by ID: %w", err)
@@ -113,7 +113,7 @@ func (r *PostgresAuthRepo) Register(ctx context.Context, username, email, hashed
 		//dbQueryErrorsTotal.Add(ctx, 1)
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return "", fmt.Errorf("email or username already exists: %w", api.ErrConflict)
+			return "", fmt.Errorf("email or username already exists: %w", types.ErrConflict)
 		}
 		r.logger.ErrorContext(ctx, "Error inserting user", slog.Any("error", err), slog.String("email", email))
 		return "", fmt.Errorf("database error registering user: %w", err)
@@ -134,7 +134,7 @@ func (r *PostgresAuthRepo) VerifyPassword(ctx context.Context, userID, password 
 	err := r.pgpool.QueryRow(ctx, query, userID).Scan(&storedHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("user not found: %w", api.ErrNotFound)
+			return fmt.Errorf("user not found: %w", types.ErrNotFound)
 		}
 		r.logger.ErrorContext(ctx, "Error fetching password hash for verification", slog.Any("error", err), slog.String("userID", userID))
 		return fmt.Errorf("database error verifying password: %w", err)
@@ -146,7 +146,7 @@ func (r *PostgresAuthRepo) VerifyPassword(ctx context.Context, userID, password 
 		l := r.logger.With(slog.String("userID", userID))
 		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
 			l.WarnContext(ctx, "Password mismatch during verification")
-			return fmt.Errorf("invalid password: %w", api.ErrUnauthenticated) // Specific error
+			return fmt.Errorf("invalid password: %w", types.ErrUnauthenticated) // Specific error
 		}
 		l.ErrorContext(ctx, "Error comparing password hash", slog.Any("error", err))
 		return fmt.Errorf("error during password comparison: %w", err)
@@ -164,7 +164,7 @@ func (r *PostgresAuthRepo) UpdatePassword(ctx context.Context, userID, newHashed
 	}
 	if tag.RowsAffected() == 0 {
 		r.logger.WarnContext(ctx, "User not found or no password change needed during update", slog.String("userID", userID))
-		return fmt.Errorf("user not found or password unchanged: %w", api.ErrNotFound) // Or a different domain error
+		return fmt.Errorf("user not found or password unchanged: %w", types.ErrNotFound) // Or a different domain error
 	}
 	return nil
 }
@@ -190,17 +190,17 @@ func (r *PostgresAuthRepo) ValidateRefreshTokenAndGetUserID(ctx context.Context,
 	err := r.pgpool.QueryRow(ctx, query, refreshToken).Scan(&userID, &expiresAt, &revokedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", fmt.Errorf("refresh token not found: %w", api.ErrUnauthenticated)
+			return "", fmt.Errorf("refresh token not found: %w", types.ErrUnauthenticated)
 		}
 		r.logger.ErrorContext(ctx, "Error querying refresh token", slog.Any("error", err))
 		return "", fmt.Errorf("database error validating refresh token: %w", err)
 	}
 
 	if revokedAt != nil {
-		return "", fmt.Errorf("refresh token has been revoked: %w", api.ErrUnauthenticated)
+		return "", fmt.Errorf("refresh token has been revoked: %w", types.ErrUnauthenticated)
 	}
 	if time.Now().After(expiresAt) {
-		return "", fmt.Errorf("refresh token has expired: %w", api.ErrUnauthenticated)
+		return "", fmt.Errorf("refresh token has expired: %w", types.ErrUnauthenticated)
 	}
 
 	return userID, nil // Return only the userID

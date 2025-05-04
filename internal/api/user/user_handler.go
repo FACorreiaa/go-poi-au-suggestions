@@ -10,6 +10,7 @@ import (
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 // HandlerUser handles HTTP requests related to user operations.
@@ -66,7 +67,7 @@ func (h *HandlerUser) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 	profile, err := h.userService.GetUserProfile(ctx, userID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to get user profile", slog.Any("error", err))
-		if errors.Is(err, api.ErrNotFound) {
+		if errors.Is(err, types.ErrNotFound) {
 			api.ErrorResponse(w, r, http.StatusNotFound, "User not found")
 		} else {
 			api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to retrieve user profile")
@@ -109,7 +110,7 @@ func (h *HandlerUser) UpdateUserProfile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var params api.UpdateProfileParams
+	var params types.UpdateProfileParams
 	if err := api.DecodeJSONBody(w, r, &params); err != nil {
 		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request format")

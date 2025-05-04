@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 var _ UserTagsRepo = (*PostgresUserTagsRepo)(nil)
@@ -140,30 +141,32 @@ func (r *PostgresUserTagsRepo) Get(ctx context.Context, userID, tagID uuid.UUID)
 	l.DebugContext(ctx, "Fetching user avoid tags")
 
 	query := `
+    SELECT id, name, description, tag_type, source, created_at
+    FROM (
+        -- Select potential Global Tag
         SELECT
             g.id,
             g.name,
             g.description,
             g.tag_type,
-            'global' AS source, 
-            g.created_at        
+            'global' AS source,
+            g.created_at
         FROM global_tags g
         WHERE g.active = TRUE
 
         UNION ALL
 
-        -- Select User Personal Tags
         SELECT
             upt.id,
             upt.name,
-            NULL AS description, 
+            upt.description, -- Use upt.description here
             upt.tag_type,
-            'personal' AS source, 
+            'personal' AS source,
             upt.created_at
-        FROM user_personal_tags upt 
-        WHERE upt.user_id = $1 AND upt.id = $2
-
-        ORDER BY name`
+        FROM user_personal_tags upt
+        WHERE upt.user_id = $1 
+    ) AS combined_tags
+    WHERE combined_tags.id = $2 -- Filter the combined set by the specific tag_id LAST`
 
 	err := r.pgpool.QueryRow(ctx, query, userID, tagID).Scan(
 		&tag.ID,
@@ -214,23 +217,23 @@ func (r *PostgresUserTagsRepo) Create(ctx context.Context, userID uuid.UUID, par
 	now := time.Now()
 
 	tag := &PersonalTag{
-		ID:      newTagID,
-		UserID:  userID,
-		Name:    params.Name,
-		TagType: params.TagType,
-		//Description: &params.Description,
-		Source:    "personal",
-		CreatedAt: now,
+		ID:          newTagID,
+		UserID:      userID,
+		Name:        params.Name,
+		TagType:     params.TagType,
+		Description: &params.Description,
+		Source:      "personal",
+		CreatedAt:   now,
 	}
 
 	query := `
-        INSERT INTO user_personal_tags (id, user_id, name, tag_type, created_at)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO user_personal_tags (id, user_id, name, tag_type, description, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
     `
 	// Note: No ON CONFLICT here. We expect a unique constraint (user_id, name)
 	// on the table and will handle the specific error if it occurs.
 
-	_, err = tx.Exec(ctx, query, tag.ID, tag.UserID, tag.Name, tag.TagType, tag.CreatedAt)
+	_, err = tx.Exec(ctx, query, tag.ID, tag.UserID, tag.Name, tag.TagType, tag.Description, tag.CreatedAt)
 	if err != nil {
 		span.RecordError(err)
 
@@ -297,7 +300,7 @@ func (r *PostgresUserTagsRepo) Update(ctx context.Context, userID, tagsID uuid.U
 		l.WarnContext(ctx, "Attempted to update non-existent or unauthorized personal tag")
 		span.SetStatus(codes.Error, "Tag not found or not owned by user")
 		// It didn't exist OR didn't belong to the user, return NotFound
-		return fmt.Errorf("personal tag not found or not owned by user: %w", api.ErrNotFound)
+		return fmt.Errorf("personal tag not found or not owned by user: %w", types.ErrNotFound)
 	}
 
 	err = tx.Commit(ctx)
@@ -351,7 +354,7 @@ func (r *PostgresUserTagsRepo) Delete(ctx context.Context, userID uuid.UUID, tag
 		l.WarnContext(ctx, "Attempted to delete non-existent or unauthorized personal tag")
 		span.SetStatus(codes.Error, "Tag not found or not owned by user")
 		// It didn't exist OR didn't belong to the user
-		return fmt.Errorf("personal tag not found or not owned by user: %w", api.ErrNotFound)
+		return fmt.Errorf("personal tag not found or not owned by user: %w", types.ErrNotFound)
 	}
 
 	err = tx.Commit(ctx)

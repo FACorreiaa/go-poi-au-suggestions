@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 var _ UserInterestRepo = (*PostgresUserInterestRepo)(nil)
@@ -62,7 +63,7 @@ func (r *PostgresUserInterestRepo) CreateInterest(ctx context.Context, name stri
 	// Input validation basic check
 	if name == "" {
 		span.SetStatus(codes.Error, "Interest name cannot be empty")
-		return nil, fmt.Errorf("interest name cannot be empty: %w", api.ErrBadRequest) // Example domain error
+		return nil, fmt.Errorf("interest name cannot be empty: %w", types.ErrBadRequest) // Example domain error
 	}
 
 	var interest api.Interest
@@ -90,7 +91,7 @@ func (r *PostgresUserInterestRepo) CreateInterest(ctx context.Context, name stri
 			l.WarnContext(ctx, "Attempted to create interest with duplicate name", slog.Any("error", err))
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "Duplicate interest name")
-			return nil, fmt.Errorf("interest with name '%s' already exists: %w", name, api.ErrConflict)
+			return nil, fmt.Errorf("interest with name '%s' already exists: %w", name, types.ErrConflict)
 		}
 		// Handle other potential errors
 		l.ErrorContext(ctx, "Failed to insert new interest", slog.Any("error", err))
@@ -132,7 +133,7 @@ func (r *PostgresUserInterestRepo) RemoveUserInterest(ctx context.Context, userI
 		l.WarnContext(ctx, "Attempted to remove non-existent user interest association")
 		// Return an error so the service/handler knows the operation didn't change anything
 		span.SetStatus(codes.Error, "Association not found")
-		return fmt.Errorf("interest association not found: %w", api.ErrNotFound)
+		return fmt.Errorf("interest association not found: %w", types.ErrNotFound)
 	}
 
 	l.InfoContext(ctx, "User interest removed successfully")
@@ -273,7 +274,7 @@ func (r *PostgresUserInterestRepo) UpdateUserInterest(ctx context.Context, userI
 			err := errors.New("custom interest name cannot be empty")
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "Invalid input: empty name")
-			return fmt.Errorf("%w: %w", api.ErrBadRequest, err)
+			return fmt.Errorf("%w: %w", types.ErrBadRequest, err)
 		}
 		setClauses = append(setClauses, fmt.Sprintf("name = $%d", argID))
 		args = append(args, *params.Name)
@@ -298,7 +299,7 @@ func (r *PostgresUserInterestRepo) UpdateUserInterest(ctx context.Context, userI
 	if len(setClauses) == 0 {
 		l.InfoContext(ctx, "No fields provided to update custom interest")
 		span.SetStatus(codes.Ok, "No update fields")
-		return nil // Or return api.ErrBadRequest("no fields provided for update")
+		return nil // Or return types.ErrBadRequest("no fields provided for update")
 	}
 
 	// Always update updated_at
@@ -333,7 +334,7 @@ func (r *PostgresUserInterestRepo) UpdateUserInterest(ctx context.Context, userI
 			l.WarnContext(ctx, "Attempted to update custom interest to a duplicate name for this user", slog.Any("error", err))
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "Duplicate custom interest name")
-			return fmt.Errorf("you already have a custom interest named '%s': %w", *params.Name, api.ErrConflict)
+			return fmt.Errorf("you already have a custom interest named '%s': %w", *params.Name, types.ErrConflict)
 		}
 		// Handle other potential errors
 		l.ErrorContext(ctx, "Failed to execute update custom interest query", slog.Any("error", err))
@@ -347,7 +348,7 @@ func (r *PostgresUserInterestRepo) UpdateUserInterest(ctx context.Context, userI
 		l.WarnContext(ctx, "Custom interest not found for update or user mismatch", slog.Int64("rows_affected", tag.RowsAffected()))
 		span.SetStatus(codes.Error, "Custom interest not found or permission denied")
 		// It's crucial to return NotFound here, as the combination wasn't found
-		return fmt.Errorf("custom interest with ID %s not found for user %s: %w", interestID.String(), userID.String(), api.ErrNotFound)
+		return fmt.Errorf("custom interest with ID %s not found for user %s: %w", interestID.String(), userID.String(), types.ErrNotFound)
 	}
 
 	l.InfoContext(ctx, "User custom interest updated successfully")

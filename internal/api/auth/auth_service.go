@@ -9,6 +9,8 @@ import (
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/config"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -30,7 +32,7 @@ type AuthService interface {
 	UpdatePassword(ctx context.Context, userID, oldPassword, newPassword string) error
 	InvalidateAllUserRefreshTokens(ctx context.Context, userID string) error
 	ValidateRefreshToken(ctx context.Context, refreshToken string) (string, error)
-	GetUserByID(ctx context.Context, userID string) (*api.UserAuth, error)
+	GetUserByID(ctx context.Context, userID string) (*types.UserAuth, error)
 	VerifyPassword(ctx context.Context, userID, password string) error
 }
 
@@ -57,14 +59,14 @@ func (s *AuthServiceImpl) Login(ctx context.Context, email, password string) (st
 	if err != nil {
 		l.WarnContext(ctx, "GetUserByEmail failed", slog.Any("error", err))
 		// Don't reveal if user exists or password is wrong
-		return "", "", fmt.Errorf("invalid credentials: %w", api.ErrUnauthenticated)
+		return "", "", fmt.Errorf("invalid credentials: %w", types.ErrUnauthenticated)
 	}
 
 	// 2. Compare submitted password with stored hash
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
 		l.WarnContext(ctx, "Password comparison failed", slog.String("userID", user.ID))
-		return "", "", fmt.Errorf("invalid credentials: %w", api.ErrUnauthenticated)
+		return "", "", fmt.Errorf("invalid credentials: %w", types.ErrUnauthenticated)
 	}
 
 	// --- Add api.Subscription Fetching Here Later ---
@@ -204,7 +206,7 @@ func (s *AuthServiceImpl) UpdatePassword(ctx context.Context, userID, oldPasswor
 	err := s.repo.VerifyPassword(ctx, userID, oldPassword)
 	if err != nil {
 		l.WarnContext(ctx, "Old password verification failed", slog.Any("error", err))
-		return fmt.Errorf("incorrect old password: %w", api.ErrUnauthenticated)
+		return fmt.Errorf("incorrect old password: %w", types.ErrUnauthenticated)
 	}
 
 	// 2. Hash the *new* password
@@ -246,7 +248,7 @@ func (s *AuthServiceImpl) InvalidateAllUserRefreshTokens(ctx context.Context, us
 	return nil
 }
 
-func (s *AuthServiceImpl) GetUserByID(ctx context.Context, userID string) (*api.UserAuth, error) {
+func (s *AuthServiceImpl) GetUserByID(ctx context.Context, userID string) (*types.UserAuth, error) {
 	l := s.logger.With(slog.String("method", "GetUserByID"), slog.String("userID", userID))
 	l.DebugContext(ctx, "Fetching user by ID")
 	user, err := s.repo.GetUserByID(ctx, userID)
@@ -259,7 +261,7 @@ func (s *AuthServiceImpl) GetUserByID(ctx context.Context, userID string) (*api.
 }
 
 // --- Internal Helper: generateTokens ---
-func (s *AuthServiceImpl) generateTokens(ctx context.Context, user *api.UserAuth, sub *api.Subscription) (accessToken string, refreshToken string, err error) {
+func (s *AuthServiceImpl) generateTokens(ctx context.Context, user *types.UserAuth, sub *api.Subscription) (accessToken string, refreshToken string, err error) {
 	l := s.logger.With(slog.String("method", "generateTokens"), slog.String("userID", user.ID))
 
 	// --- Access Token ---

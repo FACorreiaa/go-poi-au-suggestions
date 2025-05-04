@@ -45,6 +45,9 @@ type UserTagsRepo interface {
 
 	// AddTagToProfile links a tag to a profile
 	AddTagToProfile(ctx context.Context, profileID uuid.UUID, tagID uuid.UUID) error
+
+	// GetTagsForProfile retrieves all tags associated with a profile
+	GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Tags, error)
 }
 
 type PostgresUserTagsRepo struct {
@@ -435,7 +438,7 @@ func (r *PostgresUserTagsRepo) AddTagToProfile(ctx context.Context, profileID, t
 	l.DebugContext(ctx, "Linking tag to profile")
 
 	query := `
-        INSERT INTO user_personal_tags (profile_id, tag_id)
+        INSERT INTO user_profile_avoid_tags (profile_id, tag_id)
         VALUES ($1, $2)
         ON CONFLICT DO NOTHING`
 
@@ -450,4 +453,62 @@ func (r *PostgresUserTagsRepo) AddTagToProfile(ctx context.Context, profileID, t
 	l.DebugContext(ctx, "Tag linked to profile successfully")
 	span.SetStatus(codes.Ok, "Tag linked")
 	return nil
+}
+
+// GetTagsForProfile retrieves all tags associated with a profile
+func (r *PostgresUserTagsRepo) GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Tags, error) {
+	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetTagsForProfile", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "global_tags"),
+		attribute.String("db.profile.id", profileID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetTagsForProfile"), slog.String("profileID", profileID.String()))
+	l.DebugContext(ctx, "Fetching tags for profile")
+
+	query := `
+        SELECT g.id, g.name, g.tag_type, g.description, g.created_at, g.updated_at
+        FROM global_tags g
+        JOIN user_profile_avoid_tags upt ON g.id = upt.tag_id
+        WHERE upt.profile_id = $1`
+
+	rows, err := r.pgpool.Query(ctx, query, profileID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to query tags for profile", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB query failed")
+		return nil, fmt.Errorf("database error fetching tags for profile: %w", err)
+	}
+	defer rows.Close()
+
+	var tags []types.Tags
+	for rows.Next() {
+		var tag types.Tags
+		err := rows.Scan(
+			&tag.ID,
+			&tag.Name,
+			&tag.TagType,
+			&tag.Description,
+			&tag.CreatedAt,
+			&tag.UpdatedAt,
+		)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to scan tag row", slog.Any("error", err))
+			span.RecordError(err)
+			return nil, fmt.Errorf("database error scanning tag: %w", err)
+		}
+		tags = append(tags, tag)
+	}
+
+	if err = rows.Err(); err != nil {
+		l.ErrorContext(ctx, "Error iterating tag rows", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("database error reading tags: %w", err)
+	}
+
+	l.DebugContext(ctx, "Fetched tags for profile successfully", slog.Int("count", len(tags)))
+	span.SetStatus(codes.Ok, "Tags fetched")
+	return tags, nil
 }

@@ -121,14 +121,14 @@ func main() {
 	authenticateMiddleware := auth.Authenticate(logger, cfg.JWT)
 	// --- Router Setup ---
 	routerConfig := &router.Config{
-		AuthHandler:            c.AuthHandler,
-		UserHandler:            c.UserHandler,
-		UserInterestHandler:    c.UserInterestHandler,
-		UserSettingsHandler:    c.UserSettingsHandler,
-		UserTagsHandler:        c.UserTagsHandler,
-		UserProfileHandler:     c.UserProfileHandler,
-		AuthenticateMiddleware: authenticateMiddleware,
-		Logger:                 logger,
+		AuthHandler:              c.AuthHandler,
+		UserHandler:              c.UserHandler,
+		UserInterestHandler:      c.UserInterestHandler,
+		UserSettingsHandler:      c.UserSettingsHandler,
+		UserTagsHandler:          c.UserTagsHandler,
+		UserSearchProfileHandler: c.UserProfileHandler,
+		AuthenticateMiddleware:   authenticateMiddleware,
+		Logger:                   logger,
 	}
 	apiRouter := router.SetupRouter(routerConfig)
 

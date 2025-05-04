@@ -20,6 +20,7 @@ CREATE TYPE day_preference_enum AS ENUM (
     );
 
 -- Table for user-defined preference profiles
+-- rename to user_search_profile because its the search parameters for the AI
 CREATE TABLE user_preference_profiles (
                                           id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                                           user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

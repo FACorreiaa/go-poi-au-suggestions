@@ -86,7 +86,7 @@ func (u *UserSearchProfileHandler) CreateProfile(w http.ResponseWriter, r *http.
 		return
 	}
 
-	var params api.CreateUserPreferenceProfileParams
+	var params types.CreateUserPreferenceProfileParams
 	if err := api.DecodeJSONBody(w, r, &params); err != nil {
 		l.WarnContext(ctx, "Failed to decode request body", slog.Any("error", err))
 		span.RecordError(err)

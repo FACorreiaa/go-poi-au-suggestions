@@ -19,14 +19,14 @@ import (
 
 // Config contains dependencies needed for the router setup
 type Config struct {
-	AuthHandler            *auth.AuthHandler
-	AuthenticateMiddleware func(http.Handler) http.Handler // Function signature for auth middleware
-	Logger                 *slog.Logger
-	UserHandler            *user.HandlerUser
-	UserInterestHandler    *userInterest.UserInterestHandler
-	UserSettingsHandler    *userSettings.SettingsHandler
-	UserProfileHandler     *userProfiles.UserProfilesHandler
-	UserTagsHandler        *userTags.UserTagsHandler
+	AuthHandler              *auth.AuthHandler
+	AuthenticateMiddleware   func(http.Handler) http.Handler // Function signature for auth middleware
+	Logger                   *slog.Logger
+	UserHandler              *user.HandlerUser
+	UserInterestHandler      *userInterest.UserInterestHandler
+	UserSettingsHandler      *userSettings.SettingsHandler
+	UserSearchProfileHandler *userProfiles.UserSearchProfileHandler
+	UserTagsHandler          *userTags.UserTagsHandler
 }
 
 // SetupRouter initializes and configures the main application router.
@@ -77,7 +77,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			//r.Mount("/user", UserRoutes(cfg.UserHandler)) // User routes
 			r.Mount("/user/interests", UserInterestRoutes(cfg.UserInterestHandler))
 			r.Mount("/user/preferences", UserPreferencesRoutes(cfg.UserSettingsHandler))
-			r.Mount("/user/profile", UserProfileRoutes(cfg.UserProfileHandler))
+			r.Mount("/user/search-profile", UserSearchProfileRoutes(cfg.UserSearchProfileHandler))
 			r.Mount("/user/tags", UserTagsRoutes(cfg.UserTagsHandler))
 			// r.Mount("/pois", POIRoutes(cfg.POIHandler))   // Example for POI routes
 		})
@@ -160,7 +160,7 @@ func UserPreferencesRoutes(handler *userSettings.SettingsHandler) http.Handler {
 	return r
 }
 
-func UserProfileRoutes(handler *userProfiles.UserProfilesHandler) http.Handler {
+func UserSearchProfileRoutes(handler *userProfiles.UserSearchProfileHandler) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", handler.GetUserProfile)
 	r.Post("/", handler.CreateProfile) // POST http://localhost:8000/api/v1/user/profile

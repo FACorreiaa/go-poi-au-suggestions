@@ -32,6 +32,8 @@ type UserInterestRepo interface {
 	GetInterest(ctx context.Context, interestID uuid.UUID) (*api.Interest, error)
 	UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params api.UpdateUserInterestParams) error
 	AddInterestToProfile(ctx context.Context, profileID, interestID uuid.UUID) error
+	// GetInterestsForProfile retrieves all interests associated with a profile
+	GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Interests, error)
 	// GetUserEnhancedInterests retrieves all interests for a user with their preference levels
 	//GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]api.EnhancedInterest, error)
 }
@@ -420,4 +422,60 @@ func (r *PostgresUserInterestRepo) AddInterestToProfile(ctx context.Context, pro
 	l.DebugContext(ctx, "Interest linked to profile successfully")
 	span.SetStatus(codes.Ok, "Interest linked")
 	return nil
+}
+
+// GetInterestsForProfile retrieves all interests associated with a profile
+func (r *PostgresUserInterestRepo) GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Interests, error) {
+	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetInterestsForProfile", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "interests"),
+		attribute.String("db.profile.id", profileID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetInterestsForProfile"), slog.String("profileID", profileID.String()))
+	l.DebugContext(ctx, "Fetching interests for profile")
+
+	query := `
+        SELECT i.id, i.name, i.description, i.active
+        FROM interests i
+        JOIN user_profile_interests upi ON i.id = upi.interest_id
+        WHERE upi.profile_id = $1`
+
+	rows, err := r.pgpool.Query(ctx, query, profileID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to query interests for profile", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB query failed")
+		return nil, fmt.Errorf("database error fetching interests for profile: %w", err)
+	}
+	defer rows.Close()
+
+	var interests []types.Interests
+	for rows.Next() {
+		var interest types.Interests
+		err := rows.Scan(
+			&interest.ID,
+			&interest.Name,
+			&interest.Description,
+			&interest.Active,
+		)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to scan interest row", slog.Any("error", err))
+			span.RecordError(err)
+			return nil, fmt.Errorf("database error scanning interest: %w", err)
+		}
+		interests = append(interests, interest)
+	}
+
+	if err = rows.Err(); err != nil {
+		l.ErrorContext(ctx, "Error iterating interest rows", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("database error reading interests: %w", err)
+	}
+
+	l.DebugContext(ctx, "Fetched interests for profile successfully", slog.Int("count", len(interests)))
+	span.SetStatus(codes.Ok, "Interests fetched")
+	return interests, nil
 }

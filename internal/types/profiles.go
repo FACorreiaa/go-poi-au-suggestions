@@ -144,7 +144,7 @@ type UserPreferenceProfileResponse struct {
 	PreferredTransport   TransportPreference `json:"preferred_transport"`
 	DietaryNeeds         []string            `json:"dietary_needs"` // Assuming TEXT[] maps to []string
 	Interests            []Interests         `json:"interests"`     // Interests linked to this profile
-	AvoidTags            []Tags              `json:"avoid_tags"`    // Tags to avoid for this profile
+	Tags                 []Tags              `json:"tags"`          // Tags to avoid for this profile
 	CreatedAt            time.Time           `json:"created_at"`
 	UpdatedAt            time.Time           `json:"updated_at"`
 }

@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
 	userTags "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_tags"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
@@ -21,7 +20,7 @@ import (
 // Ensure implementation satisfies the interface
 var _ UserSearchProfilesService = (*UserSearchProfilesServiceImpl)(nil)
 
-// UserProfilesService defines the business logic contract for user operations.
+// UserSearchProfilesService defines the business logic contract for user operations.
 type UserSearchProfilesService interface {
 	//GetUserPreferenceProfiles User  Profiles
 	GetUserPreferenceProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error)
@@ -40,14 +39,6 @@ type UserSearchProfilesServiceImpl struct {
 	intRepo  userInterest.UserInterestRepo
 	tagRepo  userTags.UserTagsRepo
 }
-
-// NewUserService creates a new user service instance.
-//func NewUserProfilesService(repo UserProfilesRepo, logger *slog.Logger) *UserProfilesServiceImpl {
-//	return &UserProfilesServiceImpl{
-//		logger:   logger,
-//		prefRepo: repo,
-//	}
-//}
 
 func NewUserProfilesService(prefRepo UserSearchProfilesRepo, intRepo userInterest.UserInterestRepo, tagRepo userTags.UserTagsRepo, logger *slog.Logger) *UserSearchProfilesServiceImpl {
 	return &UserSearchProfilesServiceImpl{
@@ -150,6 +141,7 @@ func (s *UserSearchProfilesServiceImpl) GetDefaultUserPreferenceProfile(ctx cont
 //	return profile, nil
 //}
 
+// CreateProfile TODO fix Create profile interests and tags
 func (s *UserSearchProfilesServiceImpl) CreateProfile(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error) { // Return the richer response type
 	ctx, span := otel.Tracer("PreferenceService").Start(ctx, "CreateProfile")
 	defer span.End()
@@ -161,6 +153,15 @@ func (s *UserSearchProfilesServiceImpl) CreateProfile(ctx context.Context, userI
 	if params.ProfileName == "" {
 		return nil, fmt.Errorf("%w: profile name cannot be empty", types.ErrBadRequest)
 	}
+
+	tx, err := s.prefRepo.(*PostgresUserSearchProfilesRepo).pgpool.Begin(ctx)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to begin transaction", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Transaction begin failed")
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
 
 	// --- 2. Create the base profile ---
 	// NOTE: The repo method CreateProfile should ONLY insert into user_preference_profiles
@@ -229,26 +230,33 @@ func (s *UserSearchProfilesServiceImpl) CreateProfile(ctx context.Context, userI
 	// After successful creation and linking, fetch the linked data to return the full response object.
 	// Can also run these concurrently.
 	gResp, respCtx := errgroup.WithContext(ctx)
-	var finalInterests []types.Interests
-	var finalAvoidTags []types.Tags
+	var fetchedInterests []types.Interests
+	var fetchedTags []types.Tags
 
 	gResp.Go(func() error {
 		var fetchErr error
-		finalInterests, fetchErr = s.intRepo.GetInterest(respCtx, profileID)
-		return fetchErr // Return error if fetching fails
+		fetchedInterests, fetchErr = s.intRepo.GetInterestsForProfile(respCtx, profileID)
+		l.DebugContext(respCtx, "Fetched interests for response", slog.Int("count", len(fetchedInterests)), slog.Any("error", fetchErr)) // Log count and error
+		return fetchErr                                                                                                                  // Return error if fetching fails
 	})
 
 	gResp.Go(func() error {
 		var fetchErr error
-		finalAvoidTags, fetchErr := s.tagRepo.Get(respCtx, profileID)
+		fetchedTags, fetchErr = s.tagRepo.GetTagsForProfile(respCtx, profileID)
+		l.DebugContext(respCtx, "Fetched tags for response", slog.Int("count", len(fetchedTags)), slog.Any("error", fetchErr)) // Log count and error
 		return fetchErr
 	})
 
-	if err := gResp.Wait(); err != nil {
+	if err = gResp.Wait(); err != nil {
 		l.ErrorContext(ctx, "Error occurred fetching associated data for response", slog.Any("error", err))
-		// Profile & links were created, but we can't assemble the full response.
-		// Return the core profile data and log the fetch error.
-		return createdProfileCore, nil // Or return a specific error indicating fetch failure
+		return createdProfileCore, nil
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		l.ErrorContext(ctx, "Failed to commit transaction", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Transaction commit failed")
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	// --- 5. Assemble Final Response ---
@@ -270,9 +278,8 @@ func (s *UserSearchProfilesServiceImpl) CreateProfile(ctx context.Context, userI
 		DietaryNeeds:         createdProfileCore.DietaryNeeds,
 		CreatedAt:            createdProfileCore.CreatedAt,
 		UpdatedAt:            createdProfileCore.UpdatedAt,
-		// Add the fetched associated data
-		Interests: finalInterests,
-		AvoidTags: finalAvoidTags,
+		Interests:            fetchedInterests,
+		Tags:                 fetchedTags,
 	}
 
 	l.InfoContext(ctx, "Successfully created profile and processed associations")

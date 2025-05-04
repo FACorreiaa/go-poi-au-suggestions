@@ -71,8 +71,8 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	userTagsService := userTags.NewUserTagsService(userTagsRepo, logger)
 	userTagsHandler := userTags.NewUserTagsHandler(userTagsService, logger)
 
-	userSearchProfilesRepo := userSearchProfile.NewUserHandler(pool, logger)
-	userSearchProfilesService := userSearchProfile.NewUserProfilesService(userSearchProfilesRepo, logger)
+	userSearchProfilesRepo := userSearchProfile.NewPostgresUserRepo(pool, logger)
+	userSearchProfilesService := userSearchProfile.NewUserProfilesService(userSearchProfilesRepo, userInterestRepo, userTagsRepo, logger)
 	userSearchProfilesHandler := userSearchProfile.NewUserHandler(userSearchProfilesService, logger)
 	// Create and return the container
 	return &Container{

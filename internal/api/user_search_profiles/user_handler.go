@@ -1,6 +1,7 @@
 package userSearchProfile
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -58,10 +59,11 @@ func (u *UserSearchProfileHandler) GetUserProfile(w http.ResponseWriter, r *http
 // @Failure      500 {object} api.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles [post]
+// Assuming this is in a handler file
 func (u *UserSearchProfileHandler) CreateProfile(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("UserProfilesHandler").Start(r.Context(), "CreateProfile", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
-		semconv.HTTPRouteKey.String("/user/profiles"),
+		semconv.HTTPRouteKey.String("/user/search-profile"),
 	))
 	defer span.End()
 
@@ -88,7 +90,7 @@ func (u *UserSearchProfileHandler) CreateProfile(w http.ResponseWriter, r *http.
 
 	var params types.CreateUserPreferenceProfileParams
 	if err := api.DecodeJSONBody(w, r, &params); err != nil {
-		l.WarnContext(ctx, "Failed to decode request body", slog.Any("error", err))
+		l.WarnContext(ctx, "Failed to decode request body", slog.Any("error", err), slog.Any("params", params))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Invalid request body")
 		api.ErrorResponse(w, r, http.StatusBadRequest, fmt.Sprintf("Invalid request format: %s", err.Error()))
@@ -108,13 +110,14 @@ func (u *UserSearchProfileHandler) CreateProfile(w http.ResponseWriter, r *http.
 		l.ErrorContext(ctx, "Failed to create user preference profile", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to create user preference profile")
-
-		// Check for specific error types
-		if err == types.ErrConflict {
+		if errors.Is(err, types.ErrConflict) {
 			api.ErrorResponse(w, r, http.StatusConflict, "Profile name already exists")
 			return
 		}
-
+		if errors.Is(err, types.ErrNotFound) {
+			api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid tag or interest ID")
+			return
+		}
 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to create user preference profile")
 		return
 	}

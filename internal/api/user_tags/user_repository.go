@@ -42,8 +42,8 @@ type UserTagsRepo interface {
 	// GetTagByName retrieves a tag by name
 	GetTagByName(ctx context.Context, name string) (*types.Tags, error)
 
-	// AddTagToProfile links a tag to a profile
-	AddTagToProfile(ctx context.Context, profileID uuid.UUID, tagID uuid.UUID) error
+	// LinkPersonalTagToProfile links a tag to a profile
+	LinkPersonalTagToProfile(ctx context.Context, userID, profileID uuid.UUID, tagID uuid.UUID) error
 
 	// GetTagsForProfile retrieves all tags associated with a profile
 	GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Tags, error)
@@ -181,6 +181,7 @@ func (r *PostgresUserTagsRepo) Get(ctx context.Context, userID, tagID uuid.UUID)
 		&tag.ID,
 		&tag.Name,
 		&tag.Description,
+		&tag.Source,
 		&tag.TagType,
 		&tag.CreatedAt,
 	)
@@ -420,8 +421,8 @@ func (r *PostgresUserTagsRepo) GetTagByName(ctx context.Context, name string) (*
 	return &tag, nil
 }
 
-// AddTagToProfile links a tag to a profile
-func (r *PostgresUserTagsRepo) AddTagToProfile(ctx context.Context, profileID, tagID uuid.UUID) error {
+// LinkPersonalTagToProfile links a tag to a profile
+func (r *PostgresUserTagsRepo) LinkPersonalTagToProfile(ctx context.Context, userID, profileID, tagID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "AddTagToProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
@@ -434,17 +435,19 @@ func (r *PostgresUserTagsRepo) AddTagToProfile(ctx context.Context, profileID, t
 	l := r.logger.With(slog.String("method", "AddTagToProfile"), slog.String("profileID", profileID.String()), slog.String("tagID", tagID.String()))
 	l.DebugContext(ctx, "Linking tag to profile")
 
-	query := `
-        INSERT INTO user_personal_tags (profile_id, id)
-        VALUES ($1, $2)
-        ON CONFLICT DO NOTHING`
-
-	_, err := r.pgpool.Exec(ctx, query, profileID, tagID)
+	query := `UPDATE user_personal_tags
+              SET profile_id = $1, updated_at = NOW()
+              WHERE id = $2 AND user_id = $3` // Ensure ownership
+	tag, err := r.pgpool.Exec(ctx, query, profileID, tagID, userID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to link tag to profile", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "DB INSERT failed")
 		return fmt.Errorf("database error linking tag to profile: %w", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("personal tag %s not found for user %s: %w", tagID, userID, types.ErrNotFound)
 	}
 
 	l.DebugContext(ctx, "Tag linked to profile successfully")

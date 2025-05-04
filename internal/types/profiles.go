@@ -174,6 +174,7 @@ type Tags struct {
 	Name        string     `json:"name"`
 	TagType     string     `json:"tag_type"` // Consider using a specific enum type
 	Description *string    `json:"description"`
+	Source      *string    `json:"source"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   *time.Time `json:"updated_at"`
 }

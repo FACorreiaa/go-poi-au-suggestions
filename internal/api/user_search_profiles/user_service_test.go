@@ -11,191 +11,225 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
+	userTags "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_tags"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-// MockUserRepo is a mock implementation of the UserRepo interface
-type MockUserRepo struct {
+// MockUserSearchProfilesRepo is a mock implementation of the UserSearchProfilesRepo interface
+type MockUserSearchProfilesRepo struct {
 	mock.Mock
 }
 
-// Implement all methods of the UserRepo interface
-func (m *MockUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*api.UserProfile, error) {
+// Implement all methods of the UserSearchProfilesRepo interface
+func (m *MockUserSearchProfilesRepo) GetProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*api.UserProfile), args.Error(1)
+	return args.Get(0).([]types.UserPreferenceProfileResponse), args.Error(1)
 }
 
-func (m *MockUserRepo) ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error {
-	args := m.Called(ctx, email, oldPassword, newPassword)
-	return args.Error(0)
-}
-
-func (m *MockUserRepo) UpdateProfile(ctx context.Context, userID uuid.UUID, params api.UpdateProfileParams) error {
-	args := m.Called(ctx, userID, params)
-	return args.Error(0)
-}
-
-func (m *MockUserRepo) GetUserPreferences(ctx context.Context, userID uuid.UUID) ([]api.Interest, error) {
-	args := m.Called(ctx, userID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]api.Interest), args.Error(1)
-}
-
-func (m *MockUserRepo) AddUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
-	args := m.Called(ctx, userID, interestID)
-	return args.Error(0)
-}
-
-func (m *MockUserRepo) RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
-	args := m.Called(ctx, userID, interestID)
-	return args.Error(0)
-}
-
-func (m *MockUserRepo) GetAllInterests(ctx context.Context) ([]api.Interest, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]api.Interest), args.Error(1)
-}
-
-func (m *MockUserRepo) UpdateUserInterestPreferenceLevel(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, preferenceLevel int) error {
-	args := m.Called(ctx, userID, interestID, preferenceLevel)
-	return args.Error(0)
-}
-
-func (m *MockUserRepo) GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]api.EnhancedInterest, error) {
-	args := m.Called(ctx, userID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]api.EnhancedInterest), args.Error(1)
-}
-
-func (m *MockUserRepo) GetUserPreferenceProfiles(ctx context.Context, userID uuid.UUID) ([]api.UserPreferenceProfile, error) {
-	args := m.Called(ctx, userID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]api.UserPreferenceProfile), args.Error(1)
-}
-
-func (m *MockUserRepo) GetUserPreferenceProfile(ctx context.Context, profileID uuid.UUID) (*api.UserPreferenceProfile, error) {
+func (m *MockUserSearchProfilesRepo) GetProfile(ctx context.Context, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
 	args := m.Called(ctx, profileID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*api.UserPreferenceProfile), args.Error(1)
+	return args.Get(0).(*types.UserPreferenceProfileResponse), args.Error(1)
 }
 
-func (m *MockUserRepo) GetDefaultUserPreferenceProfile(ctx context.Context, userID uuid.UUID) (*api.UserPreferenceProfile, error) {
+func (m *MockUserSearchProfilesRepo) GetDefaultProfile(ctx context.Context, userID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*api.UserPreferenceProfile), args.Error(1)
+	return args.Get(0).(*types.UserPreferenceProfileResponse), args.Error(1)
 }
 
-func (m *MockUserRepo) CreateUserPreferenceProfile(ctx context.Context, userID uuid.UUID, params api.CreateUserPreferenceProfileParams) (*api.UserPreferenceProfile, error) {
+func (m *MockUserSearchProfilesRepo) CreateProfile(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error) {
 	args := m.Called(ctx, userID, params)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*api.UserPreferenceProfile), args.Error(1)
+	return args.Get(0).(*types.UserPreferenceProfileResponse), args.Error(1)
 }
 
-func (m *MockUserRepo) UpdateUserPreferenceProfile(ctx context.Context, profileID uuid.UUID, params api.UpdateUserPreferenceProfileParams) error {
+func (m *MockUserSearchProfilesRepo) UpdateProfile(ctx context.Context, profileID uuid.UUID, params types.UpdateUserPreferenceProfileParams) error {
 	args := m.Called(ctx, profileID, params)
 	return args.Error(0)
 }
 
-func (m *MockUserRepo) DeleteUserPreferenceProfile(ctx context.Context, profileID uuid.UUID) error {
+func (m *MockUserSearchProfilesRepo) DeleteProfile(ctx context.Context, profileID uuid.UUID) error {
 	args := m.Called(ctx, profileID)
 	return args.Error(0)
 }
 
-func (m *MockUserRepo) SetDefaultUserPreferenceProfile(ctx context.Context, profileID uuid.UUID) error {
+func (m *MockUserSearchProfilesRepo) SetDefaultProfile(ctx context.Context, profileID uuid.UUID) error {
 	args := m.Called(ctx, profileID)
 	return args.Error(0)
 }
 
-func (m *MockUserRepo) GetAllGlobalTags(ctx context.Context) ([]api.GlobalTag, error) {
+// MockUserInterestRepo is a mock implementation of the userInterest.UserInterestRepo interface
+type MockUserInterestRepo struct {
+	mock.Mock
+}
+
+// Ensure MockUserInterestRepo implements userInterest.UserInterestRepo
+var _ userInterest.UserInterestRepo = (*MockUserInterestRepo)(nil)
+
+// Implement the methods used by UserSearchProfilesService
+func (m *MockUserInterestRepo) GetAllInterests(ctx context.Context) ([]types.Interest, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]api.GlobalTag), args.Error(1)
+	return args.Get(0).([]types.Interest), args.Error(1)
 }
 
-func (m *MockUserRepo) GetUserAvoidTags(ctx context.Context, userID uuid.UUID) ([]api.UserAvoidTag, error) {
+func (m *MockUserInterestRepo) AddInterestToProfile(ctx context.Context, profileID uuid.UUID, interestID uuid.UUID) error {
+	args := m.Called(ctx, profileID, interestID)
+	return args.Error(0)
+}
+
+// Add stubs for other methods that are not used in our tests
+func (m *MockUserInterestRepo) CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error) {
+	args := m.Called(ctx, name, description, isActive, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.Interest), args.Error(1)
+}
+
+func (m *MockUserInterestRepo) RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
+	args := m.Called(ctx, userID, interestID)
+	return args.Error(0)
+}
+
+func (m *MockUserInterestRepo) UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params api.UpdateUserInterestParams) error {
+	args := m.Called(ctx, userID, interestID, params)
+	return args.Error(0)
+}
+
+func (m *MockUserInterestRepo) GetInterest(ctx context.Context, interestID uuid.UUID) (*types.Interest, error) {
+	args := m.Called(ctx, interestID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.Interest), args.Error(1)
+}
+
+func (m *MockUserInterestRepo) GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Interest, error) {
+	args := m.Called(ctx, profileID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]types.Interest), args.Error(1)
+}
+
+// MockUserTagsRepo is a mock implementation of the userTags.UserTagsRepo interface
+type MockUserTagsRepo struct {
+	mock.Mock
+}
+
+// Implement the methods used by UserSearchProfilesService
+func (m *MockUserTagsRepo) LinkPersonalTagToProfile(ctx context.Context, userID uuid.UUID, profileID uuid.UUID, tagID uuid.UUID) error {
+	args := m.Called(ctx, userID, profileID, tagID)
+	return args.Error(0)
+}
+
+// Add stubs for other methods that are not used in our tests
+func (m *MockUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]types.Tags, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]api.UserAvoidTag), args.Error(1)
+	return args.Get(0).([]types.Tags), args.Error(1)
 }
 
-func (m *MockUserRepo) AddUserAvoidTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
+func (m *MockUserTagsRepo) Get(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) (*types.Tags, error) {
+	args := m.Called(ctx, userID, tagID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.Tags), args.Error(1)
+}
+
+func (m *MockUserTagsRepo) Create(ctx context.Context, userID uuid.UUID, params userTags.CreatePersonalTagParams) (*userTags.PersonalTag, error) {
+	args := m.Called(ctx, userID, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*userTags.PersonalTag), args.Error(1)
+}
+
+func (m *MockUserTagsRepo) Update(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, params userTags.UpdatePersonalTagParams) error {
+	args := m.Called(ctx, userID, tagID, params)
+	return args.Error(0)
+}
+
+func (m *MockUserTagsRepo) Delete(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
 	args := m.Called(ctx, userID, tagID)
 	return args.Error(0)
 }
 
-func (m *MockUserRepo) RemoveUserAvoidTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
-	args := m.Called(ctx, userID, tagID)
-	return args.Error(0)
+func (m *MockUserTagsRepo) GetTagByName(ctx context.Context, name string) (*types.Tags, error) {
+	args := m.Called(ctx, name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.Tags), args.Error(1)
 }
 
-func (m *MockUserRepo) UpdateLastLogin(ctx context.Context, userID uuid.UUID) error {
-	args := m.Called(ctx, userID)
-	return args.Error(0)
+func (m *MockUserTagsRepo) GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Tags, error) {
+	args := m.Called(ctx, profileID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]types.Tags), args.Error(1)
 }
 
-func (m *MockUserRepo) MarkEmailAsVerified(ctx context.Context, userID uuid.UUID) error {
-	args := m.Called(ctx, userID)
-	return args.Error(0)
-}
-
-func (m *MockUserRepo) DeactivateUser(ctx context.Context, userID uuid.UUID) error {
-	args := m.Called(ctx, userID)
-	return args.Error(0)
-}
-
-func (m *MockUserRepo) ReactivateUser(ctx context.Context, userID uuid.UUID) error {
-	args := m.Called(ctx, userID)
-	return args.Error(0)
-}
-
-// Test cases for UserService
-func TestGetUserProfile(t *testing.T) {
-	// Create a mock repository
-	mockRepo := new(MockUserRepo)
+// Test cases for UserSearchProfilesService
+func TestGetUserPreferenceProfiles(t *testing.T) {
+	// Create mock repositories
+	mockProfileRepo := new(MockUserSearchProfilesRepo)
+	mockInterestRepo := new(MockUserInterestRepo)
+	mockTagRepo := new(MockUserTagsRepo)
 	logger := slog.Default()
-	service := NewUserService(mockRepo, logger)
+
+	// Create service with mocks
+	service := NewUserProfilesService(mockProfileRepo, mockInterestRepo, mockTagRepo, logger)
 
 	// Test case: successful retrieval
 	t.Run("Success", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.New()
-		expectedProfile := &api.UserProfile{
-			ID:       userID,
-			Email:    "test@example.com",
-			Username: nil,
+
+		// Define expected profiles
+		expectedProfiles := []types.UserPreferenceProfileResponse{
+			{
+				ID:          uuid.New(),
+				UserID:      userID,
+				ProfileName: "Profile 1",
+				IsDefault:   true,
+			},
+			{
+				ID:          uuid.New(),
+				UserID:      userID,
+				ProfileName: "Profile 2",
+				IsDefault:   false,
+			},
 		}
 
 		// Set up expectations
-		mockRepo.On("GetUserByID", ctx, userID).Return(expectedProfile, nil).Once()
+		mockProfileRepo.On("GetProfiles", ctx, userID).Return(expectedProfiles, nil).Once()
 
 		// Call the service method
-		profile, err := service.GetUserProfile(ctx, userID)
+		profiles, err := service.GetUserPreferenceProfiles(ctx, userID)
 
 		// Assert expectations
 		assert.NoError(t, err)
-		assert.Equal(t, expectedProfile, profile)
-		mockRepo.AssertExpectations(t)
+		assert.Equal(t, expectedProfiles, profiles)
+		mockProfileRepo.AssertExpectations(t)
 	})
 
 	// Test case: error from repository
@@ -205,110 +239,71 @@ func TestGetUserProfile(t *testing.T) {
 		expectedError := errors.New("database error")
 
 		// Set up expectations
-		mockRepo.On("GetUserByID", ctx, userID).Return(nil, expectedError).Once()
+		mockProfileRepo.On("GetProfiles", ctx, userID).Return(nil, expectedError).Once()
 
 		// Call the service method
-		profile, err := service.GetUserProfile(ctx, userID)
+		profiles, err := service.GetUserPreferenceProfiles(ctx, userID)
+
+		// Assert expectations
+		assert.Error(t, err)
+		assert.Nil(t, profiles)
+		assert.Contains(t, err.Error(), expectedError.Error())
+		mockProfileRepo.AssertExpectations(t)
+	})
+}
+
+func TestGetUserPreferenceProfile(t *testing.T) {
+	// Create mock repositories
+	mockProfileRepo := new(MockUserSearchProfilesRepo)
+	mockInterestRepo := new(MockUserInterestRepo)
+	mockTagRepo := new(MockUserTagsRepo)
+	logger := slog.Default()
+
+	// Create service with mocks
+	service := NewUserProfilesService(mockProfileRepo, mockInterestRepo, mockTagRepo, logger)
+
+	// Test case: successful retrieval
+	t.Run("Success", func(t *testing.T) {
+		ctx := context.Background()
+		profileID := uuid.New()
+		userID := uuid.New()
+
+		// Define expected profile
+		expectedProfile := &types.UserPreferenceProfileResponse{
+			ID:          profileID,
+			UserID:      userID,
+			ProfileName: "Test Profile",
+			IsDefault:   true,
+		}
+
+		// Set up expectations
+		mockProfileRepo.On("GetProfile", ctx, profileID).Return(expectedProfile, nil).Once()
+
+		// Call the service method
+		profile, err := service.GetUserPreferenceProfile(ctx, profileID)
+
+		// Assert expectations
+		assert.NoError(t, err)
+		assert.Equal(t, expectedProfile, profile)
+		mockProfileRepo.AssertExpectations(t)
+	})
+
+	// Test case: error from repository
+	t.Run("Error", func(t *testing.T) {
+		ctx := context.Background()
+		profileID := uuid.New()
+		expectedError := errors.New("database error")
+
+		// Set up expectations
+		mockProfileRepo.On("GetProfile", ctx, profileID).Return(nil, expectedError).Once()
+
+		// Call the service method
+		profile, err := service.GetUserPreferenceProfile(ctx, profileID)
 
 		// Assert expectations
 		assert.Error(t, err)
 		assert.Nil(t, profile)
 		assert.Contains(t, err.Error(), expectedError.Error())
-		mockRepo.AssertExpectations(t)
-	})
-}
-
-func TestUpdateUserProfile(t *testing.T) {
-	// Create a mock repository
-	mockRepo := new(MockUserRepo)
-	logger := slog.Default()
-	service := NewUserService(mockRepo, logger)
-
-	username := "test"
-	// Test case: successful update
-	t.Run("Success", func(t *testing.T) {
-		ctx := context.Background()
-		userID := uuid.New()
-		params := api.UpdateProfileParams{
-			Username: &username,
-		}
-
-		// Set up expectations
-		mockRepo.On("UpdateProfile", ctx, userID, params).Return(nil).Once()
-
-		// Call the service method
-		err := service.UpdateUserProfile(ctx, userID, params)
-
-		// Assert expectations
-		assert.NoError(t, err)
-		mockRepo.AssertExpectations(t)
-	})
-
-	// Test case: error from repository
-	t.Run("Error", func(t *testing.T) {
-		ctx := context.Background()
-		userID := uuid.New()
-		params := api.UpdateProfileParams{
-			Username: &username,
-		}
-		expectedError := errors.New("database error")
-
-		// Set up expectations
-		mockRepo.On("UpdateProfile", ctx, userID, params).Return(expectedError).Once()
-
-		// Call the service method
-		err := service.UpdateUserProfile(ctx, userID, params)
-
-		// Assert expectations
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), expectedError.Error())
-		mockRepo.AssertExpectations(t)
-	})
-}
-
-func TestGetUserPreferences(t *testing.T) {
-	// Create a mock repository
-	mockRepo := new(MockUserRepo)
-	logger := slog.Default()
-	service := NewUserService(mockRepo, logger)
-
-	// Test case: successful retrieval
-	t.Run("Success", func(t *testing.T) {
-		ctx := context.Background()
-		userID := uuid.New()
-		expectedPreferences := []api.Interest{
-			{ID: uuid.New(), Name: "Interest 1"},
-			{ID: uuid.New(), Name: "Interest 2"},
-		}
-
-		// Set up expectations
-		mockRepo.On("GetUserPreferences", ctx, userID).Return(expectedPreferences, nil).Once()
-
-		// Call the service method
-		preferences, err := service.GetUserPreferences(ctx, userID)
-
-		// Assert expectations
-		assert.NoError(t, err)
-		assert.Equal(t, expectedPreferences, preferences)
-		mockRepo.AssertExpectations(t)
-	})
-
-	// Test case: error from repository
-	t.Run("Error", func(t *testing.T) {
-		ctx := context.Background()
-		userID := uuid.New()
-		expectedError := errors.New("database error")
-
-		// Set up expectations
-		mockRepo.On("GetUserPreferences", ctx, userID).Return(nil, expectedError).Once()
-
-		// Call the service method
-		preferences, err := service.GetUserPreferences(ctx, userID)
-
-		// Assert expectations
-		assert.Error(t, err)
-		assert.Nil(t, preferences)
-		assert.Contains(t, err.Error(), expectedError.Error())
-		mockRepo.AssertExpectations(t)
+		mockProfileRepo.AssertExpectations(t)
 	})
 }

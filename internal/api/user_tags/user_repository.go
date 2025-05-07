@@ -31,13 +31,13 @@ type UserTagsRepo interface {
 	Get(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error)
 
 	// Create adds an avoid tag for a user
-	Create(ctx context.Context, userID uuid.UUID, params CreatePersonalTagParams) (*PersonalTag, error)
+	Create(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error)
 
 	// Delete removes an avoid tag for a user
 	Delete(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error
 
 	// Update updates on tag
-	Update(ctx context.Context, userID, tagsID uuid.UUID, params UpdatePersonalTagParams) error
+	Update(ctx context.Context, userID, tagsID uuid.UUID, params types.UpdatePersonalTagParams) error
 
 	// GetTagByName retrieves a tag by name
 	GetTagByName(ctx context.Context, name string) (*types.Tags, error)
@@ -197,7 +197,7 @@ func (r *PostgresUserTagsRepo) Get(ctx context.Context, userID, tagID uuid.UUID)
 }
 
 // Create creates a new personal tag for a specific user.
-func (r *PostgresUserTagsRepo) Create(ctx context.Context, userID uuid.UUID, params CreatePersonalTagParams) (*PersonalTag, error) {
+func (r *PostgresUserTagsRepo) Create(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error) {
 	ctx, span := otel.Tracer("UserTagsRepo").Start(ctx, "CreatePersonalTag", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
@@ -225,7 +225,7 @@ func (r *PostgresUserTagsRepo) Create(ctx context.Context, userID uuid.UUID, par
 	newTagID := uuid.New()
 	now := time.Now()
 
-	tag := &PersonalTag{
+	tag := &types.PersonalTag{
 		ID:          newTagID,
 		UserID:      userID,
 		Name:        params.Name,
@@ -264,7 +264,7 @@ func (r *PostgresUserTagsRepo) Create(ctx context.Context, userID uuid.UUID, par
 }
 
 // Update updates the name and/or type of an existing personal tag for a specific user.
-func (r *PostgresUserTagsRepo) Update(ctx context.Context, userID, tagsID uuid.UUID, params UpdatePersonalTagParams) error {
+func (r *PostgresUserTagsRepo) Update(ctx context.Context, userID, tagsID uuid.UUID, params types.UpdatePersonalTagParams) error {
 	ctx, span := otel.Tracer("UserTagsRepo").Start(ctx, "UpdatePersonalTag", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),

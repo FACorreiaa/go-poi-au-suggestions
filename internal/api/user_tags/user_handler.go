@@ -14,6 +14,7 @@ import (
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 // UserTagsHandler handles HTTP requests related to user operations.
@@ -148,7 +149,7 @@ func (u *UserTagsHandler) CreateTag(w http.ResponseWriter, r *http.Request) {
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
 	}
 
-	var req CreatePersonalTagParams
+	var req types.CreatePersonalTagParams
 	if err := api.DecodeJSONBody(w, r, &req); err != nil {
 		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
 		span.RecordError(err)
@@ -250,7 +251,7 @@ func (u *UserTagsHandler) UpdateTag(w http.ResponseWriter, r *http.Request) {
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid tag ID format")
 	}
 
-	var req UpdatePersonalTagParams
+	var req types.UpdatePersonalTagParams
 	if err = api.DecodeJSONBody(w, r, &req); err != nil {
 		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
 		span.RecordError(err)

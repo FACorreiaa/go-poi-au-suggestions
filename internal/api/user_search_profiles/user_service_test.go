@@ -30,8 +30,8 @@ func (m *MockUserSearchProfilesRepo) GetProfiles(ctx context.Context, userID uui
 	return args.Get(0).([]types.UserPreferenceProfileResponse), args.Error(1)
 }
 
-func (m *MockUserSearchProfilesRepo) GetProfile(ctx context.Context, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
-	args := m.Called(ctx, profileID)
+func (m *MockUserSearchProfilesRepo) GetProfile(ctx context.Context, userID, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
+	args := m.Called(ctx, userID, profileID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -277,10 +277,10 @@ func TestGetUserPreferenceProfile(t *testing.T) {
 		}
 
 		// Set up expectations
-		mockProfileRepo.On("GetProfile", ctx, profileID).Return(expectedProfile, nil).Once()
+		mockProfileRepo.On("GetProfile", ctx, userID, profileID).Return(expectedProfile, nil).Once()
 
 		// Call the service method
-		profile, err := service.GetUserPreferenceProfile(ctx, profileID)
+		profile, err := service.GetUserPreferenceProfile(ctx, userID, profileID)
 
 		// Assert expectations
 		assert.NoError(t, err)

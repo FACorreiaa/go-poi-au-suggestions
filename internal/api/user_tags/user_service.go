@@ -21,9 +21,9 @@ var _ UserTagsService = (*UserTagsServiceImpl)(nil)
 type UserTagsService interface {
 	GetTags(ctx context.Context, userID uuid.UUID) ([]types.Tags, error)
 	GetTag(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error)
-	CreateTag(ctx context.Context, userID uuid.UUID, params CreatePersonalTagParams) (*PersonalTag, error)
+	CreateTag(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error)
 	DeleteTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error
-	Update(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, params UpdatePersonalTagParams) error
+	Update(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, params types.UpdatePersonalTagParams) error
 }
 
 // UserTagsServiceImpl provides the implementation for UserService.
@@ -85,7 +85,7 @@ func (s *UserTagsServiceImpl) GetTag(ctx context.Context, userID, tagID uuid.UUI
 }
 
 // CreateTag adds an avoid tag for a user.
-func (s *UserTagsServiceImpl) CreateTag(ctx context.Context, userID uuid.UUID, params CreatePersonalTagParams) (*PersonalTag, error) {
+func (s *UserTagsServiceImpl) CreateTag(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error) {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "AddUserAvoidTag", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 	))
@@ -131,7 +131,7 @@ func (s *UserTagsServiceImpl) DeleteTag(ctx context.Context, userID uuid.UUID, t
 	return nil
 }
 
-func (s *UserTagsServiceImpl) Update(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, params UpdatePersonalTagParams) error {
+func (s *UserTagsServiceImpl) Update(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, params types.UpdatePersonalTagParams) error {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "UpdateUserAvoidTag", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 		attribute.String("tag.id", tagID.String()),

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -39,11 +41,49 @@ func NewUserHandler(userService UserSearchProfilesService, logger *slog.Logger) 
 }
 
 func (u *UserSearchProfileHandler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "GetAllInterests", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/user/interests"),
+	))
+	defer span.End()
+
 	l := u.logger.With(slog.String("handler", "GetUserProfile"))
 	l.DebugContext(ctx, "Fetching user profile")
 
-	return
+	// Get UserID from context (set by Authenticate middleware)
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+	}
+
+	profileIDStr := chi.URLParam(r, "profileID")
+	interestID, err := uuid.Parse(profileIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid profile ID format", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid interest ID format")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid interest ID format in URL")
+		return
+	}
+
+	profile, err := u.userService.GetUserPreferenceProfile(ctx, userID, interestID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to fetch user profile", slog.Any("error", err))
+		if errors.Is(err, types.ErrNotFound) {
+			api.ErrorResponse(w, r, http.StatusNotFound, "User profile not found")
+		}
+	}
+
+	l.InfoContext(ctx, "User profile fetched successfully", slog.String("profileID", profile.ID.String()))
+	api.WriteJSONResponse(w, r, http.StatusOK, profile)
+	w.WriteHeader(http.StatusOK)
 }
 
 // CreateProfile godoc

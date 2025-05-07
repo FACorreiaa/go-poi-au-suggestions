@@ -135,7 +135,7 @@ func (h *UserInterestHandler) RemoveUserInterest(w http.ResponseWriter, r *http.
 	}
 
 	span.SetStatus(codes.Ok, "User interest removed successfully")
-	api.WriteJSONResponse(w, r, http.StatusOK, api.Response{
+	api.WriteJSONResponse(w, r, http.StatusOK, types.Response{
 		Success: true,
 		Message: "Interest removed successfully",
 	})
@@ -321,7 +321,7 @@ func (h *UserInterestHandler) UpdateUserInterest(w http.ResponseWriter, r *http.
 	span.SetAttributes(attribute.String("interest.id", interestID.String()))
 
 	// 3. Decode request body
-	var params api.UpdateUserInterestParams
+	var params types.UpdateUserInterestParams
 	if err := api.DecodeJSONBody(w, r, &params); err != nil {
 		l.WarnContext(ctx, "Failed to decode request body", slog.Any("error", err))
 		span.RecordError(err)
@@ -361,7 +361,7 @@ func (h *UserInterestHandler) UpdateUserInterest(w http.ResponseWriter, r *http.
 	// 5. Respond successfully
 	l.InfoContext(ctx, "Custom interest updated successfully")
 	span.SetStatus(codes.Ok, "Custom interest updated")
-	api.WriteJSONResponse(w, r, http.StatusOK, api.Response{Success: true, Message: "Interest updated successfully"})
+	api.WriteJSONResponse(w, r, http.StatusOK, types.Response{Success: true, Message: "Interest updated successfully"})
 }
 
 // Request and Response structures for the handlers

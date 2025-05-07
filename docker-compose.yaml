@@ -27,6 +27,7 @@ services:
   # PostgreSQL Database (with PostGIS & pgvector)
 
   postgres-wanderwise:
+    platform: linux/amd64
     container_name: postgres-wanderwise
     build:
       context: . 

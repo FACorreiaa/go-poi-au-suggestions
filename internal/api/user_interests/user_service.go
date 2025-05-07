@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
@@ -24,7 +23,7 @@ type UserInterestService interface {
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	GetAllInterests(ctx context.Context) ([]types.Interest, error)
 	CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error)
-	UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params api.UpdateUserInterestParams) error
+	UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error
 }
 
 // UserInterestServiceImpl provides the implementation for UserInterestService.
@@ -111,7 +110,7 @@ func (s *UserInterestServiceImpl) GetAllInterests(ctx context.Context) ([]types.
 	return interests, nil
 }
 
-func (s *UserInterestServiceImpl) UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params api.UpdateUserInterestParams) error {
+func (s *UserInterestServiceImpl) UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error {
 	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "UpdateUserInterest", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 		attribute.String("interest.id", interestID.String()),
@@ -132,7 +131,7 @@ func (s *UserInterestServiceImpl) UpdateUserInterest(ctx context.Context, userID
 }
 
 // GetUserEnhancedInterests retrieves a user's enhanced interests.
-//func (s *UserInterestServiceImpl) GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]api.EnhancedInterest, error) {
+//func (s *UserInterestServiceImpl) GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]types.EnhancedInterest, error) {
 //	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "GetUserEnhancedInterests", trace.WithAttributes(
 //		attribute.String("user.id", userID.String()),
 //	))

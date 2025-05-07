@@ -197,9 +197,3 @@ type UpdateUserPreferenceProfileParams struct {
 	Tags                 []*string            `json:"tags,omitempty"`
 	Interests            []*string            `json:"interests,omitempty"`
 }
-
-type UpdateUserInterestParams struct {
-	Name        *string `json:"name,omitempty"`
-	Description *string `json:"description,omitempty"`
-	Active      *bool   `json:"active,omitempty"`
-}

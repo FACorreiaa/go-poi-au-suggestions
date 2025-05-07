@@ -17,7 +17,6 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
@@ -30,12 +29,12 @@ type UserInterestRepo interface {
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	GetAllInterests(ctx context.Context) ([]types.Interest, error)
 	GetInterest(ctx context.Context, interestID uuid.UUID) (*types.Interest, error)
-	UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params api.UpdateUserInterestParams) error
+	UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error
 	AddInterestToProfile(ctx context.Context, profileID, interestID uuid.UUID) error
 	// GetInterestsForProfile retrieves all interests associated with a profile
 	GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Interest, error)
 	// GetUserEnhancedInterests retrieves all interests for a user with their preference levels
-	//GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]api.EnhancedInterest, error)
+	//GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]types.EnhancedInterest, error)
 }
 
 type PostgresUserInterestRepo struct {
@@ -198,7 +197,7 @@ func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]types
 }
 
 // GetUserEnhancedInterests implements user.UserRepo.
-//func (r *PostgresUserInterestRepo) GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]api.EnhancedInterest, error) {
+//func (r *PostgresUserInterestRepo) GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]types.EnhancedInterest, error) {
 //	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserEnhancedInterests", trace.WithAttributes(
 //		semconv.DBSystemPostgreSQL,
 //		attribute.String("db.sql.table", "user_interests, interests"),
@@ -225,9 +224,9 @@ func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]types
 //	}
 //	defer rows.Close()
 //
-//	var interests []api.EnhancedInterest
+//	var interests []types.EnhancedInterest
 //	for rows.Next() {
-//		var i api.EnhancedInterest
+//		var i types.EnhancedInterest
 //		err := rows.Scan(
 //			&i.ID, &i.Name, &i.Description, &i.Active, &i.CreatedAt, &i.UpdatedAt, &i.PreferenceLevel,
 //		)
@@ -250,7 +249,7 @@ func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]types
 //	return interests, nil
 //}
 
-func (r *PostgresUserInterestRepo) UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params api.UpdateUserInterestParams) error {
+func (r *PostgresUserInterestRepo) UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "UpdateUserCustomInterest", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),

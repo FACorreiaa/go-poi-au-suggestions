@@ -15,6 +15,7 @@ import (
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 type SettingsHandler struct {
@@ -153,7 +154,7 @@ func (h *SettingsHandler) UpdateUserSettings(w http.ResponseWriter, r *http.Requ
 
 	l.Info("User preferences updated successfully")
 	span.SetStatus(codes.Ok, "User preferences updated successfully")
-	api.WriteJSONResponse(w, r, http.StatusOK, api.Response{
+	api.WriteJSONResponse(w, r, http.StatusOK, types.Response{
 		Success: true,
 		Message: "Preferences updated successfully",
 	})

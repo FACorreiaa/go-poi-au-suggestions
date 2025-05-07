@@ -29,7 +29,7 @@ type UserSearchProfilesRepo interface {
 	// GetProfiles retrieves all preference profiles for a user
 	GetProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error)
 	// GetProfile retrieves a specific preference profile by ID
-	GetProfile(ctx context.Context, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error)
+	GetProfile(ctx context.Context, userID, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error)
 	// GetDefaultProfile retrieves the default preference profile for a user
 	GetDefaultProfile(ctx context.Context, userID uuid.UUID) (*types.UserPreferenceProfileResponse, error)
 	// CreateProfile creates a new preference profile for a user
@@ -124,7 +124,7 @@ func (r *PostgresUserSearchProfilesRepo) GetProfiles(ctx context.Context, userID
 }
 
 // GetProfile implements user.UserRepo.
-func (r *PostgresUserSearchProfilesRepo) GetProfile(ctx context.Context, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
+func (r *PostgresUserSearchProfilesRepo) GetProfile(ctx context.Context, userID, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "user_preference_profiles"),
@@ -141,10 +141,10 @@ func (r *PostgresUserSearchProfilesRepo) GetProfile(ctx context.Context, profile
                prefer_dog_friendly, preferred_vibes, preferred_transport, dietary_needs, 
                created_at, updated_at
         FROM user_preference_profiles
-        WHERE id = $1`
+        WHERE id = $1 && user_id = $2`
 
 	var p types.UserPreferenceProfileResponse
-	err := r.pgpool.QueryRow(ctx, query, profileID).Scan(
+	err := r.pgpool.QueryRow(ctx, query, profileID, userID).Scan(
 		&p.ID, &p.UserID, &p.ProfileName, &p.IsDefault, &p.SearchRadiusKm, &p.PreferredTime,
 		&p.BudgetLevel, &p.PreferredPace, &p.PreferAccessiblePOIs, &p.PreferOutdoorSeating,
 		&p.PreferDogFriendly, &p.PreferredVibes, &p.PreferredTransport, &p.DietaryNeeds,

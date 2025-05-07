@@ -7,11 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/assert"
-
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
+	"github.com/stretchr/testify/require"
 )
 
 // TestUserSearchProfilesRepoLoad performs load tests for the UserSearchProfilesRepo

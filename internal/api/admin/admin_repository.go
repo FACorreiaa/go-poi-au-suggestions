@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
@@ -21,9 +20,9 @@ type AdminRepo interface {
 	// ReactivateUser marks a user as active.
 	ReactivateUser(ctx context.Context, userID uuid.UUID) error
 	// GetAllInterests retrieves all available interests for selection in the UI.
-	GetAllInterests(ctx context.Context) ([]api.Interest, error)
+	GetAllInterests(ctx context.Context) ([]types.Interest, error)
 	// GetUserPreferences retrieves the list of interests associated with a user.
-	GetUserPreferences(ctx context.Context, userID uuid.UUID) ([]api.Interest, error)
+	GetUserPreferences(ctx context.Context, userID uuid.UUID) ([]types.Interest, error)
 	// SetUserPreferences atomically replaces a user's current interests with the provided list of interest IDs.
 	SetUserPreferences(ctx context.Context, userID uuid.UUID, interestIDs []uuid.UUID) error
 

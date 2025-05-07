@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/config"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -69,10 +68,10 @@ func (s *AuthServiceImpl) Login(ctx context.Context, email, password string) (st
 		return "", "", fmt.Errorf("invalid credentials: %w", types.ErrUnauthenticated)
 	}
 
-	// --- Add api.Subscription Fetching Here Later ---
-	// sub, err := s.subsRepo.GetCurrentapi.SubscriptionByUserID(ctx, user.ID) ...
+	// --- Add types.Subscription Fetching Here Later ---
+	// sub, err := s.subsRepo.GetCurrenttypes.SubscriptionByUserID(ctx, user.ID) ...
 	// For now, create dummy/default sub info for token generation
-	sub := &api.Subscription{Plan: "free", Status: "active"} // Placeholder
+	sub := &types.Subscription{Plan: "free", Status: "active"} // Placeholder
 
 	// 3. Generate Tokens
 	accessToken, refreshToken, err := s.generateTokens(ctx, user, sub) // Pass user and sub
@@ -153,8 +152,8 @@ func (s *AuthServiceImpl) RefreshSession(ctx context.Context, refreshToken strin
 		return "", "", fmt.Errorf("internal error retrieving user during refresh")
 	}
 
-	// --- Fetch api.Subscription Here Later ---
-	sub := &api.Subscription{Plan: "free", Status: "active"} // Placeholder
+	// --- Fetch types.Subscription Here Later ---
+	sub := &types.Subscription{Plan: "free", Status: "active"} // Placeholder
 
 	// 3. Generate NEW tokens
 	newAccessToken, newRefreshToken, err := s.generateTokens(ctx, user, sub)
@@ -261,7 +260,7 @@ func (s *AuthServiceImpl) GetUserByID(ctx context.Context, userID string) (*type
 }
 
 // --- Internal Helper: generateTokens ---
-func (s *AuthServiceImpl) generateTokens(ctx context.Context, user *types.UserAuth, sub *api.Subscription) (accessToken string, refreshToken string, err error) {
+func (s *AuthServiceImpl) generateTokens(ctx context.Context, user *types.UserAuth, sub *types.Subscription) (accessToken string, refreshToken string, err error) {
 	l := s.logger.With(slog.String("method", "generateTokens"), slog.String("userID", user.ID))
 
 	// --- Access Token ---
@@ -270,7 +269,7 @@ func (s *AuthServiceImpl) generateTokens(ctx context.Context, user *types.UserAu
 	audience := s.getAudience()
 	secretKeyBytes := []byte(s.getSecretKey())
 
-	accessClaims := &api.Claims{ // Use your Claims struct
+	accessClaims := &types.Claims{ // Use your Claims struct
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -282,8 +281,8 @@ func (s *AuthServiceImpl) generateTokens(ctx context.Context, user *types.UserAu
 		UserID:   user.ID,
 		Username: user.Username,
 		Email:    user.Email,
-		//api.SubscriptionPlan:   sub.Plan,   // Add from sub
-		//api.SubscriptionStatus: sub.Status, // Add from sub
+		//types.SubscriptionPlan:   sub.Plan,   // Add from sub
+		//types.SubscriptionStatus: sub.Status, // Add from sub
 	}
 	accessTokenJWT := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
 	accessToken, err = accessTokenJWT.SignedString(secretKeyBytes)
@@ -349,10 +348,10 @@ func (s *AuthServiceImpl) ValidateRefreshToken(ctx context.Context, refreshToken
 // Implement a dummy for now if needed for compilation
 type dummySubsRepo struct{}
 
-func (d *dummySubsRepo) GetCurrentSubscriptionByUserID(ctx context.Context, userID string) (*api.Subscription, error) {
-	return &api.Subscription{Plan: "free", Status: "active"}, nil // Always return free/active
+func (d *dummySubsRepo) GetCurrentSubscriptionByUserID(ctx context.Context, userID string) (*types.Subscription, error) {
+	return &types.Subscription{Plan: "free", Status: "active"}, nil // Always return free/active
 }
 func (d *dummySubsRepo) CreateDefaultSubscription(ctx context.Context, userID string) error {
 	return nil // Do nothing
 }
-func NewDummySubsRepo() api.SubscriptionRepository { return &dummySubsRepo{} }
+func NewDummySubsRepo() types.SubscriptionRepository { return &dummySubsRepo{} }

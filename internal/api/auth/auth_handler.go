@@ -44,7 +44,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l := h.logger.With(slog.String("handler", "Login"))
 
-	var req api.LoginRequest
+	var req types.LoginRequest
 	if err := api.DecodeJSONBody(w, r, &req); err != nil {
 		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request format")
@@ -78,7 +78,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Respond with access token only
-	resp := api.LoginResponse{
+	resp := types.LoginResponse{
 		AccessToken: accessToken,
 		Message:     "Login successful",
 	}
@@ -139,7 +139,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	})
 
 	l.InfoContext(ctx, "Logout processed")
-	api.WriteJSONResponse(w, r, http.StatusOK, api.Response{Success: true, Message: "Logged out successfully"})
+	api.WriteJSONResponse(w, r, http.StatusOK, types.Response{Success: true, Message: "Logged out successfully"})
 }
 
 // RefreshToken godoc
@@ -196,7 +196,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Respond with access token only
-	h.respondWithJSON(w, http.StatusOK, api.TokenResponse{
+	h.respondWithJSON(w, http.StatusOK, types.TokenResponse{
 		AccessToken: accessToken,
 	})
 }
@@ -225,7 +225,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	// Record start time for duration metric
 	//startTime := time.Now()
 
-	var req api.RegisterRequest
+	var req types.RegisterRequest
 	if err := api.DecodeJSONBody(w, r, &req); err != nil {
 		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
 		span.RecordError(err)
@@ -261,12 +261,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	l.InfoContext(ctx, "User registered successfully", slog.String("email", req.Email))
 	span.SetStatus(codes.Ok, "User registered successfully")
-	api.WriteJSONResponse(w, r, http.StatusCreated, api.Response{Success: true, Message: "User registered successfully"})
+	api.WriteJSONResponse(w, r, http.StatusCreated, types.Response{Success: true, Message: "User registered successfully"})
 }
 
 // ValidateSession checks if a session is valid
 func (h *AuthHandler) ValidateSession(w http.ResponseWriter, r *http.Request) {
-	var req api.ValidateSessionRequest
+	var req types.ValidateSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondWithError(w, http.StatusBadRequest, "Invalid request payload")
 		return
@@ -282,7 +282,7 @@ func (h *AuthHandler) ValidateSession(w http.ResponseWriter, r *http.Request) {
 	userID, err := h.authService.ValidateRefreshToken(r.Context(), req.SessionID)
 	if err != nil {
 		h.logger.Error("Session validation failed", "error", err)
-		h.respondWithJSON(w, http.StatusOK, api.ValidateSessionResponse{
+		h.respondWithJSON(w, http.StatusOK, types.ValidateSessionResponse{
 			Valid: false,
 		})
 		return
@@ -291,14 +291,14 @@ func (h *AuthHandler) ValidateSession(w http.ResponseWriter, r *http.Request) {
 	user, err := h.authService.GetUserByID(r.Context(), userID)
 	if err != nil {
 		h.logger.Error("Failed to get user details", "error", err)
-		h.respondWithJSON(w, http.StatusOK, api.ValidateSessionResponse{
+		h.respondWithJSON(w, http.StatusOK, types.ValidateSessionResponse{
 			Valid: false,
 		})
 		return
 	}
 
 	// Respond with session info
-	h.respondWithJSON(w, http.StatusOK, api.ValidateSessionResponse{
+	h.respondWithJSON(w, http.StatusOK, types.ValidateSessionResponse{
 		Valid:    true,
 		UserID:   user.ID,
 		Username: user.Username,
@@ -332,7 +332,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	l = l.With(slog.String("userID", userID))
 
-	var req api.ChangePasswordRequest
+	var req types.ChangePasswordRequest
 	if err := api.DecodeJSONBody(w, r, &req); err != nil {
 		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request format")
@@ -361,12 +361,12 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l.InfoContext(ctx, "Password updated successfully")
-	api.WriteJSONResponse(w, r, http.StatusOK, api.Response{Success: true, Message: "Password updated successfully"})
+	api.WriteJSONResponse(w, r, http.StatusOK, types.Response{Success: true, Message: "Password updated successfully"})
 }
 
 // ChangeEmail updates a user's email
 func (h *AuthHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) {
-	var req api.ChangeEmailRequest
+	var req types.ChangeEmailRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondWithError(w, http.StatusBadRequest, "Invalid request payload")
 		return
@@ -403,7 +403,7 @@ func (h *AuthHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) {
 // Helper functions for response handling
 
 func (h *AuthHandler) respondWithError(w http.ResponseWriter, code int, message string) {
-	h.respondWithJSON(w, code, api.Response{
+	h.respondWithJSON(w, code, types.Response{
 		Success: false,
 		Error:   message,
 	})
@@ -436,7 +436,7 @@ func (h *AuthHandler) RefreshSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l := h.logger.With(slog.String("handler", "RefreshSession"))
 
-	var req api.RefreshTokenRequest
+	var req types.RefreshTokenRequest
 	if err := api.DecodeJSONBody(w, r, &req); err != nil || req.RefreshToken == "" {
 		l.WarnContext(ctx, "Missing refresh token for refresh", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Refresh token required")
@@ -463,7 +463,7 @@ func (h *AuthHandler) RefreshSession(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   int((7 * 24 * time.Hour).Seconds()), // Match your refresh token TTL
 	})
 
-	resp := api.TokenResponse{
+	resp := types.TokenResponse{
 		AccessToken: newAccessToken,
 	}
 	l.InfoContext(ctx, "Token refresh successful")

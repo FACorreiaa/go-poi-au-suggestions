@@ -124,7 +124,7 @@ func (h *HandlerUser) UpdateUserProfile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	api.WriteJSONResponse(w, r, http.StatusOK, api.Response{
+	api.WriteJSONResponse(w, r, http.StatusOK, types.Response{
 		Success: true,
 		Message: "Profile updated successfully",
 	})

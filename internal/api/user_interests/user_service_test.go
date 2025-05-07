@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 // MockUserRepo is a mock implementation of the UserRepo interface
@@ -19,12 +19,12 @@ type MockUserRepo struct {
 }
 
 // Implement all methods of the UserRepo interface
-func (m *MockUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*api.UserProfile, error) {
+func (m *MockUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*types.UserProfile, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*api.UserProfile), args.Error(1)
+	return args.Get(0).(*types.UserProfile), args.Error(1)
 }
 
 func (m *MockUserRepo) ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error {
@@ -32,17 +32,17 @@ func (m *MockUserRepo) ChangePassword(ctx context.Context, email, oldPassword, n
 	return args.Error(0)
 }
 
-func (m *MockUserRepo) UpdateProfile(ctx context.Context, userID uuid.UUID, params api.UpdateProfileParams) error {
+func (m *MockUserRepo) UpdateProfile(ctx context.Context, userID uuid.UUID, params types.UpdateProfileParams) error {
 	args := m.Called(ctx, userID, params)
 	return args.Error(0)
 }
 
-func (m *MockUserRepo) GetUserPreferences(ctx context.Context, userID uuid.UUID) ([]api.Interest, error) {
+func (m *MockUserRepo) GetUserPreferences(ctx context.Context, userID uuid.UUID) ([]types.Interest, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]api.Interest), args.Error(1)
+	return args.Get(0).([]types.Interest), args.Error(1)
 }
 
 func (m *MockUserRepo) AddUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
@@ -55,12 +55,12 @@ func (m *MockUserRepo) RemoveUserInterest(ctx context.Context, userID uuid.UUID,
 	return args.Error(0)
 }
 
-func (m *MockUserRepo) GetAllInterests(ctx context.Context) ([]api.Interest, error) {
+func (m *MockUserRepo) GetAllInterests(ctx context.Context) ([]types.Interest, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]api.Interest), args.Error(1)
+	return args.Get(0).([]types.Interest), args.Error(1)
 }
 
 func (m *MockUserRepo) UpdateUserInterestPreferenceLevel(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, preferenceLevel int) error {
@@ -68,47 +68,47 @@ func (m *MockUserRepo) UpdateUserInterestPreferenceLevel(ctx context.Context, us
 	return args.Error(0)
 }
 
-func (m *MockUserRepo) GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]api.EnhancedInterest, error) {
+func (m *MockUserRepo) GetUserInterests(ctx context.Context, userID uuid.UUID) ([]types.Interest, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]api.EnhancedInterest), args.Error(1)
+	return args.Get(0).([]types.Interest), args.Error(1)
 }
 
-func (m *MockUserRepo) GetUserPreferenceProfiles(ctx context.Context, userID uuid.UUID) ([]api.UserPreferenceProfile, error) {
+func (m *MockUserRepo) GetUserPreferenceProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserProfile, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]api.UserPreferenceProfile), args.Error(1)
+	return args.Get(0).([]types.UserPreferenceProfile), args.Error(1)
 }
 
-func (m *MockUserRepo) GetUserPreferenceProfile(ctx context.Context, profileID uuid.UUID) (*api.UserPreferenceProfile, error) {
+func (m *MockUserRepo) GetUserPreferenceProfile(ctx context.Context, profileID uuid.UUID) (*types.UserPreferenceProfile, error) {
 	args := m.Called(ctx, profileID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*api.UserPreferenceProfile), args.Error(1)
+	return args.Get(0).(*types.UserPreferenceProfile), args.Error(1)
 }
 
-func (m *MockUserRepo) GetDefaultUserPreferenceProfile(ctx context.Context, userID uuid.UUID) (*api.UserPreferenceProfile, error) {
+func (m *MockUserRepo) GetDefaultUserPreferenceProfile(ctx context.Context, userID uuid.UUID) (*types.UserPreferenceProfile, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*api.UserPreferenceProfile), args.Error(1)
+	return args.Get(0).(*types.UserPreferenceProfile), args.Error(1)
 }
 
-func (m *MockUserRepo) CreateUserPreferenceProfile(ctx context.Context, userID uuid.UUID, params api.CreateUserPreferenceProfileParams) (*api.UserPreferenceProfile, error) {
+func (m *MockUserRepo) CreateUserPreferenceProfile(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfile, error) {
 	args := m.Called(ctx, userID, params)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*api.UserPreferenceProfile), args.Error(1)
+	return args.Get(0).(*types.UserPreferenceProfile), args.Error(1)
 }
 
-func (m *MockUserRepo) UpdateUserPreferenceProfile(ctx context.Context, profileID uuid.UUID, params api.UpdateUserPreferenceProfileParams) error {
+func (m *MockUserRepo) UpdateUserPreferenceProfile(ctx context.Context, profileID uuid.UUID, params types.UpdateUserPreferenceProfileParams) error {
 	args := m.Called(ctx, profileID, params)
 	return args.Error(0)
 }
@@ -123,20 +123,20 @@ func (m *MockUserRepo) SetDefaultUserPreferenceProfile(ctx context.Context, prof
 	return args.Error(0)
 }
 
-func (m *MockUserRepo) GetAllGlobalTags(ctx context.Context) ([]api.GlobalTag, error) {
+func (m *MockUserRepo) GetAllGlobalTags(ctx context.Context) ([]types.GlobalTag, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]api.GlobalTag), args.Error(1)
+	return args.Get(0).([]types.GlobalTag), args.Error(1)
 }
 
-func (m *MockUserRepo) GetUserAvoidTags(ctx context.Context, userID uuid.UUID) ([]api.UserAvoidTag, error) {
+func (m *MockUserRepo) GetUserAvoidTags(ctx context.Context, userID uuid.UUID) ([]types.UserAvoidTag, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]api.UserAvoidTag), args.Error(1)
+	return args.Get(0).([]types.UserAvoidTag), args.Error(1)
 }
 
 func (m *MockUserRepo) AddUserAvoidTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
@@ -180,7 +180,7 @@ func TestGetUserProfile(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.New()
-		expectedProfile := &api.UserProfile{
+		expectedProfile := &types.UserProfile{
 			ID:       userID,
 			Email:    "test@example.com",
 			Username: nil,
@@ -229,7 +229,7 @@ func TestUpdateUserProfile(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.New()
-		params := api.UpdateProfileParams{
+		params := types.UpdateProfileParams{
 			Username: &username,
 		}
 
@@ -248,7 +248,7 @@ func TestUpdateUserProfile(t *testing.T) {
 	t.Run("Error", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.New()
-		params := api.UpdateProfileParams{
+		params := types.UpdateProfileParams{
 			Username: &username,
 		}
 		expectedError := errors.New("database error")
@@ -276,7 +276,7 @@ func TestGetUserPreferences(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.New()
-		expectedPreferences := []api.Interest{
+		expectedPreferences := []types.Interest{
 			{ID: uuid.New(), Name: "Interest 1"},
 			{ID: uuid.New(), Name: "Interest 2"},
 		}

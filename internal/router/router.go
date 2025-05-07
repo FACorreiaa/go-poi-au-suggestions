@@ -162,7 +162,7 @@ func UserPreferencesRoutes(handler *userSettings.SettingsHandler) http.Handler {
 
 func UserSearchProfileRoutes(handler *userProfiles.UserSearchProfileHandler) http.Handler {
 	r := chi.NewRouter()
-	r.Get("/", handler.GetUserProfile)
+	r.Get("/{profileID}", handler.GetUserProfile)
 	r.Post("/", handler.CreateProfile) // POST http://localhost:8000/api/v1/user/profile
 
 	return r

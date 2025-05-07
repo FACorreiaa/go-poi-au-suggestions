@@ -12,7 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/config"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 // MockAuthRepo is a mock implementation of the AuthRepo interface
@@ -21,20 +21,20 @@ type MockAuthRepo struct {
 }
 
 // Implement all methods of the AuthRepo interface
-func (m *MockAuthRepo) GetUserByEmail(ctx context.Context, email string) (*api.UserAuth, error) {
+func (m *MockAuthRepo) GetUserByEmail(ctx context.Context, email string) (*types.UserAuth, error) {
 	args := m.Called(ctx, email)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*api.UserAuth), args.Error(1)
+	return args.Get(0).(*types.UserAuth), args.Error(1)
 }
 
-func (m *MockAuthRepo) GetUserByID(ctx context.Context, userID string) (*api.UserAuth, error) {
+func (m *MockAuthRepo) GetUserByID(ctx context.Context, userID string) (*types.UserAuth, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*api.UserAuth), args.Error(1)
+	return args.Get(0).(*types.UserAuth), args.Error(1)
 }
 
 func (m *MockAuthRepo) Register(ctx context.Context, username, email, hashedPassword string) (string, error) {
@@ -95,7 +95,7 @@ func TestLogin(t *testing.T) {
 		password := "password123"
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
-		user := &api.UserAuth{
+		user := &types.UserAuth{
 			ID:       "user123",
 			Username: "testuser",
 			Email:    email,
@@ -132,7 +132,7 @@ func TestLogin(t *testing.T) {
 		assert.Error(t, err)
 		assert.Empty(t, accessToken)
 		assert.Empty(t, refreshToken)
-		assert.ErrorIs(t, err, api.ErrUnauthenticated)
+		assert.ErrorIs(t, err, types.ErrUnauthenticated)
 		mockRepo.AssertExpectations(t)
 	})
 
@@ -143,7 +143,7 @@ func TestLogin(t *testing.T) {
 		password := "wrongpassword"
 		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("correctpassword"), bcrypt.DefaultCost)
 
-		user := &api.UserAuth{
+		user := &types.UserAuth{
 			ID:       "user123",
 			Username: "testuser",
 			Email:    email,
@@ -160,7 +160,7 @@ func TestLogin(t *testing.T) {
 		assert.Error(t, err)
 		assert.Empty(t, accessToken)
 		assert.Empty(t, refreshToken)
-		assert.ErrorIs(t, err, api.ErrUnauthenticated)
+		assert.ErrorIs(t, err, types.ErrUnauthenticated)
 		mockRepo.AssertExpectations(t)
 	})
 }

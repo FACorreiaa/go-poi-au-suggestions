@@ -10,9 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
-	userTags "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_tags"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
@@ -105,7 +103,7 @@ func (m *MockUserInterestRepo) RemoveUserInterest(ctx context.Context, userID uu
 	return args.Error(0)
 }
 
-func (m *MockUserInterestRepo) UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params api.UpdateUserInterestParams) error {
+func (m *MockUserInterestRepo) UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error {
 	args := m.Called(ctx, userID, interestID, params)
 	return args.Error(0)
 }
@@ -126,7 +124,7 @@ func (m *MockUserInterestRepo) GetInterestsForProfile(ctx context.Context, profi
 	return args.Get(0).([]types.Interest), args.Error(1)
 }
 
-// MockUserTagsRepo is a mock implementation of the userTags.UserTagsRepo interface
+// MockUserTagsRepo is a mock implementation of the types.UserTagsRepo interface
 type MockUserTagsRepo struct {
 	mock.Mock
 }
@@ -154,15 +152,15 @@ func (m *MockUserTagsRepo) Get(ctx context.Context, userID uuid.UUID, tagID uuid
 	return args.Get(0).(*types.Tags), args.Error(1)
 }
 
-func (m *MockUserTagsRepo) Create(ctx context.Context, userID uuid.UUID, params userTags.CreatePersonalTagParams) (*userTags.PersonalTag, error) {
+func (m *MockUserTagsRepo) Create(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error) {
 	args := m.Called(ctx, userID, params)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*userTags.PersonalTag), args.Error(1)
+	return args.Get(0).(*types.PersonalTag), args.Error(1)
 }
 
-func (m *MockUserTagsRepo) Update(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, params userTags.UpdatePersonalTagParams) error {
+func (m *MockUserTagsRepo) Update(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, params types.UpdatePersonalTagParams) error {
 	args := m.Called(ctx, userID, tagID, params)
 	return args.Error(0)
 }
@@ -292,13 +290,14 @@ func TestGetUserPreferenceProfile(t *testing.T) {
 	t.Run("Error", func(t *testing.T) {
 		ctx := context.Background()
 		profileID := uuid.New()
+		userID := uuid.New()
 		expectedError := errors.New("database error")
 
 		// Set up expectations
 		mockProfileRepo.On("GetProfile", ctx, profileID).Return(nil, expectedError).Once()
 
 		// Call the service method
-		profile, err := service.GetUserPreferenceProfile(ctx, profileID)
+		profile, err := service.GetUserPreferenceProfile(ctx, userID, profileID)
 
 		// Assert expectations
 		assert.Error(t, err)

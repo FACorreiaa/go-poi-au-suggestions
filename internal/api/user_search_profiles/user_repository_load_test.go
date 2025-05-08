@@ -136,11 +136,11 @@ func TestUserSearchProfilesRepoLoad(t *testing.T) {
 
 				// Use a different profile for each goroutine to distribute the load
 				profileID := profileIDs[profileIndex%len(profileIDs)]
-
+				userID := uuid.New()
 				for j := 0; j < numRequestsPerGoroutine; j++ {
 					// Measure time to get profile
 					start := time.Now()
-					_, err := repo.GetProfile(ctx, profileID)
+					_, err := repo.GetProfile(ctx, userID, profileID)
 					duration := time.Since(start)
 
 					// Record result

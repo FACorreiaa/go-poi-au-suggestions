@@ -21,7 +21,7 @@ var _ UserInterestService = (*UserInterestServiceImpl)(nil)
 type UserInterestService interface {
 	//RemoveUserInterest remove interests
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
-	GetAllInterests(ctx context.Context) ([]types.Interest, error)
+	GetAllInterests(ctx context.Context) ([]*types.Interest, error)
 	CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error)
 	UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error
 }
@@ -90,7 +90,7 @@ func (s *UserInterestServiceImpl) RemoveUserInterest(ctx context.Context, userID
 }
 
 // GetAllInterests retrieves all available interests.
-func (s *UserInterestServiceImpl) GetAllInterests(ctx context.Context) ([]types.Interest, error) {
+func (s *UserInterestServiceImpl) GetAllInterests(ctx context.Context) ([]*types.Interest, error) {
 	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "GetAllInterests")
 	defer span.End()
 

@@ -143,8 +143,8 @@ type UserPreferenceProfileResponse struct {
 	PreferredVibes       []string            `json:"preferred_vibes"` // Assuming TEXT[] maps to []string
 	PreferredTransport   TransportPreference `json:"preferred_transport"`
 	DietaryNeeds         []string            `json:"dietary_needs"` // Assuming TEXT[] maps to []string
-	Interests            []Interest          `json:"interests"`     // Interests linked to this profile
-	Tags                 []Tags              `json:"tags"`          // Tags to avoid for this profile
+	Interests            []*Interest         `json:"interests"`     // Interests linked to this profile
+	Tags                 []*Tags             `json:"tags"`          // Tags to avoid for this profile
 	CreatedAt            time.Time           `json:"created_at"`
 	UpdatedAt            time.Time           `json:"updated_at"`
 }
@@ -179,9 +179,9 @@ type Tags struct {
 	UpdatedAt   *time.Time `json:"updated_at"`
 }
 
-// UpdateUserPreferenceProfileParams defines fields allowed for updating a profile.
+// UpdateSearchProfileParams defines fields allowed for updating a profile.
 // Pointers allow partial updates.
-type UpdateUserPreferenceProfileParams struct {
+type UpdateSearchProfileParams struct {
 	ProfileName          string               `json:"profile_name" binding:"required"`
 	IsDefault            *bool                `json:"is_default,omitempty"` // Default is FALSE in DB
 	SearchRadiusKm       *float64             `json:"search_radius_km,omitempty"`

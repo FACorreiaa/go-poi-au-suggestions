@@ -64,16 +64,16 @@ func (u *UserSearchProfileHandler) GetUserProfile(w http.ResponseWriter, r *http
 	}
 
 	profileIDStr := chi.URLParam(r, "profileID")
-	interestID, err := uuid.Parse(profileIDStr)
+	profileID, err := uuid.Parse(profileIDStr)
 	if err != nil {
 		l.ErrorContext(ctx, "Invalid profile ID format", slog.Any("error", err))
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "Invalid interest ID format")
-		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid interest ID format in URL")
+		span.SetStatus(codes.Error, "Invalid profile ID format")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid profile ID format in URL")
 		return
 	}
 
-	profile, err := u.userService.GetUserPreferenceProfile(ctx, userID, interestID)
+	profile, err := u.userService.GetSearchProfile(ctx, userID, profileID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch user profile", slog.Any("error", err))
 		if errors.Is(err, types.ErrNotFound) {
@@ -145,7 +145,7 @@ func (u *UserSearchProfileHandler) CreateProfile(w http.ResponseWriter, r *http.
 		return
 	}
 
-	profile, err := u.userService.CreateProfile(ctx, userID, params)
+	profile, err := u.userService.CreateSearchProfile(ctx, userID, params)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to create user preference profile", slog.Any("error", err))
 		span.RecordError(err)

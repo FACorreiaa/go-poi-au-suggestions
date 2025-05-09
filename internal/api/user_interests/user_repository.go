@@ -27,12 +27,12 @@ type UserInterestRepo interface {
 	// CreateInterest ---  / Interests ---
 	CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error)
 	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
-	GetAllInterests(ctx context.Context) ([]types.Interest, error)
+	GetAllInterests(ctx context.Context) ([]*types.Interest, error)
 	GetInterest(ctx context.Context, interestID uuid.UUID) (*types.Interest, error)
 	UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error
 	AddInterestToProfile(ctx context.Context, profileID, interestID uuid.UUID) error
 	// GetInterestsForProfile retrieves all interests associated with a profile
-	GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Interest, error)
+	GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Interest, error)
 	// GetUserEnhancedInterests retrieves all interests for a user with their preference levels
 	//GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]types.EnhancedInterest, error)
 }
@@ -85,7 +85,7 @@ func (r *PostgresUserInterestRepo) CreateInterest(ctx context.Context, name stri
 		&interest.UpdatedAt, // Scan the updated_at timestamp set by the query
 	)
 
-	// TODO also add to user_interests
+	// TODO also add to user_custom_interests
 
 	if err != nil {
 		// Check for unique constraint violation (name already exists)
@@ -114,7 +114,7 @@ func (r *PostgresUserInterestRepo) RemoveUserInterest(ctx context.Context, userI
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "RemoveUserInterest", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "DELETE"),
-		attribute.String("db.sql.table", "user_interests"),
+		attribute.String("db.sql.table", "user_custom_interests"),
 		attribute.String("db.user.id", userID.String()),
 		attribute.String("db.interest.id", interestID.String()),
 	))
@@ -123,7 +123,7 @@ func (r *PostgresUserInterestRepo) RemoveUserInterest(ctx context.Context, userI
 	l := r.logger.With(slog.String("method", "RemoveUserInterest"), slog.String("userID", userID.String()), slog.String("interestID", interestID.String()))
 	l.DebugContext(ctx, "Removing user interest")
 
-	query := "DELETE FROM user_interests WHERE user_id = $1 AND interest_id = $2"
+	query := "DELETE FROM user_custom_interests WHERE user_id = $1 AND id = $2"
 	tag, err := r.pgpool.Exec(ctx, query, userID, interestID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to delete user interest", slog.Any("error", err))
@@ -146,7 +146,7 @@ func (r *PostgresUserInterestRepo) RemoveUserInterest(ctx context.Context, userI
 
 // GetAllInterests TODO does it make sense to only return the active interests ? Just mark active on the UI ?
 // GetAllInterests implements user.UserRepo.
-func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]types.Interest, error) {
+func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]*types.Interest, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetAllInterests", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "interests"),
@@ -157,9 +157,11 @@ func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]types
 	l.DebugContext(ctx, "Fetching all active interests")
 
 	query := `
-        SELECT id, name, description, active, created_at, updated_at
-        FROM interests
-        WHERE active = TRUE
+        SELECT id, name, description, active, created_at, updated_at, 'global' AS type
+		FROM interests
+		UNION
+		SELECT id, name, description, active, created_at, updated_at, 'custom' AS type
+		FROM user_custom_interests 
         ORDER BY name`
 
 	rows, err := r.pgpool.Query(ctx, query)
@@ -171,18 +173,18 @@ func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]types
 	}
 	defer rows.Close()
 
-	var interests []types.Interest
+	var interests []*types.Interest
 	for rows.Next() {
 		var i types.Interest
 		err := rows.Scan(
-			&i.ID, &i.Name, &i.Description, &i.Active, &i.CreatedAt, &i.UpdatedAt,
+			&i.ID, &i.Name, &i.Description, &i.Active, &i.CreatedAt, &i.UpdatedAt, &i.Source,
 		)
 		if err != nil {
 			l.ErrorContext(ctx, "Failed to scan interest row", slog.Any("error", err))
 			span.RecordError(err)
 			return nil, fmt.Errorf("database error scanning interest: %w", err)
 		}
-		interests = append(interests, i)
+		interests = append(interests, &i)
 	}
 
 	if err = rows.Err(); err != nil {
@@ -200,7 +202,7 @@ func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]types
 //func (r *PostgresUserInterestRepo) GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]types.EnhancedInterest, error) {
 //	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserEnhancedInterests", trace.WithAttributes(
 //		semconv.DBSystemPostgreSQL,
-//		attribute.String("db.sql.table", "user_interests, interests"),
+//		attribute.String("db.sql.table", "user_custom_interests, interests"),
 //		attribute.String("db.user.id", userID.String()),
 //	))
 //	defer span.End()
@@ -211,7 +213,7 @@ func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]types
 //	query := `
 //        SELECT i.id, i.name, i.description, i.active, i.created_at, i.updated_at, ui.preference_level
 //        FROM interests i
-//        JOIN user_interests ui ON i.id = ui.interest_id
+//        JOIN user_custom_interests ui ON i.id = ui.interest_id
 //        WHERE ui.user_id = $1 AND i.active = TRUE
 //        ORDER BY ui.preference_level DESC, i.name`
 //
@@ -372,8 +374,11 @@ func (r *PostgresUserInterestRepo) GetInterest(ctx context.Context, interestID u
 	l.DebugContext(ctx, "Fetching interest")
 
 	query := `
-        SELECT id, name, description, active, created_at, updated_at
-        FROM interests
+		SELECT id, name, description, active, created_at, updated_at, 'global' AS type
+		FROM interests
+		UNION
+		SELECT id, name, description, active, created_at, updated_at, 'custom' AS type
+		FROM user_custom_interests 
         WHERE id = $1`
 
 	err := r.pgpool.QueryRow(ctx, query, interestID).Scan(
@@ -383,6 +388,7 @@ func (r *PostgresUserInterestRepo) GetInterest(ctx context.Context, interestID u
 		&interest.Active,
 		&interest.CreatedAt,
 		&interest.UpdatedAt,
+		&interest.Source,
 	)
 
 	if err != nil {
@@ -424,7 +430,7 @@ func (r *PostgresUserInterestRepo) AddInterestToProfile(ctx context.Context, pro
 }
 
 // GetInterestsForProfile retrieves all interests associated with a profile
-func (r *PostgresUserInterestRepo) GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Interest, error) {
+func (r *PostgresUserInterestRepo) GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Interest, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetInterestsForProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "SELECT"),
@@ -451,7 +457,7 @@ func (r *PostgresUserInterestRepo) GetInterestsForProfile(ctx context.Context, p
 	}
 	defer rows.Close()
 
-	var interests []types.Interest
+	var interests []*types.Interest
 	for rows.Next() {
 		var interest types.Interest
 		err := rows.Scan(
@@ -465,7 +471,7 @@ func (r *PostgresUserInterestRepo) GetInterestsForProfile(ctx context.Context, p
 			span.RecordError(err)
 			return nil, fmt.Errorf("database error scanning interest: %w", err)
 		}
-		interests = append(interests, interest)
+		interests = append(interests, &interest)
 	}
 
 	if err = rows.Err(); err != nil {

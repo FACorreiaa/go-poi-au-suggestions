@@ -19,7 +19,7 @@ var _ UserTagsService = (*UserTagsServiceImpl)(nil)
 
 // UserTagsService defines the business logic contract for user operations.
 type UserTagsService interface {
-	GetTags(ctx context.Context, userID uuid.UUID) ([]types.Tags, error)
+	GetTags(ctx context.Context, userID uuid.UUID) ([]*types.Tags, error)
 	GetTag(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error)
 	CreateTag(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error)
 	DeleteTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error
@@ -41,7 +41,7 @@ func NewUserTagsService(repo UserTagsRepo, logger *slog.Logger) *UserTagsService
 }
 
 // GetTags retrieves all global tags.
-func (s *UserTagsServiceImpl) GetTags(ctx context.Context, userID uuid.UUID) ([]types.Tags, error) {
+func (s *UserTagsServiceImpl) GetTags(ctx context.Context, userID uuid.UUID) ([]*types.Tags, error) {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "GetAllGlobalTags")
 	defer span.End()
 

@@ -25,7 +25,7 @@ var _ UserTagsRepo = (*PostgresUserTagsRepo)(nil)
 type UserTagsRepo interface {
 	// GetAll --- Global Tags & User Avoid Tags ---
 	// GetAll retrieves all global tags
-	GetAll(ctx context.Context, userID uuid.UUID) ([]types.Tags, error)
+	GetAll(ctx context.Context, userID uuid.UUID) ([]*types.Tags, error)
 
 	// Get retrieves all avoid tags for a user
 	Get(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error)
@@ -46,7 +46,7 @@ type UserTagsRepo interface {
 	LinkPersonalTagToProfile(ctx context.Context, userID, profileID uuid.UUID, tagID uuid.UUID) error
 
 	// GetTagsForProfile retrieves all tags associated with a profile
-	GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Tags, error)
+	GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Tags, error)
 }
 
 type PostgresUserTagsRepo struct {
@@ -62,7 +62,7 @@ func NewPostgresUserTagsRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *Postgr
 }
 
 // GetAll implements user.UserRepo.
-func (r *PostgresUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]types.Tags, error) {
+func (r *PostgresUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]*types.Tags, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetAllGlobalTags", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "global_tags"),
@@ -107,7 +107,7 @@ func (r *PostgresUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]
 	}
 	defer rows.Close()
 
-	var tags []types.Tags
+	var tags []*types.Tags
 	for rows.Next() {
 		var t types.Tags
 		err := rows.Scan(
@@ -122,7 +122,7 @@ func (r *PostgresUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]
 			span.RecordError(err)
 			return nil, fmt.Errorf("database error scanning global tag: %w", err)
 		}
-		tags = append(tags, t)
+		tags = append(tags, &t)
 	}
 
 	if err = rows.Err(); err != nil {
@@ -456,7 +456,7 @@ func (r *PostgresUserTagsRepo) LinkPersonalTagToProfile(ctx context.Context, use
 }
 
 // GetTagsForProfile retrieves all tags associated with a profile
-func (r *PostgresUserTagsRepo) GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]types.Tags, error) {
+func (r *PostgresUserTagsRepo) GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Tags, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetTagsForProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "SELECT"),
@@ -483,7 +483,7 @@ func (r *PostgresUserTagsRepo) GetTagsForProfile(ctx context.Context, profileID 
 	}
 	defer rows.Close()
 
-	var tags []types.Tags
+	var tags []*types.Tags
 	for rows.Next() {
 		var tag types.Tags
 		err := rows.Scan(
@@ -499,7 +499,7 @@ func (r *PostgresUserTagsRepo) GetTagsForProfile(ctx context.Context, profileID 
 			span.RecordError(err)
 			return nil, fmt.Errorf("database error scanning tag: %w", err)
 		}
-		tags = append(tags, tag)
+		tags = append(tags, &tag)
 	}
 
 	if err = rows.Err(); err != nil {

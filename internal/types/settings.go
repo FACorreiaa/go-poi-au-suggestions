@@ -22,7 +22,7 @@ type UserSettings struct {
 }
 
 // UpdateUserSettingsParams is used for updating user settings.
-// Deprecated: Use UpdateUserPreferenceProfileParams instead
+// Deprecated: Use UpdateSearchProfileParams instead
 type UpdateUserSettingsParams struct {
 	DefaultSearchRadiusKm *float64       `json:"default_search_radius_km,omitempty"`
 	PreferredTime         *DayPreference `json:"preferred_time,omitempty"`

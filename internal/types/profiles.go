@@ -169,6 +169,24 @@ type CreateUserPreferenceProfileParams struct {
 	Interests            []uuid.UUID          `json:"interests,omitempty"`
 }
 
+type UpdateUserPreferenceProfileParams struct {
+	ProfileName          string               `json:"profile_name" binding:"required"`
+	IsDefault            *bool                `json:"is_default,omitempty"` // Default is FALSE in DB
+	SearchRadiusKm       *float64             `json:"search_radius_km,omitempty"`
+	PreferredTime        *DayPreference       `json:"preferred_time,omitempty"`
+	BudgetLevel          *int                 `json:"budget_level,omitempty"`
+	PreferredPace        *SearchPace          `json:"preferred_pace,omitempty"`
+	PreferAccessiblePOIs *bool                `json:"prefer_accessible_pois,omitempty"`
+	PreferOutdoorSeating *bool                `json:"prefer_outdoor_seating,omitempty"`
+	PreferDogFriendly    *bool                `json:"prefer_dog_friendly,omitempty"`
+	PreferredVibes       []string             `json:"preferred_vibes,omitempty"` // Use empty slice if not provided?
+	PreferredTransport   *TransportPreference `json:"preferred_transport,omitempty"`
+	DietaryNeeds         []string             `json:"dietary_needs,omitempty"`
+	Tags                 []uuid.UUID          `json:"tags,omitempty"`
+	Interests            []uuid.UUID          `json:"interests,omitempty"`
+	UpdatedAt            *time.Time           `json:"updated_at,omitempty"` // Optional, can be set to nil
+}
+
 type Tags struct {
 	ID          uuid.UUID  `json:"id"`
 	Name        string     `json:"name"`
@@ -196,4 +214,5 @@ type UpdateSearchProfileParams struct {
 	DietaryNeeds         []string             `json:"dietary_needs,omitempty"`
 	Tags                 []*string            `json:"tags,omitempty"`
 	Interests            []*string            `json:"interests,omitempty"`
+	UpdateAt             *time.Time           `json:"updated_at,omitempty"` // Optional, can be set to nil
 }

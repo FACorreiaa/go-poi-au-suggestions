@@ -35,11 +35,11 @@ type UserSearchProfilesRepo interface {
 	// CreateSearchProfile creates a new preference profile for a user
 	CreateSearchProfile(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error)
 	// UpdateSearchProfile updates a preference profile
-	UpdateSearchProfile(ctx context.Context, profileID uuid.UUID, params types.UpdateSearchProfileParams) error
+	UpdateSearchProfile(ctx context.Context, userID, profileID uuid.UUID, params types.UpdateSearchProfileParams) error
 	// DeleteSearchProfile deletes a preference profile
-	DeleteSearchProfile(ctx context.Context, profileID uuid.UUID) error
+	DeleteSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error
 	// SetDefaultSearchProfile sets a profile as the default for a user
-	SetDefaultSearchProfile(ctx context.Context, profileID uuid.UUID) error
+	SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error
 }
 
 type PostgresUserSearchProfilesRepo struct {
@@ -323,7 +323,7 @@ func (r *PostgresUserSearchProfilesRepo) CreateSearchProfile(ctx context.Context
 }
 
 // UpdateProfile implements user.UserRepo.
-func (r *PostgresUserSearchProfilesRepo) UpdateSearchProfile(ctx context.Context, profileID uuid.UUID, params types.UpdateSearchProfileParams) error {
+func (r *PostgresUserSearchProfilesRepo) UpdateSearchProfile(ctx context.Context, userID, profileID uuid.UUID, params types.UpdateSearchProfileParams) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "UpdateUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),
@@ -337,10 +337,9 @@ func (r *PostgresUserSearchProfilesRepo) UpdateSearchProfile(ctx context.Context
 
 	// Build the update query dynamically based on which fields are provided
 	var updates []string
-	var args []interface{}
-	args = append(args, profileID) // $1 is always profileID
-
-	paramIdx := 2 // Start with $2
+	// Build dynamic query
+	args := []interface{}{}
+	paramIdx := 1
 
 	if params.ProfileName != "" {
 		updates = append(updates, fmt.Sprintf("profile_name = $%d", paramIdx))
@@ -417,6 +416,7 @@ func (r *PostgresUserSearchProfilesRepo) UpdateSearchProfile(ctx context.Context
 	// Always update the updated_at timestamp
 	updates = append(updates, fmt.Sprintf("updated_at = $%d", paramIdx))
 	args = append(args, time.Now())
+	paramIdx++
 
 	// If no updates were provided, return early
 	if len(updates) == 1 { // Only updated_at
@@ -424,10 +424,18 @@ func (r *PostgresUserSearchProfilesRepo) UpdateSearchProfile(ctx context.Context
 		return nil
 	}
 
+	args = append(args, profileID)
+	idPlaceholderNum := paramIdx
+	paramIdx++
+
+	args = append(args, userID)
+	userIDPlaceholderNum := paramIdx
+
 	query := fmt.Sprintf(`
         UPDATE user_preference_profiles
         SET %s
-        WHERE id = $1`, strings.Join(updates, ", "))
+        WHERE id = $%d AND user_id = $%d`, strings.Join(updates, ", "),
+		idPlaceholderNum, userIDPlaceholderNum)
 
 	tag, err := r.pgpool.Exec(ctx, query, args...)
 	if err != nil {
@@ -458,7 +466,7 @@ func (r *PostgresUserSearchProfilesRepo) UpdateSearchProfile(ctx context.Context
 }
 
 // DeleteProfile implements user.UserRepo.
-func (r *PostgresUserSearchProfilesRepo) DeleteSearchProfile(ctx context.Context, profileID uuid.UUID) error {
+func (r *PostgresUserSearchProfilesRepo) DeleteSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "DeleteUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "DELETE"),
@@ -472,7 +480,7 @@ func (r *PostgresUserSearchProfilesRepo) DeleteSearchProfile(ctx context.Context
 
 	// First check if this is the default profile
 	var isDefault bool
-	err := r.pgpool.QueryRow(ctx, "SELECT is_default FROM user_preference_profiles WHERE id = $1", profileID).Scan(&isDefault)
+	err := r.pgpool.QueryRow(ctx, "SELECT is_default FROM user_preference_profiles WHERE id = $1 AND user_id = $2", profileID, userID).Scan(&isDefault)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			err := fmt.Errorf("preference profile not found: %w", types.ErrNotFound)
@@ -496,7 +504,7 @@ func (r *PostgresUserSearchProfilesRepo) DeleteSearchProfile(ctx context.Context
 	}
 
 	// Delete the profile
-	tag, err := r.pgpool.Exec(ctx, "DELETE FROM user_preference_profiles WHERE id = $1", profileID)
+	tag, err := r.pgpool.Exec(ctx, "DELETE FROM user_preference_profiles WHERE id = $1 AND user_id = $2", profileID, userID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to delete user preference profile", slog.Any("error", err))
 		span.RecordError(err)
@@ -519,7 +527,7 @@ func (r *PostgresUserSearchProfilesRepo) DeleteSearchProfile(ctx context.Context
 }
 
 // SetDefaultProfile implements user.UserRepo.
-func (r *PostgresUserSearchProfilesRepo) SetDefaultSearchProfile(ctx context.Context, profileID uuid.UUID) error {
+func (r *PostgresUserSearchProfilesRepo) SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "SetDefaultUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),
@@ -532,8 +540,7 @@ func (r *PostgresUserSearchProfilesRepo) SetDefaultSearchProfile(ctx context.Con
 	l.DebugContext(ctx, "Setting profile as default")
 
 	// First get the user ID for this profile
-	var userID uuid.UUID
-	err := r.pgpool.QueryRow(ctx, "SELECT user_id FROM user_preference_profiles WHERE id = $1", profileID).Scan(&userID)
+	err := r.pgpool.QueryRow(ctx, "SELECT user_id FROM user_preference_profiles WHERE user_id = $1", userID).Scan(&userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			err := fmt.Errorf("preference profile not found: %w", types.ErrNotFound)
@@ -568,7 +575,7 @@ func (r *PostgresUserSearchProfilesRepo) SetDefaultSearchProfile(ctx context.Con
 	}
 
 	// Then set the specified profile as default
-	tag, err := tx.Exec(ctx, "UPDATE user_preference_profiles SET is_default = TRUE WHERE id = $1", profileID)
+	tag, err := tx.Exec(ctx, "UPDATE user_preference_profiles SET is_default = TRUE WHERE id = $1 AND user_id = $2", profileID, userID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to set profile as default", slog.Any("error", err))
 		span.RecordError(err)

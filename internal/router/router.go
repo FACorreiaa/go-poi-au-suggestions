@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors" // Import CORS middleware if needed
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
@@ -19,7 +18,7 @@ import (
 
 // Config contains dependencies needed for the router setup
 type Config struct {
-	AuthHandler              *auth.AuthHandler
+	AuthHandler              *appMiddleware.AuthHandler
 	AuthenticateMiddleware   func(http.Handler) http.Handler // Function signature for auth middleware
 	Logger                   *slog.Logger
 	UserHandler              *user.HandlerUser
@@ -162,8 +161,13 @@ func UserPreferencesRoutes(handler *userSettings.SettingsHandler) http.Handler {
 
 func UserSearchProfileRoutes(handler *userProfiles.UserSearchProfileHandler) http.Handler {
 	r := chi.NewRouter()
-	r.Get("/{profileID}", handler.GetUserProfile)
-	r.Post("/", handler.CreateProfile) // POST http://localhost:8000/api/v1/user/search-profile
+	r.Get("/{profileID}", handler.GetSearchProfile)
+	r.Get("/default", handler.GetDefaultSearchProfile)             // GET http://localhost:8000/api/v1/user/search-profile/default
+	r.Put("/default/{profileID}", handler.SetDefaultSearchProfile) // PUT http://localhost:8000/api/v1/user/search-profile/default
+	r.Put("/{profileID}", handler.UpdateSearchProfile)             // PUT http://localhost:8000/api/v1/user/search-profile/{profileID}
+	r.Delete("/{profileID}", handler.DeleteSearchProfile)          // DELETE http://localhost:8000/api/v1/user/search-profile/{profileID}
+	r.Get("/", handler.GetSearchProfiles)                          // GET http://localhost:8000/api/v1/user/search-profile
+	r.Post("/", handler.CreateSearchProfile)                       // POST http://localhost:8000/api/v1/user/search-profile
 
 	return r
 }

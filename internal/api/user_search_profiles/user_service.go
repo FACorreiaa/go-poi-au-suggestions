@@ -25,11 +25,11 @@ type UserSearchProfilesService interface {
 	//GetSearchProfiles User  Profiles
 	GetSearchProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error)
 	GetSearchProfile(ctx context.Context, userID, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error)
-	GetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error)
+	GetDefaultSearchProfile(ctx context.Context, userID uuid.UUID) (*types.UserPreferenceProfileResponse, error)
 	CreateSearchProfile(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error)
-	UpdateSearchProfile(ctx context.Context, profileID uuid.UUID, params types.UpdateSearchProfileParams) error
-	DeleteSearchProfile(ctx context.Context, profileID uuid.UUID) error
-	SetDefaultSearchProfile(ctx context.Context, profileID uuid.UUID) error
+	UpdateSearchProfile(ctx context.Context, userID, profileID uuid.UUID, params types.UpdateSearchProfileParams) error
+	DeleteSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error
+	SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error
 }
 
 // UserSearchProfilesServiceImpl provides the implementation for UserService.
@@ -96,7 +96,7 @@ func (s *UserSearchProfilesServiceImpl) GetSearchProfile(ctx context.Context, us
 }
 
 // GetDefaultSearchProfile retrieves the default preference profile for a user.
-func (s *UserSearchProfilesServiceImpl) GetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
+func (s *UserSearchProfilesServiceImpl) GetDefaultSearchProfile(ctx context.Context, userID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "GetDefaultSearchProfile", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 	))
@@ -105,7 +105,7 @@ func (s *UserSearchProfilesServiceImpl) GetDefaultSearchProfile(ctx context.Cont
 	l := s.logger.With(slog.String("method", "GetDefaultSearchProfile"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Fetching default user preference profile")
 
-	profile, err := s.prefRepo.GetSearchProfile(ctx, userID, profileID)
+	profile, err := s.prefRepo.GetDefaultSearchProfile(ctx, userID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch default user preference profile", slog.Any("error", err))
 		span.RecordError(err)
@@ -424,7 +424,7 @@ func (s *UserSearchProfilesServiceImpl) CreateSearchProfile(ctx context.Context,
 }
 
 // DeleteSearchProfile deletes a preference profile.
-func (s *UserSearchProfilesServiceImpl) DeleteSearchProfile(ctx context.Context, profileID uuid.UUID) error {
+func (s *UserSearchProfilesServiceImpl) DeleteSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "DeleteSearchProfile", trace.WithAttributes(
 		attribute.String("profile.id", profileID.String()),
 	))
@@ -433,7 +433,7 @@ func (s *UserSearchProfilesServiceImpl) DeleteSearchProfile(ctx context.Context,
 	l := s.logger.With(slog.String("method", "DeleteSearchProfile"), slog.String("profileID", profileID.String()))
 	l.DebugContext(ctx, "Deleting user preference profile")
 
-	err := s.prefRepo.DeleteSearchProfile(ctx, profileID)
+	err := s.prefRepo.DeleteSearchProfile(ctx, userID, profileID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to delete user preference profile", slog.Any("error", err))
 		span.RecordError(err)
@@ -447,7 +447,7 @@ func (s *UserSearchProfilesServiceImpl) DeleteSearchProfile(ctx context.Context,
 }
 
 // SetDefaultSearchProfile sets a profile as the default for a user.
-func (s *UserSearchProfilesServiceImpl) SetDefaultSearchProfile(ctx context.Context, profileID uuid.UUID) error {
+func (s *UserSearchProfilesServiceImpl) SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "SetDefaultSearchProfile", trace.WithAttributes(
 		attribute.String("profile.id", profileID.String()),
 	))
@@ -456,7 +456,7 @@ func (s *UserSearchProfilesServiceImpl) SetDefaultSearchProfile(ctx context.Cont
 	l := s.logger.With(slog.String("method", "SetDefaultSearchProfile"), slog.String("profileID", profileID.String()))
 	l.DebugContext(ctx, "Setting profile as default")
 
-	err := s.prefRepo.SetDefaultSearchProfile(ctx, profileID)
+	err := s.prefRepo.SetDefaultSearchProfile(ctx, userID, profileID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to set default user preference profile", slog.Any("error", err))
 		span.RecordError(err)
@@ -470,6 +470,23 @@ func (s *UserSearchProfilesServiceImpl) SetDefaultSearchProfile(ctx context.Cont
 }
 
 // UpdateSearchProfile implements UserSearchProfilesService.
-func (s *UserSearchProfilesServiceImpl) UpdateSearchProfile(ctx context.Context, profileID uuid.UUID, params types.UpdateSearchProfileParams) error {
-	panic("unimplemented")
+func (s *UserSearchProfilesServiceImpl) UpdateSearchProfile(ctx context.Context, userID, profileID uuid.UUID, params types.UpdateSearchProfileParams) error {
+	ctx, span := otel.Tracer("UserService").Start(ctx, "UpdateSearchProfile", trace.WithAttributes(
+		attribute.String("profile.id", profileID.String()),
+	))
+	defer span.End()
+
+	l := s.logger.With(slog.String("method", "SetDefaultSearchProfile"), slog.String("profileID", profileID.String()))
+	l.DebugContext(ctx, "Setting profile as default")
+
+	if err := s.prefRepo.UpdateSearchProfile(ctx, userID, profileID, params); err != nil {
+		l.ErrorContext(ctx, "Failed to set default user preference profile", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to set default user preference profile")
+		return fmt.Errorf("error setting default user preference profile: %w", err)
+	}
+
+	l.InfoContext(ctx, "User search profile updated successfully")
+	span.SetStatus(codes.Ok, "User preference profile updated successfully")
+	return nil
 }

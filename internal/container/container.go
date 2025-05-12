@@ -9,6 +9,7 @@ import (
 	database "github.com/FACorreiaa/go-poi-au-suggestions/app/db"
 	"github.com/FACorreiaa/go-poi-au-suggestions/config"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	llmInteraction "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_interaction"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
 	userSearchProfile "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_search_profiles"
@@ -18,15 +19,16 @@ import (
 
 // Container holds all application dependencies
 type Container struct {
-	Config              *config.Config
-	Logger              *slog.Logger
-	Pool                *pgxpool.Pool
-	AuthHandler         *auth.AuthHandler
-	UserHandler         *user.HandlerUser
-	UserInterestHandler *userInterest.UserInterestHandler
-	UserSettingsHandler *userSettings.SettingsHandler
-	UserTagsHandler     *userTags.UserTagsHandler
-	UserProfileHandler  *userSearchProfile.UserSearchProfileHandler
+	Config                *config.Config
+	Logger                *slog.Logger
+	Pool                  *pgxpool.Pool
+	AuthHandler           *auth.AuthHandler
+	UserHandler           *user.HandlerUser
+	UserInterestHandler   *userInterest.UserInterestHandler
+	UserSettingsHandler   *userSettings.SettingsHandler
+	UserTagsHandler       *userTags.UserTagsHandler
+	UserProfileHandler    *userSearchProfile.UserSearchProfileHandler
+	LLMInteractionHandler *llmInteraction.LlmInteractionHandler
 	// Add other handlers, services, and repositories as needed
 }
 
@@ -75,16 +77,21 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	userSearchProfilesService := userSearchProfile.NewUserProfilesService(userSearchProfilesRepo, userInterestRepo, userTagsRepo, logger)
 	userSearchProfilesHandler := userSearchProfile.NewUserHandler(userSearchProfilesService, logger)
 	// Create and return the container
+
+	// initialise the LLM interaction service
+	llmInteractionService := llmInteraction.NewLlmInteractiontService(userInterestRepo, userSearchProfilesRepo, userTagsRepo, logger)
+	llmInteractionHandler := llmInteraction.NewLLMHandler(llmInteractionService, logger)
 	return &Container{
-		Config:              cfg,
-		Logger:              logger,
-		Pool:                pool,
-		AuthHandler:         authHandler,
-		UserHandler:         userHandler,
-		UserInterestHandler: userInterestHandler,
-		UserSettingsHandler: userSettingsHandler,
-		UserTagsHandler:     userTagsHandler,
-		UserProfileHandler:  userSearchProfilesHandler,
+		Config:                cfg,
+		Logger:                logger,
+		Pool:                  pool,
+		AuthHandler:           authHandler,
+		UserHandler:           userHandler,
+		UserInterestHandler:   userInterestHandler,
+		UserSettingsHandler:   userSettingsHandler,
+		UserTagsHandler:       userTagsHandler,
+		UserProfileHandler:    userSearchProfilesHandler,
+		LLMInteractionHandler: llmInteractionHandler,
 		// Add other handlers, services, and repositories as needed
 	}, nil
 }

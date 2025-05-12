@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/cors" // Import CORS middleware if needed
 
 	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	llmInteraction "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_interaction"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
 	userProfiles "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_search_profiles"
@@ -26,6 +27,7 @@ type Config struct {
 	UserSettingsHandler      *userSettings.SettingsHandler
 	UserSearchProfileHandler *userProfiles.UserSearchProfileHandler
 	UserTagsHandler          *userTags.UserTagsHandler
+	LLMInteractionHandler    *llmInteraction.LlmInteractionHandler
 }
 
 // SetupRouter initializes and configures the main application router.
@@ -78,6 +80,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			r.Mount("/user/preferences", UserPreferencesRoutes(cfg.UserSettingsHandler))
 			r.Mount("/user/search-profile", UserSearchProfileRoutes(cfg.UserSearchProfileHandler))
 			r.Mount("/user/tags", UserTagsRoutes(cfg.UserTagsHandler))
+			r.Mount("/llm", LLMInteractionRoutes(cfg.LLMInteractionHandler))
 			// r.Mount("/pois", POIRoutes(cfg.POIHandler))   // Example for POI routes
 		})
 
@@ -168,6 +171,14 @@ func UserSearchProfileRoutes(handler *userProfiles.UserSearchProfileHandler) htt
 	r.Delete("/{profileID}", handler.DeleteSearchProfile)          // DELETE http://localhost:8000/api/v1/user/search-profile/{profileID}
 	r.Get("/", handler.GetSearchProfiles)                          // GET http://localhost:8000/api/v1/user/search-profile
 	r.Post("/", handler.CreateSearchProfile)                       // POST http://localhost:8000/api/v1/user/search-profile
+
+	return r
+}
+
+func LLMInteractionRoutes(handler *llmInteraction.LlmInteractionHandler) http.Handler {
+	r := chi.NewRouter()
+	// LLM interaction routes
+	r.Post("/prompt-response/profile/{profileID}", handler.GetPrompResponse) // GET http://localhost:8000/api/v1/user/interests
 
 	return r
 }

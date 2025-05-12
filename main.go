@@ -19,7 +19,6 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/app/observability/metrics"
 	"github.com/FACorreiaa/go-poi-au-suggestions/app/observability/tracer"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
-	llmInteraction "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_interaction"
 	router "github.com/FACorreiaa/go-poi-au-suggestions/internal/router"
 
 	database "github.com/FACorreiaa/go-poi-au-suggestions/app/db"
@@ -128,6 +127,7 @@ func main() {
 		UserSettingsHandler:      c.UserSettingsHandler,
 		UserTagsHandler:          c.UserTagsHandler,
 		UserSearchProfileHandler: c.UserProfileHandler,
+		LLMInteractionHandler:    c.LLMInteractionHandler,
 		AuthenticateMiddleware:   authenticateMiddleware,
 		Logger:                   logger,
 	}
@@ -170,8 +170,6 @@ func main() {
 			cancel()
 		}
 	}()
-
-	llmInteraction.RunLLM(ctx)
 
 	<-ctx.Done()
 

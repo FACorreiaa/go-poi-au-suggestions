@@ -219,6 +219,400 @@ Start simple. For your post-MVP, handle a few common refinement types. You don't
 
 ___
 
+Okay, let's break down how you'd test Gemini for structured JSON output and then how the function calling part for coordinates would work.
+
+## Part 1: Testing Gemini for Direct JSON Output
+
+You want to see if Gemini can directly generate the JSON in your desired format. This relies heavily on clear instructions in your prompt.
+
+**1. Define Your Go Structs for the Desired JSON:**
+
+It's good practice to define Go structs that match the JSON structure you want to receive. This makes unmarshalling and validation easy.
+
+```go
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/api/option"
+)
+
+// POICoordinates represents the geographic coordinates of a POI
+type POICoordinates struct {
+	Latitude  float64 `json:"lat"`
+	Longitude float64 `json:"lon"`
+}
+
+// PointOfInterest represents a single point of interest with its details
+type PointOfInterest struct {
+	Name        string         `json:"name"`
+	Coordinates POICoordinates `json:"coordinates"`
+	// You could add more fields here if Gemini is to generate them,
+	// e.g., DescriptionShort string `json:"description_short,omitempty"`
+}
+
+func main() {
+	ctx := context.Background()
+	apiKey := os.Getenv("GEMINI_API_KEY") // Make sure to set your API key
+	if apiKey == "" {
+		log.Fatal("GEMINI_API_KEY environment variable not set.")
+	}
+
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	if err != nil {
+		log.Fatalf("Failed to create new GenAI client: %v", err)
+	}
+	defer client.Close()
+
+	model := client.GenerativeModel("gemini-1.5-pro-latest") // Or your preferred model
+
+	// --- Test: Direct JSON Output ---
+	fmt.Println("--- Testing Direct JSON Output ---")
+
+	// Construct a very specific prompt
+	// The key is to be EXTREMELY explicit about the JSON structure.
+	jsonPrompt := `
+Please provide a list of 5 famous points of interest in Berlin, Germany.
+Format your response STRICTLY as a JSON array. Each object in the array should represent a point of interest and must have the following structure:
+{
+  "name": "Name of the POI",
+  "coordinates": {
+    "lat": <latitude_float>,
+    "lon": <longitude_float>
+  }
+}
+Do NOT include any text or explanation before or after the JSON array. Only output the JSON.
+For example:
+[
+  {
+    "name": "Example POI",
+    "coordinates": {
+      "lat": 52.0000,
+      "lon": 13.0000
+    }
+  }
+  // ... more POIs
+]
+Now, generate the list for 5 points of interest in Berlin.
+`
+	resp, err := model.GenerateContent(ctx, genai.Text(jsonPrompt))
+	if err != nil {
+		log.Fatalf("Failed to generate content: %v", err)
+	}
+
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		log.Fatal("Received an empty response from the model.")
+	}
+
+	// Extract the text content
+	// Assuming the first part is the text we want
+	jsonText, ok := resp.Candidates[0].Content.Parts[0].(genai.Text)
+	if !ok {
+		log.Fatalf("Unexpected response part type: %T", resp.Candidates[0].Content.Parts[0])
+	}
+
+	fmt.Printf("Raw AI Response:\n%s\n\n", string(jsonText))
+
+	// Try to unmarshal the response into our Go structs
+	var pois []PointOfInterest
+	err = json.Unmarshal([]byte(jsonText), &pois)
+	if err != nil {
+		log.Fatalf("Failed to unmarshal JSON response: %v\nIs the AI output valid JSON matching the schema?", err)
+	}
+
+	fmt.Printf("Successfully Unmarshalled POIs (%d found):\n", len(pois))
+	for i, poi := range pois {
+		fmt.Printf("%d. Name: %s, Lat: %f, Lon: %f\n", i+1, poi.Name, poi.Coordinates.Latitude, poi.Coordinates.Longitude)
+	}
+
+	if len(pois) != 5 {
+		fmt.Printf("Warning: Expected 5 POIs, but received %d.\n", len(pois))
+	}
+	fmt.Println("--- Direct JSON Output Test Complete ---")
+}
+```
+
+**Explanation:**
+
+1.  **Go Structs:** `PointOfInterest` and `POICoordinates` mirror your target JSON.
+2.  **Prompt Engineering:** This is the most critical part.
+    *   **Be Explicit:** Tell the model *exactly* what JSON structure you want. Providing an example within the prompt is highly effective.
+    *   **Strict Formatting:** Use phrases like "STRICTLY as a JSON array," "must have the following structure," "Do NOT include any text...before or after."
+    *   **Constraints:** "5 famous points of interest in Berlin."
+3.  **API Call:** Standard call to `model.GenerateContent`.
+4.  **Response Extraction:** Get the text part from the response.
+5.  **Unmarshal:** Attempt to `json.Unmarshal` the AI's text output into your `[]PointOfInterest` slice. If this succeeds, Gemini followed your instructions. If it fails, the output wasn't valid JSON or didn't match your schema.
+6.  **Validation:** Check if you got the expected number of POIs and print them.
+
+**Running this test will show you how well the model adheres to strict JSON formatting instructions.** Sometimes, LLMs can still add small conversational preambles or postscripts, which would break the JSON parsing. Your prompt needs to be firm about avoiding that.
+
+## Part 2: How Function Calling for Coordinates Would Work
+
+Function calling is a more robust way to get structured data, especially when that data should come from *your* system (like coordinates from your PostGIS database) rather than being hallucinated or looked up by the LLM.
+
+**Scenario:** Gemini is asked to plan an itinerary and needs coordinates for a POI it has decided to include (e.g., "Brandenburg Gate").
+
+**1. Define the Go Function in Your Backend:**
+
+This function will query your database.
+
+```go
+// In your backend (e.g., poi_service.go or poi_repository.go)
+
+package types // Or your relevant package
+
+// POIDataForLLM is what your Go function will return
+type POIDataForLLM struct {
+	Name        string         `json:"name"`
+	Coordinates POICoordinates `json:"coordinates"`
+	Address     string         `json:"address,omitempty"` // Optional
+	// Add any other basic info useful for the LLM
+}
+
+// This is a simplified example. In a real app, this would use your pgx connection pool.
+func (s *YourPOIService) GetPOICoordinatesAndBasicInfo(ctx context.Context, poiName string, cityName string) (*POIDataForLLM, error) {
+	s.logger.InfoContext(ctx, "Function Call: GetPOICoordinatesAndBasicInfo", "poiName", poiName, "cityName", cityName)
+	// --- Database Query Logic ---
+	// 1. Find cityID from cityName (if necessary)
+	// 2. Query 'points_of_interest' table:
+	//    SELECT name, ST_Y(location) AS latitude, ST_X(location) AS longitude, address
+	//    FROM points_of_interest
+	//    WHERE name ILIKE $1 -- Use appropriate matching
+	//    AND city_id = (SELECT id FROM cities WHERE name ILIKE $2 LIMIT 1) -- If city context is needed
+	//    LIMIT 1;
+	//
+	// For this example, let's mock the DB call:
+	if strings.ToLower(poiName) == "brandenburg gate" && strings.ToLower(cityName) == "berlin" {
+		return &POIDataForLLM{
+			Name: "Brandenburg Gate",
+			Coordinates: POICoordinates{
+				Latitude:  52.516275,
+				Longitude: 13.377704,
+			},
+			Address: "Pariser Platz, 10117 Berlin, Germany",
+		}, nil
+	}
+	if strings.ToLower(poiName) == "reichstag building" && strings.ToLower(cityName) == "berlin" {
+		return &POIDataForLLM{
+			Name: "Reichstag Building",
+			Coordinates: POICoordinates{
+				Latitude:  52.518623,
+				Longitude: 13.376187,
+			},
+			Address: "Platz der Republik 1, 11011 Berlin, Germany",
+		}, nil
+	}
+	return nil, fmt.Errorf("POI '%s' in city '%s' not found in database", poiName, cityName)
+}
+```
+
+**2. Declare the Function to Gemini:**
+
+When you make a call to `GenerateContent` where you expect an itinerary, you'll include "tool" declarations.
+
+```go
+// In your main generation logic (e.g., where you handle user requests for itineraries)
+
+// Define the function declaration for Gemini
+getPOICoordsFuncDecl := &genai.FunctionDeclaration{
+	Name:        "getPOICoordinatesAndBasicInfo",
+	Description: "Gets the precise geographic coordinates (latitude and longitude) and basic information (like address) for a known Point of Interest (POI) in a specific city from the WanderWiseAI database.",
+	Parameters: &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"poiName": {
+				Type:        genai.TypeString,
+				Description: "The common name of the Point of Interest (e.g., 'Eiffel Tower', 'Brandenburg Gate').",
+			},
+			"cityName": {
+				Type:        genai.TypeString,
+				Description: "The city where the POI is located (e.g., 'Paris', 'Berlin').",
+			},
+		},
+		Required: []string{"poiName", "cityName"},
+	},
+}
+
+// Create a "Tool" that contains your function declaration(s)
+tools := []*genai.Tool{
+	{FunctionDeclarations: []*genai.FunctionDeclaration{getPOICoordsFuncDecl}},
+}
+
+// ... (inside your main function or handler)
+// model := client.GenerativeModel("gemini-1.5-pro-latest") // Or your preferred model
+// model.Tools = tools // Attach the tools to the model instance for this call if it's a single call
+                      // Or pass it with StartChat for chat sessions
+
+// --- Example Usage with Function Calling ---
+fmt.Println("\n--- Testing Function Calling for Coordinates ---")
+
+// Start a chat session to handle multi-turn for function calling
+chat := model.StartChat()
+chat.History = []*genai.Content{} // Start with empty history for this example
+
+initialPrompt := "Plan a short itinerary for me in Berlin that includes Brandenburg Gate and the Reichstag Building. For each, I need their coordinates."
+
+fmt.Printf("Sending initial prompt to Gemini: %s\n", initialPrompt)
+// Send initial prompt, making sure tools are available (often set on the model or passed with StartChat)
+// For go-genai, tools are often passed to the model.GenerativeModel itself if they apply to all calls,
+// or might be part of the chat session setup.
+// The `model.Tools = tools` above might be how it's done, or when calling GenerateContent/SendMessage.
+// The exact mechanism for making tools available for a chat session should be checked in go-genai docs.
+// For this example, let's assume the tools are implicitly available to `chat.SendMessage` if set on `model`.
+// A more explicit way if StartChat takes tools:
+// model.Tools = tools // For this example's simplicity
+// chat := model.StartChat()
+
+// If tools are not set on the model globally, you might need to set them per call or for the chat session
+// For example, some SDKs might allow:
+// modelForFuncCall := client.GenerativeModel("gemini-1.5-pro-latest")
+// modelForFuncCall.Tools = tools
+// chat := modelForFuncCall.StartChat()
+
+
+// IMPORTANT: To make tools available for a chat session, they are usually part of the `GenerativeModel` instance.
+// If you only want tools for specific messages, you might send them with GenerateContent.
+// Let's assume `model.Tools = tools` has made the tools available for this `model` instance.
+
+resp, err = chat.SendMessage(ctx, genai.Text(initialPrompt)) // Send the user's request
+if err != nil {
+	log.Fatalf("Failed to send message (initial prompt): %v", err)
+}
+
+// Loop to handle function calls
+for {
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+		log.Println("No content in response, breaking loop.")
+		break
+	}
+	candidate := resp.Candidates[0]
+
+	// Check if the response contains a function call
+	if len(candidate.Content.Parts) > 0 {
+		if fc, ok := candidate.Content.Parts[0].(genai.FunctionCall); ok {
+			fmt.Printf("Gemini wants to call function: %s\n", fc.Name)
+			if fc.Name == "getPOICoordinatesAndBasicInfo" {
+				poiName, _ := fc.Args["poiName"].(string)
+				cityName, _ := fc.Args["cityName"].(string)
+				fmt.Printf("  Args: poiName='%s', cityName='%s'\n", poiName, cityName)
+
+				// --- Execute your Go function ---
+				// In a real app, this would call your POI service instance
+				// var poiService YourPOIService // Initialize your service
+				// poiData, err := poiService.GetPOICoordinatesAndBasicInfo(ctx, poiName, cityName)
+				// Mocking the call for this example:
+				poiData, err := mockGetPOICoordinatesAndBasicInfo(ctx, poiName, cityName)
+
+
+				functionResponseParts := []genai.Part{}
+				if err != nil {
+					// Inform Gemini that the function call failed
+					fmt.Printf("  Go function execution failed: %v\n", err)
+					// You might want to return a structured error or just text
+					functionResponseParts = append(functionResponseParts, genai.Text(fmt.Sprintf("Error executing function: %v", err)))
+				} else {
+					// Serialize your function's output (struct) to JSON to send back
+					// The SDK expects parts, and structured data is often sent as a genai. लिहाजाType for FunctionResponse
+					// Let's try sending the struct directly if the SDK handles it, or marshal to JSON if needed.
+					// The `genai.FunctionResponse` part expects `Response any` which can be your struct.
+					fmt.Printf("  Go function executed successfully. Returning data for %s.\n", poiData.Name)
+				}
+
+				// Send the function response back to Gemini
+                // The actual data sent back needs to be in a format Gemini expects for the function response.
+                // The `genai.FunctionResponse` takes `Name` and `Response any`.
+                // The `Response` should be the data structure that fulfills the function's purpose.
+				resp, err = chat.SendMessage(ctx,
+					&genai.FunctionResponse{Name: fc.Name, Response: poiData}, // Pass your struct directly
+				)
+				if err != nil {
+					log.Fatalf("Failed to send message (function response): %v", err)
+				}
+				continue // Continue the loop to get Gemini's next response
+			}
+		}
+	}
+
+	// If it's not a function call, it's (hopefully) the final text response
+	fmt.Println("Gemini's Final Response (after function calls if any):")
+	for _, part := range candidate.Content.Parts {
+		if txt, ok := part.(genai.Text); ok {
+			fmt.Printf("%s", string(txt))
+		}
+	}
+	fmt.Println("\n--- Function Calling Test Complete ---")
+	break // Exit loop after processing the final response
+}
+
+// Mock function for the example main, replace with your actual service call
+func mockGetPOICoordinatesAndBasicInfo(ctx context.Context, poiName string, cityName string) (*types.POIDataForLLM, error) {
+	if strings.ToLower(poiName) == "brandenburg gate" && strings.ToLower(cityName) == "berlin" {
+		return &types.POIDataForLLM{
+			Name: "Brandenburg Gate",
+			Coordinates: types.POICoordinates{
+				Latitude:  52.516275,
+				Longitude: 13.377704,
+			},
+			Address: "Pariser Platz, 10117 Berlin, Germany",
+		}, nil
+	}
+	if strings.ToLower(poiName) == "reichstag building" && strings.ToLower(cityName) == "berlin" {
+		return &types.POIDataForLLM{
+			Name: "Reichstag Building",
+			Coordinates: types.POICoordinates{
+				Latitude:  52.518623,
+				Longitude: 13.376187,
+			},
+			Address: "Platz der Republik 1, 11011 Berlin, Germany",
+		}, nil
+	}
+	return nil, fmt.Errorf("MOCK_POI_NOT_FOUND: POI '%s' in city '%s' not found", poiName, cityName)
+}
+```
+
+*(Please ensure you have a `types` package or adjust the struct definitions and `mockGetPOICoordinatesAndBasicInfo` accordingly. The function calling loop is a common pattern.)*
+
+**Explanation of Function Calling Flow:**
+
+1.  **Declaration (`getPOICoordsFuncDecl`):**
+    *   `Name`: The exact name your Go function will be identified by.
+    *   `Description`: **Crucial!** This tells Gemini *when* and *why* to call this function. Make it clear and descriptive.
+    *   `Parameters`: Defines the input schema Gemini should provide when calling the function (e.g., `poiName` and `cityName` are required strings).
+2.  **Tools:** You bundle your function declarations into a `Tool`. This `Tool` is then associated with your model or chat session.
+3.  **Initial Prompt:** You send a prompt like "Plan an itinerary for Berlin including Brandenburg Gate. I need coordinates."
+4.  **Gemini's Response (Function Call):**
+    *   Instead of directly answering, Gemini might respond with a `Content` part of type `genai.FunctionCall`.
+    *   This `FunctionCall` will contain the `Name: "getPOICoordinatesAndBasicInfo"` and `Args: {"poiName": "Brandenburg Gate", "cityName": "Berlin"}`.
+5.  **Your Go Backend Acts:**
+    *   You detect this `FunctionCall`.
+    *   You parse the `Args`.
+    *   You execute your *actual* Go function (`yourPOIService.GetPOICoordinatesAndBasicInfo(ctx, "Brandenburg Gate", "Berlin")`). This function queries your PostGIS database.
+6.  **Send Function Response Back to Gemini:**
+    *   Your Go function returns a struct (e.g., `POIDataForLLM`) or an error.
+    *   You construct a new message to send to `chat.SendMessage`. This message will contain a `genai.FunctionResponse` part.
+    *   `Name`: Must match the function call name.
+    *   `Response`: The data returned by your Go function (your `POIDataForLLM` struct). The SDK should handle serializing this.
+7.  **Gemini's Final Answer:**
+    *   Gemini receives the data from your function.
+    *   It now uses this data (the actual coordinates for Brandenburg Gate) to formulate its final response to the user, e.g., "Okay, for Brandenburg Gate, the coordinates are Lat: 52.516275, Lon: 13.377704. Next..."
+
+**Benefits of Function Calling for this:**
+
+*   **Accuracy:** Coordinates come from *your* authoritative database, not the LLM's knowledge (which can be outdated or slightly off).
+*   **Data Control:** You control exactly what information is exposed.
+*   **Integration:** Seamlessly integrates the LLM's planning capabilities with your backend data.
+*   **Structured Data Exchange:** Ensures data passed between your system and the LLM is well-defined.
+
+When Gemini plans an itinerary, it might generate a list of POI names. Then, for each POI, it could make a separate function call to your backend to get the coordinates and other essential data you want to pull from your DB rather than having the LLM generate it. Your backend then assembles the complete itinerary using the LLM's narrative and the structured data fetched via function calls.
+
+___
+
 Okay, here is the provided text formatted as Markdown. It appears to be two distinct answers, so I've formatted them as such.
 
 ---

@@ -11,7 +11,7 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_search_profiles"
+	userSearchProfile "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_search_profiles"
 	userSettings "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_settings"
 	userTags "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_tags"
 )

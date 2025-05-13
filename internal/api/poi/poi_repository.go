@@ -2,9 +2,10 @@ package poi
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"github.com/google/uuid"
@@ -32,6 +33,12 @@ func NewPOIRepository(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresPOIRe
 }
 
 func (r *PostgresPOIRepository) SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
+	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	// Validate coordinates
 	if poi.Latitude < -90 || poi.Latitude > 90 || poi.Longitude < -180 || poi.Longitude > 180 {
 		return uuid.Nil, fmt.Errorf("invalid coordinates: lat=%f, lon=%f", poi.Latitude, poi.Longitude)
@@ -48,31 +55,50 @@ func (r *PostgresPOIRepository) SavePoi(ctx context.Context, poi types.POIDetail
         ) RETURNING id
     `
 	var id uuid.UUID
-	err := r.pgpool.QueryRow(ctx, query,
+	if err = tx.QueryRow(ctx, query,
 		poi.Name, poi.DescriptionPOI, poi.Longitude, poi.Latitude, cityID,
 		poi.Category, "wanderwise_ai", poi.DescriptionPOI,
-	).Scan(&id)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to save POI: %w", err)
+	).Scan(&id); err != nil {
+		if err == pgx.ErrNoRows {
+			return uuid.Nil, nil
+		}
+		return uuid.Nil, fmt.Errorf("failed to insert POI: %w", err)
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	// Log the successful insertion
+	r.logger.Info("POI saved successfully", slog.String("name", poi.Name), slog.String("id", id.String()))
+
 	return id, nil
 }
 
 func (r *PostgresPOIRepository) FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetail, error) {
+	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	query := `
         SELECT name, description, ST_Y(location) as lat, ST_X(location) as lon, poi_type
         FROM points_of_interest
         WHERE name = $1 AND city_id = $2
     `
 	var poi types.POIDetail
-	err := r.pgpool.QueryRow(ctx, query, name, cityID).Scan(
+	if err = tx.QueryRow(ctx, query, name, cityID).Scan(
 		&poi.Name, &poi.DescriptionPOI, &poi.Latitude, &poi.Longitude, &poi.Category,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("failed to find POI: %w", err)
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	// Log the successful retrieval
+	r.logger.Info("POI found successfully", slog.String("name", poi.Name), slog.String("cityID", cityID.String()))
+
 	return &poi, nil
 }

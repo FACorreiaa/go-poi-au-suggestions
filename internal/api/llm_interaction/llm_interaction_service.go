@@ -2,6 +2,7 @@ package llmInteraction
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -457,21 +458,24 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 		//Country:   "Portugal", // Adjust based on input or configuration
 		AiSummary: itinerary.OverallDescription,
 	}
+	var cityID uuid.UUID
 
 	// TODO review
-	// city, err := l.cityRepo.FindCityByNameAndCountry(ctx, cityName, "Portugal")
-	// if err != nil && err != sql.ErrNoRows {
-	// 	fmt.Println("City detail inside FindCityByNameAndCountry")
+	city, err := l.cityRepo.FindCityByNameAndCountry(ctx, cityName)
+	if err != nil && err != sql.ErrNoRows {
+		l.logger.ErrorContext(ctx, "Failed to check city existence", slog.Any("error", err))
+	}
 
-	// 	l.logger.ErrorContext(ctx, "Failed to check city existence", slog.Any("error", err))
-	// 	return nil, fmt.Errorf("failed to check city: %w", err)
-	// }
-	cityID, err := l.cityRepo.SaveCity(ctx, cityDetail)
-	if err != nil {
-		fmt.Println("City detail inside SaveCity")
-
-		l.logger.ErrorContext(ctx, "Failed to save city", slog.Any("error", err))
-		return nil, fmt.Errorf("failed to save city: %w", err)
+	if city == nil {
+		// City doesn't exist, save it
+		cityID, err = l.cityRepo.SaveCity(ctx, cityDetail)
+		if err != nil {
+			l.logger.ErrorContext(ctx, "Failed to save city", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to save city: %w", err)
+		}
+	} else {
+		// City exists, use its ID
+		cityID = city.ID
 	}
 
 	// TODO review

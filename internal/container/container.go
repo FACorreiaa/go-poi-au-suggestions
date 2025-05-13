@@ -9,7 +9,9 @@ import (
 	database "github.com/FACorreiaa/go-poi-au-suggestions/app/db"
 	"github.com/FACorreiaa/go-poi-au-suggestions/config"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
 	llmInteraction "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_interaction"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
 	userSearchProfile "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_search_profiles"
@@ -78,8 +80,19 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	userSearchProfilesHandler := userSearchProfile.NewUserHandler(userSearchProfilesService, logger)
 	// Create and return the container
 
+	// city repository
+	cityRepo := city.NewCityRepository(pool, logger)
+
+	poiRepo := poi.NewPOIRepository(pool, logger)
 	// initialise the LLM interaction service
-	llmInteractionService := llmInteraction.NewLlmInteractiontService(userInterestRepo, userSearchProfilesRepo, userTagsRepo, logger)
+	llmInteractionRepo := llmInteraction.NewPostgresLlmInteractionRepo(pool, logger)
+	llmInteractionService := llmInteraction.NewLlmInteractiontService(userInterestRepo,
+		userSearchProfilesRepo,
+		userTagsRepo,
+		llmInteractionRepo,
+		cityRepo,
+		poiRepo,
+		logger)
 	llmInteractionHandler := llmInteraction.NewLLMHandler(llmInteractionService, logger)
 	return &Container{
 		Config:                cfg,

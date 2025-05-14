@@ -23,8 +23,18 @@ type AIItineraryResponse struct {
 	ItineraryName      string      `json:"itinerary_name"`
 	OverallDescription string      `json:"overall_description"`
 	PointsOfInterest   []POIDetail `json:"points_of_interest"`
-	//You might add other dynamic categories here if the AI generates them
-	//For example:
-	Restaurants []POIDetail `json:"restaurants,omitempty"`
-	Bars        []POIDetail `json:"bars,omitempty"`
+	Restaurants        []POIDetail `json:"restaurants,omitempty"`
+	Bars               []POIDetail `json:"bars,omitempty"`
+}
+
+type GeneralCityData struct {
+	City        string `json:"city"`
+	Country     string `json:"country"`
+	Description string `json:"description"`
+}
+
+type AiCityResponse struct {
+	GeneralCityData     GeneralCityData     `json:"general_city_data"`
+	PointsOfInterest    []POIDetail         `json:"points_of_interest"`
+	AIItineraryResponse AIItineraryResponse `json:"itinerary_response"`
 }

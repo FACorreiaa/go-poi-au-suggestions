@@ -152,10 +152,10 @@ func (u *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r *http.
 
 	// 5. Send successful response
 	l.InfoContext(ctx, "Successfully generated itinerary response",
-		slog.String("itinerary_name", itineraryResponse.ItineraryName),
+		slog.String("itinerary_name", itineraryResponse.AIItineraryResponse.ItineraryName),
 		slog.Int("poi_count", len(itineraryResponse.PointsOfInterest)))
 
-	span.SetAttributes(attribute.String("app.itinerary.name", itineraryResponse.ItineraryName))
+	span.SetAttributes(attribute.String("app.itinerary.name", itineraryResponse.AIItineraryResponse.ItineraryName))
 	span.SetStatus(codes.Ok, "Itinerary generated")
 	l.InfoContext(ctx, "User preference profile created successfully")
 	api.WriteJSONResponse(w, r, http.StatusCreated, itineraryResponse)

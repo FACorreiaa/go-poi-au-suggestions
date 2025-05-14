@@ -16,7 +16,7 @@ var _ CityRepository = (*PostgresCityRepository)(nil)
 
 type CityRepository interface {
 	SaveCity(ctx context.Context, city types.CityDetail) (uuid.UUID, error)
-	FindCityByNameAndCountry(ctx context.Context, name string) (*types.CityDetail, error)
+	FindCityByNameAndCountry(ctx context.Context, city, country string) (*types.CityDetail, error)
 }
 
 type PostgresCityRepository struct {
@@ -58,7 +58,7 @@ func (r *PostgresCityRepository) SaveCity(ctx context.Context, city types.CityDe
 	return id, nil
 }
 
-func (r *PostgresCityRepository) FindCityByNameAndCountry(ctx context.Context, name string) (*types.CityDetail, error) {
+func (r *PostgresCityRepository) FindCityByNameAndCountry(ctx context.Context, city, country string) (*types.CityDetail, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -69,11 +69,11 @@ func (r *PostgresCityRepository) FindCityByNameAndCountry(ctx context.Context, n
 	query := `
         SELECT id, name, country, state_province, ai_summary
         FROM cities
-        WHERE name = $1 
+        WHERE name = $1 AND country = $2
     `
-	var city types.CityDetail
-	if err = tx.QueryRow(ctx, query, name).Scan(
-		&city.ID, &city.Name, &city.Country, &city.StateProvince, &city.AiSummary,
+	var cityDetail types.CityDetail
+	if err = tx.QueryRow(ctx, query, city, country).Scan(
+		&cityDetail.ID, &cityDetail.Name, &cityDetail.Country, &cityDetail.StateProvince, &cityDetail.AiSummary,
 	); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -84,5 +84,5 @@ func (r *PostgresCityRepository) FindCityByNameAndCountry(ctx context.Context, n
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return &city, nil
+	return &cityDetail, nil
 }

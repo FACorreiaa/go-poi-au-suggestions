@@ -38,3 +38,14 @@ type AiCityResponse struct {
 	PointsOfInterest    []POIDetail         `json:"points_of_interest"`
 	AIItineraryResponse AIItineraryResponse `json:"itinerary_response"`
 }
+
+type GenAIResponse struct {
+	City                 string
+	Country              string
+	CityDescription      string
+	ItineraryName        string
+	ItineraryDescription string
+	GeneralPOI           []POIDetail
+	PersonalisedPOI      []POIDetail
+	Err                  error
+}

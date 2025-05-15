@@ -22,6 +22,15 @@ import (
 	"google.golang.org/genai"
 )
 
+const defaultTemperature = 0.5
+
+type ChatSession struct {
+	History []genai.Chat
+}
+
+var sessions = make(map[string]*ChatSession) // In-memory session store
+var sessionsMu sync.Mutex                    // Mutex for thread-safe access
+
 // Ensure implementation satisfies the interface
 var _ LlmInteractiontService = (*LlmInteractiontServiceImpl)(nil)
 
@@ -162,7 +171,7 @@ func NewLlmInteractiontService(interestRepo userInterest.UserInterestRepo,
 // 		cityName, // For the overall_description part
 // 	)
 
-// 	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.5)}
+// 	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)}
 // 	response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
 // 	if err != nil {
 // 		log.Fatal(err)
@@ -277,52 +286,22 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 	}
 
 	// Common user preferences for prompts
-	userPrefs := fmt.Sprintf(`
-    - Search Radius: %.1f km
-    - Preferred Time: %s
-    - Budget Level: %d (0=any, 1=cheap, 4=expensive)
-    - Prefers Outdoor Seating: %t
-    - Prefers Dog Friendly: %t
-    - Preferred Dietary Needs: [%s]
-    - Preferred Pace: %s
-    - Prefers Accessible POIs: %t
-    - Preferred Vibes: [%s]
-    - Preferred Transport: %s
-`, searchProfile.SearchRadiusKm, searchProfile.PreferredTime, searchProfile.BudgetLevel,
-		searchProfile.PreferOutdoorSeating, searchProfile.PreferDogFriendly, strings.Join(searchProfile.DietaryNeeds, ", "),
-		searchProfile.PreferredPace, searchProfile.PreferAccessiblePOIs, strings.Join(searchProfile.PreferredVibes, ", "),
-		searchProfile.PreferredTransport)
+	userPrefs := GetUserPreferencesPrompt(searchProfile)
 
 	// Define result struct to collect data from goroutines
-	type result struct {
-		city                 string
-		country              string
-		cityDescription      string
-		itineraryName        string
-		itineraryDescription string
-		generalPOI           []types.POIDetail
-		personalisedPOI      []types.POIDetail
-		err                  error
-	}
-	resultCh := make(chan result, 3)
+
+	resultCh := make(chan types.GenAIResponse, 3)
 	var wg sync.WaitGroup
 	wg.Add(3)
 
 	// **Goroutine 1: Generate city, country, and description**
 	go func() {
 		defer wg.Done()
-		prompt := fmt.Sprintf(`
-            Generate the country this city belongs to and a brief description of %s.
-            Return the response STRICTLY as a JSON object with:
-            {
-            "city": "%s",
-            "country": "the country of the city",
-            "description": "A brief description of the city, including its history and main attractions."
-            }`, cityName, cityName)
-		config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.5)}
+		prompt := GetCityDescriptionPrompt(cityName)
+		config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)}
 		response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
 		if err != nil {
-			resultCh <- result{err: fmt.Errorf("failed to generate city data: %w", err)}
+			resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to generate city data: %w", err)}
 			return
 		}
 
@@ -334,7 +313,7 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 			}
 		}
 		if txt == "" {
-			resultCh <- result{err: fmt.Errorf("no valid city data content from AI")}
+			resultCh <- types.GenAIResponse{Err: fmt.Errorf("no valid city data content from AI")}
 			return
 		}
 
@@ -345,40 +324,27 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 			Description string `json:"description"`
 		}
 		if err := json.Unmarshal([]byte(jsonStr), &cityData); err != nil {
-			resultCh <- result{err: fmt.Errorf("failed to parse city data JSON: %w", err)}
+			resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to parse city data JSON: %w", err)}
 			return
 		}
 
-		resultCh <- result{
-			city:            cityData.City,
-			country:         cityData.Country,
-			cityDescription: cityData.Description,
+		resultCh <- types.GenAIResponse{
+			City:            cityData.City,
+			Country:         cityData.Country,
+			CityDescription: cityData.Description,
 		}
 	}()
 
 	// **Goroutine 2: Generate general points of interest**
 	go func() {
 		defer wg.Done()
-		prompt := fmt.Sprintf(`
-            Generate a list of maximum 5 general points of interest that people usually see no matter the taste or preference for this city %s.
-            Return the response STRICTLY as a JSON object with:
-            {
-            "points_of_interest": [
-                {
-                "name": "Name of the Point of Interest",
-                "latitude": <float>,
-                "longitude": <float>,
-                "category": "Primary category (e.g., Museum, Historical Site, Park, Restaurant, Bar)",
-                "description_poi": "A 2-3 sentence description of this specific POI and why it's relevant."
-                }
-            ]
-            }`, cityName)
+		prompt := GetGeneralPOI(cityName)
 		//startTime := time.Now()
-		config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.5)}
+		config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)}
 		response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
 		//latencyMs := int(time.Since(startTime).Milliseconds())
 		if err != nil {
-			resultCh <- result{err: fmt.Errorf("failed to generate general POIs: %w", err)}
+			resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to generate general POIs: %w", err)}
 			return
 		}
 
@@ -390,7 +356,7 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 			}
 		}
 		if txt == "" {
-			resultCh <- result{err: fmt.Errorf("no valid general POI content from AI")}
+			resultCh <- types.GenAIResponse{Err: fmt.Errorf("no valid general POI content from AI")}
 			return
 		}
 
@@ -399,38 +365,22 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 			PointsOfInterest []types.POIDetail `json:"points_of_interest"`
 		}
 		if err := json.Unmarshal([]byte(jsonStr), &poiData); err != nil {
-			resultCh <- result{err: fmt.Errorf("failed to parse general POI JSON: %w", err)}
+			resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to parse general POI JSON: %w", err)}
 			return
 		}
 
-		resultCh <- result{generalPOI: poiData.PointsOfInterest}
+		resultCh <- types.GenAIResponse{GeneralPOI: poiData.PointsOfInterest}
 	}()
 
 	// **Goroutine 3: Generate itinerary name, description, and personalized POIs**
 	go func() {
 		defer wg.Done()
-		prompt := fmt.Sprintf(`
-            Generate a creative itinerary name, a personalized description, and a list of personalized points of interest for %s based on the user's interests: [%s].%s
-            The user's general preferences are:
-            %s
-            Return the response STRICTLY as a JSON object with:
-            {
-            "itinerary_name": "A creative and descriptive name for this itinerary",
-            "overall_description": "A 1 paragraph short descriptive story about exploring %s with these interests and preferences.",
-            "points_of_interest": [
-                {
-                "name": "Name of the Point of Interest",
-                "latitude": <float>,
-                "longitude": <float>,
-                "category": "Primary category (e.g., Museum, Historical Site, Park, Restaurant, Bar)",
-                "description_poi": "A 2-3 very short sentence description of this specific POI and why it's relevant to the user's interests."
-                }
-            ]
-            }`, cityName, strings.Join(interestNames, ", "), tagsPromptPart, userPrefs, cityName)
-		config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.5)}
+		prompt := GetPersonalizedPOI(interestNames, cityName, tagsPromptPart, userPrefs)
+
+		config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)}
 		response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
 		if err != nil {
-			resultCh <- result{err: fmt.Errorf("failed to generate personalized itinerary: %w", err)}
+			resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to generate personalized itinerary: %w", err)}
 			return
 		}
 
@@ -442,7 +392,7 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 			}
 		}
 		if txt == "" {
-			resultCh <- result{err: fmt.Errorf("no valid personalized itinerary content from AI")}
+			resultCh <- types.GenAIResponse{Err: fmt.Errorf("no valid personalized itinerary content from AI")}
 			return
 		}
 
@@ -453,7 +403,7 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 			PointsOfInterest   []types.POIDetail `json:"points_of_interest"`
 		}
 		if err := json.Unmarshal([]byte(jsonStr), &itineraryData); err != nil {
-			resultCh <- result{err: fmt.Errorf("failed to parse personalized itinerary JSON: %w", err)}
+			resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to parse personalized itinerary JSON: %w", err)}
 			return
 		}
 
@@ -473,10 +423,10 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 			// Decide whether to fail the request or continue
 		}
 
-		resultCh <- result{
-			itineraryName:        itineraryData.ItineraryName,
-			itineraryDescription: itineraryData.OverallDescription,
-			personalisedPOI:      itineraryData.PointsOfInterest,
+		resultCh <- types.GenAIResponse{
+			ItineraryName:        itineraryData.ItineraryName,
+			ItineraryDescription: itineraryData.OverallDescription,
+			PersonalisedPOI:      itineraryData.PointsOfInterest,
 		}
 	}()
 
@@ -490,24 +440,24 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 	var itinerary types.AiCityResponse
 	var errors []error
 	for res := range resultCh {
-		if res.err != nil {
-			errors = append(errors, res.err)
+		if res.Err != nil {
+			errors = append(errors, res.Err)
 			continue
 		}
-		if res.city != "" {
-			itinerary.GeneralCityData.City = res.city
-			itinerary.GeneralCityData.Country = res.country
-			itinerary.GeneralCityData.Description = res.cityDescription
+		if res.City != "" {
+			itinerary.GeneralCityData.City = res.City
+			itinerary.GeneralCityData.Country = res.Country
+			itinerary.GeneralCityData.Description = res.CityDescription
 		}
-		if res.itineraryName != "" {
-			itinerary.AIItineraryResponse.ItineraryName = res.itineraryName
-			itinerary.AIItineraryResponse.OverallDescription = res.itineraryDescription
+		if res.ItineraryName != "" {
+			itinerary.AIItineraryResponse.ItineraryName = res.ItineraryName
+			itinerary.AIItineraryResponse.OverallDescription = res.ItineraryDescription
 		}
-		if len(res.generalPOI) > 0 {
-			itinerary.PointsOfInterest = res.generalPOI
+		if len(res.GeneralPOI) > 0 {
+			itinerary.PointsOfInterest = res.GeneralPOI
 		}
-		if len(res.personalisedPOI) > 0 {
-			itinerary.AIItineraryResponse.PointsOfInterest = res.personalisedPOI
+		if len(res.PersonalisedPOI) > 0 {
+			itinerary.AIItineraryResponse.PointsOfInterest = res.PersonalisedPOI
 		}
 	}
 

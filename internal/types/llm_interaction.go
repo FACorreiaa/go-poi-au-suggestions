@@ -28,9 +28,19 @@ type AIItineraryResponse struct {
 }
 
 type GeneralCityData struct {
-	City        string `json:"city"`
-	Country     string `json:"country"`
-	Description string `json:"description"`
+	City            string  `json:"city"`
+	Country         string  `json:"country"`
+	StateProvince   string  `json:"state_province,omitempty"`
+	Description     string  `json:"description"`
+	CenterLatitude  float64 `json:"center_latitude,omitempty"`
+	CenterLongitude float64 `json:"center_longitude,omitempty"`
+	Population      string  `json:"population"`
+	Area            string  `json:"area"`
+	Timezone        string  `json:"timezone"`
+	Language        string  `json:"language"`
+	Weather         string  `json:"weather"`
+	Attractions     string  `json:"attractions"`
+	History         string  `json:"history"`
 }
 
 type AiCityResponse struct {
@@ -40,12 +50,15 @@ type AiCityResponse struct {
 }
 
 type GenAIResponse struct {
-	City                 string
-	Country              string
-	CityDescription      string
-	ItineraryName        string
-	ItineraryDescription string
-	GeneralPOI           []POIDetail
-	PersonalisedPOI      []POIDetail
-	Err                  error
+	City                 string      `json:"city,omitempty"`
+	Country              string      `json:"country,omitempty"`
+	StateProvince        string      `json:"state_province,omitempty"` // New
+	CityDescription      string      `json:"city_description,omitempty"`
+	Latitude             float64     `json:"latitude,omitempty"`  // New: for city center
+	Longitude            float64     `json:"longitude,omitempty"` // New: for city center
+	ItineraryName        string      `json:"itinerary_name,omitempty"`
+	ItineraryDescription string      `json:"itinerary_description,omitempty"`
+	GeneralPOI           []POIDetail `json:"general_poi,omitempty"`
+	PersonalisedPOI      []POIDetail `json:"personalised_poi,omitempty"` // Consider changing to []PersonalizedPOIDetail
+	Err                  error       `json:"-"`
 }

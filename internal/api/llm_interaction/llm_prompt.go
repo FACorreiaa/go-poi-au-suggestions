@@ -27,14 +27,26 @@ func GetUserPreferencesPrompt(searchProfile *types.UserPreferenceProfileResponse
 
 func GetCityDescriptionPrompt(cityName string) string {
 	return fmt.Sprintf(`
-            Generate the country this city belongs to and a brief description of %s.
-            Return the response STRICTLY as a JSON object with:
-            {
-            "city": "%s",
-            "country": "the country of the city",
-            "description": "A brief description of the city, including its history and main attractions."
-            }`, cityName, cityName)
+        Provide detailed information for the city: '%s'.
+        Return the response STRICTLY as a JSON object with the following keys:
+        {
+            "city_name": "The official or commonly accepted name of the city",
+            "state_province": "The state, province, or region the city belongs to (if applicable, otherwise null or empty string)",
+            "country": "The country where the city is located",
+            "center_latitude": <float, the latitude of the city's approximate center>,
+            "center_longitude": <float, the longitude of the city's approximate center>,
+            "description": "A brief description of the city, including its history, main attractions, and culture."
+        }
+        If state/province is not applicable (e.g., for a city-state or a country's capital that isn't part of a larger state), return null or an empty string for "state_province".
+        Ensure latitude is between -90 and 90, and longitude is between -180 and 180.
+    `, cityName)
 }
+
+// Population      string  `json:"population"`
+// 	Area            string  `json:"area"`
+// 	Timezone        string  `json:"timezone"`
+// 	Language        string  `json:"language"`
+// 	Weather         string  `json:"weather"`
 
 func GetGeneralPOI(cityName string) string {
 	return fmt.Sprintf(`

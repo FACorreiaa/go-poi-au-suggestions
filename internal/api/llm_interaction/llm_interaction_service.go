@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
 	generativeAI "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
@@ -232,6 +233,8 @@ func NewLlmInteractiontService(interestRepo userInterest.UserInterestRepo,
 
 func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, cityName string, userID, profileID uuid.UUID) (*types.AiCityResponse, error) {
 	// Fetch user interests, search profile, and tags
+	startTime := time.Now()
+	l.logger.DebugContext(ctx, "Starting itinerary generation", slog.String("cityName", cityName), slog.String("userID", userID.String()), slog.String("profileID", profileID.String()))
 	interests, err := l.interestRepo.GetInterestsForProfile(ctx, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch user interests: %w", err)
@@ -316,10 +319,8 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
             "country": "the country of the city",
             "description": "A brief description of the city, including its history and main attractions."
             }`, cityName, cityName)
-		//startTime := time.Now()
 		config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.5)}
 		response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
-		//latencyMs := int(time.Since(startTime).Milliseconds())
 		if err != nil {
 			resultCh <- result{err: fmt.Errorf("failed to generate city data: %w", err)}
 			return
@@ -454,6 +455,22 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 		if err := json.Unmarshal([]byte(jsonStr), &itineraryData); err != nil {
 			resultCh <- result{err: fmt.Errorf("failed to parse personalized itinerary JSON: %w", err)}
 			return
+		}
+
+		latencyMs := int(time.Since(startTime).Milliseconds())
+		interaction := types.LlmInteraction{
+			UserID:       userID,
+			Prompt:       prompt,
+			ResponseText: txt,
+			ModelUsed:    "gemini-2.0-pro", // Adjust based on your AI client
+			LatencyMs:    latencyMs,
+			// Add token counts if available from response (depends on genai API)
+			// PromptTokens, CompletionTokens, TotalTokens
+			// RequestPayload, ResponsePayload if you serialize the full request/response
+		}
+		if err := l.llmInteractionRepo.SaveInteraction(ctx, interaction); err != nil {
+			l.logger.WarnContext(ctx, "Failed to save LLM interaction", slog.Any("error", err))
+			// Decide whether to fail the request or continue
 		}
 
 		resultCh <- result{

@@ -76,11 +76,14 @@ func NewLlmInteractiontService(interestRepo userInterest.UserInterestRepo,
 	}
 }
 
-func (l *LlmInteractiontServiceImpl) generateGeneralCityData(wg *sync.WaitGroup, ctx context.Context, cityName string, resultCh chan<- types.GenAIResponse) {
+func (l *LlmInteractiontServiceImpl) generateGeneralCityData(wg *sync.WaitGroup,
+	ctx context.Context,
+	cityName string,
+	resultCh chan<- types.GenAIResponse,
+	config *genai.GenerateContentConfig) {
 	go func() {
 		defer wg.Done()
 		prompt := GetCityDescriptionPrompt(cityName)
-		config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)}
 		response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
 		if err != nil {
 			resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to generate city data: %w", err)}
@@ -131,11 +134,14 @@ func (l *LlmInteractiontServiceImpl) generateGeneralCityData(wg *sync.WaitGroup,
 	}()
 }
 
-func (l *LlmInteractiontServiceImpl) generateGeneralPOI(wg *sync.WaitGroup, ctx context.Context, cityName string, resultCh chan<- types.GenAIResponse) {
+func (l *LlmInteractiontServiceImpl) generateGeneralPOI(wg *sync.WaitGroup,
+	ctx context.Context,
+	cityName string,
+	resultCh chan<- types.GenAIResponse,
+	config *genai.GenerateContentConfig) {
 	defer wg.Done()
 	prompt := GetGeneralPOI(cityName)
 	//startTime := time.Now()
-	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)}
 	response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
 	//latencyMs := int(time.Since(startTime).Milliseconds())
 	if err != nil {
@@ -169,13 +175,13 @@ func (l *LlmInteractiontServiceImpl) generateGeneralPOI(wg *sync.WaitGroup, ctx 
 
 func (l *LlmInteractiontServiceImpl) generatePersonalisedPOI(wg *sync.WaitGroup, ctx context.Context,
 	cityName string, userID, profileID uuid.UUID, resultCh chan<- types.GenAIResponse,
-	interestNames []string, tagsPromptPart string, userPrefs string) {
+	interestNames []string, tagsPromptPart string, userPrefs string,
+	config *genai.GenerateContentConfig) {
 	defer wg.Done()
 	startTime := time.Now()
 
 	prompt := GetPersonalizedPOI(interestNames, cityName, tagsPromptPart, userPrefs)
 
-	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)}
 	response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
 	if err != nil {
 		resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to generate personalized itinerary: %w", err)}
@@ -212,6 +218,8 @@ func (l *LlmInteractiontServiceImpl) generatePersonalisedPOI(wg *sync.WaitGroup,
 		ResponseText: txt,
 		ModelUsed:    "gemini-2.0-flash", // Adjust based on your AI client
 		LatencyMs:    latencyMs,
+		// request payload
+		// response payload
 		// Add token counts if available from response (depends on genai API)
 		// PromptTokens, CompletionTokens, TotalTokens
 		// RequestPayload, ResponsePayload if you serialize the full request/response
@@ -237,6 +245,7 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 	// }
 	// sessionsMu.Unlock()
 	// Fetch user interests, search profile, and tags
+	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)}
 	l.logger.DebugContext(ctx, "Starting itinerary generation", slog.String("cityName", cityName), slog.String("userID", userID.String()), slog.String("profileID", profileID.String()))
 	interests, err := l.interestRepo.GetInterestsForProfile(ctx, profileID)
 	if err != nil {
@@ -289,12 +298,12 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 	wg.Add(3)
 
 	// **Goroutine 1: Generate city, country, and description**
-	go l.generateGeneralCityData(&wg, ctx, cityName, resultCh)
+	go l.generateGeneralCityData(&wg, ctx, cityName, resultCh, config)
 	// **Goroutine 2: Generate general points of interest**
-	go l.generateGeneralPOI(&wg, ctx, cityName, resultCh)
+	go l.generateGeneralPOI(&wg, ctx, cityName, resultCh, config)
 
 	// **Goroutine 3: Generate itinerary name, description, and personalized POIs**
-	go l.generatePersonalisedPOI(&wg, ctx, cityName, userID, profileID, resultCh, interestNames, tagsPromptPart, userPrefs)
+	go l.generatePersonalisedPOI(&wg, ctx, cityName, userID, profileID, resultCh, interestNames, tagsPromptPart, userPrefs, config)
 
 	// Close result channel after goroutines complete
 	go func() {

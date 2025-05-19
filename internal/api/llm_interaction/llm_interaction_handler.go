@@ -129,6 +129,12 @@ func (u *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r *http.
 
 	l.InfoContext(ctx, "Processing itinerary request")
 
+	// TODO set userLocation from route later
+	// userLocation := types.UserLocation{
+	// 	UserLat: 41.3851,
+	// 	UserLon: 2.1734,
+	// }
+
 	itineraryResponse, err := u.llmInteractionService.GetPromptResponse(ctx, cityName, userID, profileID)
 	if err != nil {
 		l.ErrorContext(ctx, "Service failed to generate prompt response", slog.Any("error", err))

@@ -2,11 +2,14 @@ package types
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/genai"
 )
 
 type LlmInteraction struct {
+	SessionID        uuid.UUID       `json:"session_id"`
 	UserID           uuid.UUID       `json:"user_id"`
 	Prompt           string          `json:"prompt"`
 	RequestPayload   json.RawMessage `json:"request_payload"`
@@ -47,9 +50,11 @@ type AiCityResponse struct {
 	GeneralCityData     GeneralCityData     `json:"general_city_data"`
 	PointsOfInterest    []POIDetail         `json:"points_of_interest"`
 	AIItineraryResponse AIItineraryResponse `json:"itinerary_response"`
+	SessionID           string              `json:"session_id"`
 }
 
 type GenAIResponse struct {
+	SessionID            string      `json:"session_id"`
 	City                 string      `json:"city,omitempty"`
 	Country              string      `json:"country,omitempty"`
 	StateProvince        string      `json:"state_province,omitempty"` // New
@@ -61,4 +66,27 @@ type GenAIResponse struct {
 	GeneralPOI           []POIDetail `json:"general_poi,omitempty"`
 	PersonalisedPOI      []POIDetail `json:"personalised_poi,omitempty"` // Consider changing to []PersonalizedPOIDetail
 	Err                  error       `json:"-"`
+}
+
+type AIRequestPayloadForLog struct {
+	ModelName        string                       `json:"model_name"`
+	GenerationConfig *genai.GenerateContentConfig `json:"generation_config,omitempty"`
+	Content          *genai.Content               `json:"content"` // The actual content sent (prompt)
+	// You could add other things like "tools" if you use function calling
+}
+
+type ChatTurn struct { // You might not need this explicit struct if directly using []*genai.Content
+	Role  string       `json:"role"` // "user" or "model"
+	Parts []genai.Part `json:"parts"`
+}
+
+type ChatSession struct {
+	History             []*ChatTurn  // If you want to store a serializable version
+	InternalChatSession *genai.Chats // Holds the live SDK chat session
+	LastUpdatedAt       time.Time
+}
+
+type UserLocation struct {
+	UserLat float64
+	UserLon float64
 }

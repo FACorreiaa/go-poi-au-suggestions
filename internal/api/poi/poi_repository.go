@@ -18,6 +18,7 @@ var _ POIRepository = (*PostgresPOIRepository)(nil)
 type POIRepository interface {
 	SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error)
 	FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetail, error)
+	GetPOIsByNamesAndCitySortedByDistance(ctx context.Context, names []string, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error)
 }
 
 type PostgresPOIRepository struct {
@@ -101,4 +102,47 @@ func (r *PostgresPOIRepository) FindPoiByNameAndCity(ctx context.Context, name s
 	r.logger.Info("POI found successfully", slog.String("name", poi.Name), slog.String("cityID", cityID.String()))
 
 	return &poi, nil
+}
+
+func (r *PostgresPOIRepository) GetPOIsByNamesAndCitySortedByDistance(ctx context.Context, names []string, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error) {
+	// Construct the user's location as a PostGIS POINT
+	userPoint := fmt.Sprintf("SRID=4326;POINT(%f %f)", userLocation.UserLon, userLocation.UserLat)
+
+	// SQL query using ST_Distance for sorting
+	query := `
+        SELECT 
+            id, 
+            name, 
+            ST_X(location::geometry) AS longitude, 
+            ST_Y(location::geometry) AS latitude, 
+            poi_type AS category, 
+            ai_summary AS description_poi,
+            ST_Distance(location::geography, ST_GeomFromText($1, 4326)::geography) AS distance
+        FROM points_of_interest
+        WHERE name = ANY($2) AND city_id = $3
+        ORDER BY distance ASC
+    `
+
+	rows, err := r.pgpool.Query(ctx, query, userPoint, names, cityID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query POIs: %w", err)
+	}
+	defer rows.Close()
+
+	var pois []types.POIDetail
+	for rows.Next() {
+		var poi types.POIDetail
+		err := rows.Scan(&poi.ID, &poi.Name, &poi.Longitude,
+			&poi.Latitude, &poi.Category, &poi.DescriptionPOI, &poi.Distance)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan POI row: %w", err)
+		}
+		pois = append(pois, poi)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating POI rows: %w", err)
+	}
+
+	return pois, nil
 }

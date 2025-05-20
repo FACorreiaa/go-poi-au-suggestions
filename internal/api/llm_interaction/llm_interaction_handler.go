@@ -16,6 +16,7 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	generativeAI "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -130,12 +131,12 @@ func (u *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r *http.
 	l.InfoContext(ctx, "Processing itinerary request")
 
 	// TODO set userLocation from route later
-	// userLocation := types.UserLocation{
-	// 	UserLat: 41.3851,
-	// 	UserLon: 2.1734,
-	// }
+	userLocation := &types.UserLocation{
+		UserLat: 41.3851,
+		UserLon: 2.1734,
+	}
 
-	itineraryResponse, err := u.llmInteractionService.GetPromptResponse(ctx, cityName, userID, profileID)
+	itineraryResponse, err := u.llmInteractionService.GetPromptResponse(ctx, cityName, userID, profileID, userLocation)
 	if err != nil {
 		l.ErrorContext(ctx, "Service failed to generate prompt response", slog.Any("error", err))
 		span.RecordError(err)

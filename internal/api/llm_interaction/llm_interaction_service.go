@@ -22,7 +22,10 @@ import (
 	"google.golang.org/genai"
 )
 
-const defaultTemperature = 0.5
+const (
+	model              = "gemini-2.0-flash"
+	defaultTemperature = 0.5
+)
 
 type ChatSession struct {
 	History []genai.Chat
@@ -36,7 +39,7 @@ var _ LlmInteractiontService = (*LlmInteractiontServiceImpl)(nil)
 
 // LlmInteractiontService defines the business logic contract for user operations.
 type LlmInteractiontService interface {
-	GetPromptResponse(ctx context.Context, cityName string, userID, profileID uuid.UUID) (*types.AiCityResponse, error)
+	GetPromptResponse(ctx context.Context, cityName string, userID, profileID uuid.UUID, userLocation *types.UserLocation) (*types.AiCityResponse, error)
 }
 
 // LlmInteractiontServiceImpl provides the implementation for LlmInteractiontService.
@@ -216,7 +219,7 @@ func (l *LlmInteractiontServiceImpl) generatePersonalisedPOI(wg *sync.WaitGroup,
 		UserID:       userID,
 		Prompt:       prompt,
 		ResponseText: txt,
-		ModelUsed:    "gemini-2.0-flash", // Adjust based on your AI client
+		ModelUsed:    model, // Adjust based on your AI client
 		LatencyMs:    latencyMs,
 		// request payload
 		// response payload
@@ -236,7 +239,7 @@ func (l *LlmInteractiontServiceImpl) generatePersonalisedPOI(wg *sync.WaitGroup,
 	}
 }
 
-func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, cityName string, userID, profileID uuid.UUID) (*types.AiCityResponse, error) {
+func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, cityName string, userID, profileID uuid.UUID, userLocation *types.UserLocation) (*types.AiCityResponse, error) {
 	// sessionsMu.Lock()
 	// session, ok := sessions[sessionID]
 	// if !ok {
@@ -291,8 +294,19 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 	// Common user preferences for prompts
 	userPrefs := GetUserPreferencesPrompt(searchProfile)
 
-	// Define result struct to collect data from goroutines
+	//
+	//var userCurrentLocation *types.UserLocation
+	if searchProfile.UserLatitude != nil && searchProfile.UserLongitude != nil {
+		userLocation = &types.UserLocation{
+			UserLat: *searchProfile.UserLatitude,
+			UserLon: *searchProfile.UserLongitude,
+		}
+	} else {
+		l.logger.WarnContext(ctx, "User location not available in search profile, cannot sort personalised POIs by distance.")
+		// Depending on requirements, you might proceed without sorting or return an error.
+	}
 
+	// Define result struct to collect data from goroutines
 	resultCh := make(chan types.GenAIResponse, 3)
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -397,6 +411,97 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 			}
 		}
 	}
+
+	// TODO Sort the POIs by distance from user location
+	if userLocation != nil && cityID != uuid.Nil && len(itinerary.AIItineraryResponse.PointsOfInterest) > 0 {
+		l.logger.InfoContext(ctx, "Attempting to save and sort personalised POIs by distance.")
+		var personalisedPoiNamesToQuery []string
+		tempPersonalisedPois := make([]types.POIDetail, 0, len(itinerary.AIItineraryResponse.PointsOfInterest))
+
+		for _, pPoi := range itinerary.AIItineraryResponse.PointsOfInterest { // These are personalised POIs from LLM
+			// Check if POI exists, save if not.
+			// This step ensures that the POIs are in the DB before attempting to sort them via a DB query.
+			existingPersPoi, err := l.poiRepo.FindPoiByNameAndCity(ctx, pPoi.Name, cityID)
+			if err != nil && err != sql.ErrNoRows {
+				l.logger.WarnContext(ctx, "Error checking personalised POI for saving", slog.String("name", pPoi.Name), slog.Any("error", err))
+				tempPersonalisedPois = append(tempPersonalisedPois, pPoi) // Add unsaved POI to list to keep it
+				continue
+			}
+
+			var dbPoiID uuid.UUID
+			var dbPoiLat, dbPoiLon float64
+
+			if existingPersPoi == nil {
+				// POI doesn't exist, save it
+				// The SavePoi function should ideally handle setting the location GEOMETRY from pPoi.Latitude and pPoi.Longitude
+				savedID, saveErr := l.poiRepo.SavePoi(ctx, pPoi, cityID)
+				if saveErr != nil {
+					l.logger.WarnContext(ctx, "Failed to save new personalised POI", slog.String("name", pPoi.Name), slog.Any("error", saveErr))
+					tempPersonalisedPois = append(tempPersonalisedPois, pPoi) // Add unsaved POI
+					continue
+				}
+				dbPoiID = savedID
+				dbPoiLat = pPoi.Latitude // Use original LLM lat/lon for the newly saved POI
+				dbPoiLon = pPoi.Longitude
+				l.logger.DebugContext(ctx, "Saved new personalised POI", slog.String("name", pPoi.Name), slog.String("id", dbPoiID.String()))
+			} else {
+				// POI already exists
+				dbPoiID = existingPersPoi.ID
+				dbPoiLat = existingPersPoi.Latitude // Use DB lat/lon for existing POI
+				dbPoiLon = existingPersPoi.Longitude
+				l.logger.DebugContext(ctx, "Found existing personalised POI", slog.String("name", pPoi.Name), slog.String("id", dbPoiID.String()))
+			}
+
+			// Add name for querying sorted list, and update the POI detail for potential use if sorting fails
+			pPoi.ID = dbPoiID        // Update the POI in memory with its database ID
+			pPoi.Latitude = dbPoiLat // Ensure using consistent lat/lon (from DB if exists, from LLM if new)
+			pPoi.Longitude = dbPoiLon
+			tempPersonalisedPois = append(tempPersonalisedPois, pPoi)
+			personalisedPoiNamesToQuery = append(personalisedPoiNamesToQuery, pPoi.Name)
+		}
+
+		// Update the itinerary with POIs that have now been processed (saved/found and IDs updated)
+		itinerary.AIItineraryResponse.PointsOfInterest = tempPersonalisedPois
+
+		// If there are any names to query (meaning some POIs were processed successfully)
+		if len(personalisedPoiNamesToQuery) > 0 {
+			l.logger.DebugContext(ctx, "Fetching personalised POIs sorted by distance",
+				slog.Any("names", personalisedPoiNamesToQuery),
+				slog.String("cityID", cityID.String()),
+				slog.Any("user_location", *userLocation),
+			)
+			sortedPersonalisedPois, sortErr := l.poiRepo.GetPOIsByNamesAndCitySortedByDistance(ctx, personalisedPoiNamesToQuery, cityID, *userLocation)
+			if sortErr != nil {
+				l.logger.ErrorContext(ctx, "Failed to fetch sorted personalised POIs, returning them unsorted (but potentially saved/updated).", slog.Any("error", sortErr))
+				// itinerary.AIItineraryResponse.PointsOfInterest will remain as tempPersonalisedPois (unsorted but processed)
+			} else {
+				l.logger.InfoContext(ctx, "Successfully fetched and sorted personalised POIs by distance.", slog.Int("count", len(sortedPersonalisedPois)))
+				// We need to be careful here. GetPOIsByNamesAndCitySortedByDistance returns a new list.
+				// We should map the sorted POIs back to the itinerary's list or replace it carefully,
+				// ensuring all relevant data (like LLM description) is preserved if the DB version is minimal.
+				// For simplicity, if the sorted list contains all necessary fields, we can replace it.
+				// If `types.POIDetail` from `GetPOIsByNamesAndCitySortedByDistance` is complete, this is fine:
+				itinerary.AIItineraryResponse.PointsOfInterest = sortedPersonalisedPois
+			}
+		} else {
+			l.logger.InfoContext(ctx, "No personalised POIs were successfully processed for sorting by distance.")
+		}
+
+	} else {
+		if userLocation == nil {
+			l.logger.InfoContext(ctx, "Skipping sorting of personalised POIs: user location not available.")
+		}
+		if cityID == uuid.Nil {
+			l.logger.InfoContext(ctx, "Skipping sorting of personalised POIs: cityID is nil (city not found/saved).")
+		}
+		if len(itinerary.AIItineraryResponse.PointsOfInterest) == 0 {
+			l.logger.InfoContext(ctx, "Skipping sorting of personalised POIs: no personalised POIs to sort.")
+		}
+	}
+
+	l.logger.InfoContext(ctx, "Final itinerary ready",
+		slog.String("itinerary_name", itinerary.AIItineraryResponse.ItineraryName),
+		slog.Int("final_personalised_poi_count", len(itinerary.AIItineraryResponse.PointsOfInterest)))
 
 	return &itinerary, nil
 }

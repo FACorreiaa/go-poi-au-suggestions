@@ -1,15 +1,15 @@
 -- +migrate Up
 CREATE TABLE cities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     name TEXT NOT NULL,
-    state_province TEXT,                      -- e.g., California, Bavaria
-    country TEXT NOT NULL,                    -- e.g., USA, Germany
+    state_province TEXT, -- e.g., California, Bavaria
+    country TEXT NOT NULL, -- e.g., USA, Germany
     -- Unique constraint on name/state/country to avoid duplicates
     CONSTRAINT unique_city_location UNIQUE (name, state_province, country),
-    center_location GEOMETRY(Point, 4326),    -- Optional: Center point for map display
-    bounding_box GEOMETRY(Polygon, 4326),   -- Optional: Bounding box for spatial queries
-    ai_summary TEXT,                        -- AI-generated summary of the city
-    embedding VECTOR(768),                  -- Optional: Embedding vector for the city (adjust dimension)
+    center_location GEOMETRY (Point, 4326), -- Optional: Center point for map display
+    bounding_box GEOMETRY (Polygon, 4326), -- Optional: Bounding box for spatial queries
+    ai_summary TEXT, -- AI-generated summary of the city
+    embedding VECTOR (768), -- Optional: Embedding vector for the city (adjust dimension)
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -24,29 +24,31 @@ CREATE TRIGGER trigger_set_cities_updated_at
 BEFORE UPDATE ON cities
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-
 CREATE TABLE points_of_interest (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     name TEXT NOT NULL,
     description TEXT,
-    location GEOMETRY(Point, 4326) NOT NULL, -- Uses PostGIS geometry type (SRID 4326 for WGS84)
-    city_id UUID REFERENCES cities(id) ON DELETE SET NULL, -- Link POI to a city (optional, but recommended)
-    address TEXT,                           -- Formatted address string
-    poi_type TEXT,                          -- Simple text type or FK to a poi_types table
+    location GEOMETRY (Point, 4326) NOT NULL, -- Uses PostGIS geometry type (SRID 4326 for WGS84)
+    city_id UUID REFERENCES cities (id) ON DELETE SET NULL, -- Link POI to a city (optional, but recommended)
+    address TEXT, -- Formatted address string
+    poi_type TEXT, -- Simple text type or FK to a poi_types table
     website TEXT,
     phone_number TEXT,
-    opening_hours JSONB,                    -- Store opening hours structured (e.g., OSM opening_hours format or custom JSON)
-    price_level INTEGER CHECK (price_level >= 1 AND price_level <= 4), -- e.g., 1 (cheap) to 4 (expensive)
-    average_rating NUMERIC(3, 2),           -- For Phase 2 reviews (e.g., 4.50)
-    rating_count INTEGER DEFAULT 0,         -- For Phase 2 reviews
+    opening_hours JSONB, -- Store opening hours structured (e.g., OSM opening_hours format or custom JSON)
+    price_level INTEGER CHECK (
+        price_level >= 1
+        AND price_level <= 4
+    ), -- e.g., 1 (cheap) to 4 (expensive)
+    average_rating NUMERIC(3, 2), -- For Phase 2 reviews (e.g., 4.50)
+    rating_count INTEGER DEFAULT 0, -- For Phase 2 reviews
     source poi_source NOT NULL DEFAULT 'wanderwise_ai', -- Where did this data come from?
-    source_id TEXT,                         -- Original ID from the source system (e.g., OSM Node ID)
+    source_id TEXT, -- Original ID from the source system (e.g., OSM Node ID)
     is_verified BOOLEAN NOT NULL DEFAULT FALSE, -- Has this been manually verified?
     is_sponsored BOOLEAN NOT NULL DEFAULT FALSE, -- Is this a paid placement?
-    ai_summary TEXT,                        -- AI-generated summary specific to the POI
-    embedding VECTOR(768),                  -- Uses pgvector type (adjust dimension as needed)
-    tags TEXT[],                            -- Array of simple text tags (e.g., {"historic", "good for kids", "romantic"}) - Alternatively use a join table
-    accessibility_info TEXT,                -- Description of accessibility features
+    ai_summary TEXT, -- AI-generated summary specific to the POI
+    embedding VECTOR (768), -- Uses pgvector type (adjust dimension as needed)
+    tags TEXT [], -- Array of simple text tags (e.g., {"historic", "good for kids", "romantic"}) - Alternatively use a join table
+    accessibility_info TEXT, -- Description of accessibility features
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -59,13 +61,57 @@ CREATE INDEX idx_poi_city_id ON points_of_interest (city_id);
 CREATE INDEX idx_poi_type ON points_of_interest (poi_type);
 -- Index for text search on name/description (consider more advanced FTS later)
 CREATE INDEX idx_poi_name ON points_of_interest USING GIN (to_tsvector('english', name));
-CREATE INDEX idx_poi_description ON points_of_interest USING GIN (to_tsvector('english', description));
+
+CREATE INDEX idx_poi_description ON points_of_interest USING GIN (
+    to_tsvector('english', description)
+);
 -- Index for embeddings (Choose one - HNSW is often faster for high-dimensional data)
 -- Needs pgvector installed. Create AFTER inserting some data if using IVFFlat.
 -- CREATE INDEX idx_poi_embedding_hnsw ON points_of_interest USING HNSW (embedding vector_cosine_ops); -- Example using Cosine distance
 
-
 -- Trigger to update 'updated_at' timestamp
 CREATE TRIGGER trigger_set_poi_updated_at
 BEFORE UPDATE ON points_of_interest
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+
+CREATE TABLE llm_suggested_pois (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL, -- The user for whom this was generated
+    search_profile_id UUID, -- The specific search profile used (if applicable)
+    llm_interaction_id UUID NOT NULL REFERENCES llm_interactions(id) ON DELETE CASCADE, -- Links to the LLM request/response log
+    city_id UUID REFERENCES cities(id) ON DELETE SET NULL, -- The city context for this POI
+
+    name TEXT NOT NULL,
+    description_poi TEXT, -- LLM-generated description
+    location GEOMETRY(Point, 4326) NOT NULL, -- Store LLM provided lat/lon here
+    category TEXT, -- LLM-suggested category
+    address TEXT, -- If LLM provides it
+    website TEXT, -- If LLM provides it
+    opening_hours_suggestion TEXT, -- If LLM provides it
+    -- You can add other fields from types.POIDetail if the LLM commonly provides them
+
+-- Foreign key constraints (if not defined inline above)
+-- CONSTRAINT fk_llm_suggested_pois_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, -- Assuming you have a users table
+-- CONSTRAINT fk_llm_suggested_pois_profile FOREIGN KEY (search_profile_id) REFERENCES user_search_profiles(id) ON DELETE SET NULL,
+
+created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_llm_suggested_pois_user_id ON llm_suggested_pois (user_id);
+
+CREATE INDEX idx_llm_suggested_pois_search_profile_id ON llm_suggested_pois (search_profile_id);
+
+CREATE INDEX idx_llm_suggested_pois_llm_interaction_id ON llm_suggested_pois (llm_interaction_id);
+
+CREATE INDEX idx_llm_suggested_pois_city_id ON llm_suggested_pois (city_id);
+
+CREATE INDEX idx_llm_suggested_pois_location ON llm_suggested_pois USING GIST (location);
+-- Crucial for distance sorting
+
+-- Trigger to update 'updated_at' timestamp
+CREATE TRIGGER trigger_set_llm_suggested_pois_updated_at
+BEFORE UPDATE ON llm_suggested_pois
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();

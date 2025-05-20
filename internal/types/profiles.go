@@ -145,6 +145,8 @@ type UserPreferenceProfileResponse struct {
 	DietaryNeeds         []string            `json:"dietary_needs"` // Assuming TEXT[] maps to []string
 	Interests            []*Interest         `json:"interests"`     // Interests linked to this profile
 	Tags                 []*Tags             `json:"tags"`          // Tags to avoid for this profile
+	UserLatitude         *float64            `json:"user_latitude"`
+	UserLongitude        *float64            `json:"user_longitude"`
 	CreatedAt            time.Time           `json:"created_at"`
 	UpdatedAt            time.Time           `json:"updated_at"`
 }

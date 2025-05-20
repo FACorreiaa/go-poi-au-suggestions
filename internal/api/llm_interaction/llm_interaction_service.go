@@ -209,6 +209,7 @@ func (l *LlmInteractiontServiceImpl) generatePersonalisedPOI(wg *sync.WaitGroup,
 		OverallDescription string            `json:"overall_description"`
 		PointsOfInterest   []types.POIDetail `json:"points_of_interest"`
 	}
+
 	if err := json.Unmarshal([]byte(jsonStr), &itineraryData); err != nil {
 		resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to parse personalized itinerary JSON: %w", err)}
 		return
@@ -227,15 +228,17 @@ func (l *LlmInteractiontServiceImpl) generatePersonalisedPOI(wg *sync.WaitGroup,
 		// PromptTokens, CompletionTokens, TotalTokens
 		// RequestPayload, ResponsePayload if you serialize the full request/response
 	}
-	if err := l.llmInteractionRepo.SaveInteraction(ctx, interaction); err != nil {
-		l.logger.WarnContext(ctx, "Failed to save LLM interaction", slog.Any("error", err))
-		// Decide whether to fail the request or continue
+	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
+	if err != nil {
+		resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to save LLM interaction: %w", err)}
+		return
 	}
 
 	resultCh <- types.GenAIResponse{
 		ItineraryName:        itineraryData.ItineraryName,
 		ItineraryDescription: itineraryData.OverallDescription,
 		PersonalisedPOI:      itineraryData.PointsOfInterest,
+		LlmInteractionID:     savedInteractionID,
 	}
 }
 
@@ -328,6 +331,9 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 	// Collect results from goroutines
 	var itinerary types.AiCityResponse
 	var errors []error
+	var llmInteractionIDForPersonalisedPOIs uuid.UUID
+	var rawPersonalisedPOIs []types.POIDetail
+
 	for res := range resultCh {
 		if res.Err != nil {
 			errors = append(errors, res.Err)
@@ -352,6 +358,12 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 		if len(res.PersonalisedPOI) > 0 {
 			itinerary.AIItineraryResponse.PointsOfInterest = res.PersonalisedPOI
 		}
+		if res.LlmInteractionID != uuid.Nil {
+			llmInteractionIDForPersonalisedPOIs = res.LlmInteractionID
+			itinerary.AIItineraryResponse.ItineraryName = res.ItineraryName
+			itinerary.AIItineraryResponse.OverallDescription = res.ItineraryDescription
+			rawPersonalisedPOIs = res.PersonalisedPOI // Store raw POIs for now
+		}
 	}
 
 	// Handle any errors from goroutines
@@ -372,8 +384,7 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 
 	// Check if city exists in the database and save if not
 	city, err := l.cityRepo.FindCityByNameAndCountry(ctx, itinerary.GeneralCityData.City, itinerary.GeneralCityData.Country)
-	if err != nil && err != sql.ErrNoRows {
-		l.logger.ErrorContext(ctx, "Failed to check city existence", slog.Any("error", err))
+	if err != nil {
 		return nil, fmt.Errorf("failed to check city existence: %w", err)
 	}
 
@@ -415,6 +426,28 @@ func (l *LlmInteractiontServiceImpl) GetPromptResponse(ctx context.Context, city
 	// TODO Sort the POIs by distance from user location
 	if userLocation != nil && cityID != uuid.Nil && len(itinerary.AIItineraryResponse.PointsOfInterest) > 0 {
 		l.logger.InfoContext(ctx, "Attempting to save and sort personalised POIs by distance.")
+		err := l.llmInteractionRepo.SaveLlmSuggestedPOIsBatch(ctx, rawPersonalisedPOIs, userID, profileID, llmInteractionIDForPersonalisedPOIs, cityID)
+		if err != nil {
+			l.logger.ErrorContext(ctx, "Failed to save personalised POIs", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to save personalised POIs: %w", err)
+		} else {
+			l.logger.InfoContext(ctx, "Successfully saved personalised POIs to the database.")
+			l.logger.DebugContext(ctx, "Fetching LLM suggested POIs sorted by distance",
+				slog.String("llm_interaction_id", llmInteractionIDForPersonalisedPOIs.String()),
+				slog.String("cityID", cityID.String()))
+
+			sortedPois, sortErr := l.llmInteractionRepo.GetLlmSuggestedPOIsByInteractionSortedByDistance(
+				ctx, llmInteractionIDForPersonalisedPOIs, cityID, *userLocation,
+			)
+			if sortErr != nil {
+				l.logger.ErrorContext(ctx, "Failed to fetch sorted LLM suggested POIs, using unsorted (but saved).", slog.Any("error", sortErr))
+				itinerary.AIItineraryResponse.PointsOfInterest = rawPersonalisedPOIs
+			} else {
+				l.logger.InfoContext(ctx, "Successfully fetched and sorted LLM suggested POIs.", slog.Int("count", len(sortedPois)))
+				itinerary.AIItineraryResponse.PointsOfInterest = sortedPois
+			}
+
+		}
 		var personalisedPoiNamesToQuery []string
 		tempPersonalisedPois := make([]types.POIDetail, 0, len(itinerary.AIItineraryResponse.PointsOfInterest))
 

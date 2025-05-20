@@ -16,7 +16,7 @@ import (
 var _ LLmInteractionRepository = (*PostgresLlmInteractionRepo)(nil)
 
 type LLmInteractionRepository interface {
-	SaveInteraction(ctx context.Context, interaction types.LlmInteraction) error
+	SaveInteraction(ctx context.Context, interaction types.LlmInteraction) (uuid.UUID, error)
 
 	SaveLlmSuggestedPOIsBatch(ctx context.Context, pois []types.POIDetail, userID, searchProfileID, llmInteractionID, cityID uuid.UUID) error
 	GetLlmSuggestedPOIsByInteractionSortedByDistance(ctx context.Context, llmInteractionID uuid.UUID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error)
@@ -34,10 +34,10 @@ func NewPostgresLlmInteractionRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *
 	}
 }
 
-func (r *PostgresLlmInteractionRepo) SaveInteraction(ctx context.Context, interaction types.LlmInteraction) error {
+func (r *PostgresLlmInteractionRepo) SaveInteraction(ctx context.Context, interaction types.LlmInteraction) (uuid.UUID, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to start transaction: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
@@ -45,16 +45,28 @@ func (r *PostgresLlmInteractionRepo) SaveInteraction(ctx context.Context, intera
         INSERT INTO llm_interactions (
             user_id, prompt, response_text, model_used, latency_ms
         ) VALUES ($1, $2, $3, $4, $5)
+		RETURNING id
     `
-	_, err = tx.Exec(ctx, query,
-		interaction.UserID, interaction.Prompt, interaction.ResponseText,
-		interaction.ModelUsed, interaction.LatencyMs,
-	)
+
+	var interactionID uuid.UUID
+	err = r.pgpool.QueryRow(ctx, query,
+		interaction.UserID,
+		//interaction.ProfileID, // Assuming you added ProfileID to types.LlmInteraction
+		interaction.Prompt,
+		interaction.ResponseText,
+		interaction.ModelUsed,
+		interaction.LatencyMs,
+		//interaction.PromptTokens,     // Handle nil if these are pointers or use sql.NullInt64
+		//interaction.CompletionTokens, // Handle nil
+		//interaction.TotalTokens,      // Handle nil
+		//interaction.RequestPayload,   // Handle nil
+		//interaction.ResponsePayload,  // Handle nil
+	).Scan(&interactionID)
 
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	return err
+	return interactionID, err
 }
 
 func (r *PostgresLlmInteractionRepo) SaveLlmSuggestedPOIsBatch(ctx context.Context, pois []types.POIDetail, userID, searchProfileID, llmInteractionID, cityID uuid.UUID) error {
@@ -62,22 +74,15 @@ func (r *PostgresLlmInteractionRepo) SaveLlmSuggestedPOIsBatch(ctx context.Conte
 	query := `
         INSERT INTO llm_suggested_pois 
             (user_id, search_profile_id, llm_interaction_id, city_id, 
-             name, description_poi, location, category, address, website, opening_hours_suggestion)
+             name, description_poi, location)
         VALUES 
-            ($1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7, $8), 4326), $9, $10, $11, $12)
+            ($1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7, $8), 4326))
     `
-	// Note: searchProfileID and cityID can be nil (uuid.Nil) if not applicable.
-	// The database schema should allow NULL for these if that's intended.
-	// Handle uuid.Nil for searchProfileID and cityID if they are optional
-	var spID sql.Null[uuid.UUID] // Using sql.Null for nullable UUIDs
-
-	var cID sql.Null[uuid.UUID]
 
 	for _, poi := range pois {
 		batch.Queue(query,
-			userID, spID, llmInteractionID, cID,
+			userID, searchProfileID, llmInteractionID, cityID,
 			poi.Name, poi.DescriptionPOI, poi.Longitude, poi.Latitude, // Lon, Lat order for ST_MakePoint
-			poi.Category,
 		)
 	}
 
@@ -109,10 +114,6 @@ func (r *PostgresLlmInteractionRepo) GetLlmSuggestedPOIsByInteractionSortedByDis
             description_poi,
             ST_X(location::geometry) AS longitude, 
             ST_Y(location::geometry) AS latitude, 
-            category,
-            address,
-            website,
-            opening_hours_suggestion,
             ST_Distance(location::geography, ST_GeomFromText($1, 4326)::geography) AS distance
         FROM llm_suggested_pois
         WHERE llm_interaction_id = $2 `
@@ -138,22 +139,21 @@ func (r *PostgresLlmInteractionRepo) GetLlmSuggestedPOIsByInteractionSortedByDis
 	for rows.Next() {
 		var p types.POIDetail
 		var descr sql.NullString // Handle nullable fields from DB
-		var cat sql.NullString
-		var addr sql.NullString
-		var web sql.NullString
-		var openH sql.NullString
+		// var cat sql.NullString
+		// var addr sql.NullString
+		// var web sql.NullString
+		// var openH sql.NullString
 
 		err := rows.Scan(
 			&p.ID, &p.Name, &descr,
 			&p.Longitude, &p.Latitude,
-			&cat, &addr, &web, &openH,
 			&p.Distance, // Ensure your types.POIDetail has Distance field
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan llm_suggested_poi row: %w", err)
 		}
 		p.DescriptionPOI = descr.String
-		p.Category = cat.String
+		//p.Category = cat.String
 
 		resultPois = append(resultPois, p)
 	}

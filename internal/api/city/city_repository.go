@@ -73,7 +73,17 @@ func (r *PostgresCityRepository) SaveCity(ctx context.Context, city types.CityDe
             -- bounding_box will use its DEFAULT or be NULL if not specified
         ) VALUES (
             $1, $2, $3, $4, 
-            CASE WHEN $5 IS NOT NULL AND $6 IS NOT NULL THEN ST_SetSRID(ST_MakePoint($5, $6), 4326) ELSE NULL END
+            -- Check for 0.0 is a bit naive if 0,0 is a valid location.
+            -- It's better if types.CityDetail.CenterLongitude/Latitude are pointers (*float64)
+            -- Then you can check for nil. For now, assuming 0.0 implies "not set".
+            CASE 
+                WHEN ($5::DOUBLE PRECISION IS NOT NULL AND $6::DOUBLE PRECISION IS NOT NULL) 
+                     AND ($5::DOUBLE PRECISION != 0.0 OR $6::DOUBLE PRECISION != 0.0) -- Example: only make point if not (0,0) AND both are provided
+                     AND ($5::DOUBLE PRECISION >= -180 AND $5::DOUBLE PRECISION <= 180) -- Longitude check
+                     AND ($6::DOUBLE PRECISION >= -90 AND $6::DOUBLE PRECISION <= 90)   -- Latitude check
+                THEN ST_SetSRID(ST_MakePoint($5::DOUBLE PRECISION, $6::DOUBLE PRECISION), 4326) 
+                ELSE NULL 
+            END
         ) RETURNING id
     `
 	var id uuid.UUID

@@ -11,6 +11,7 @@ import (
 type LlmInteraction struct {
 	SessionID        uuid.UUID       `json:"session_id"`
 	UserID           uuid.UUID       `json:"user_id"`
+	ProfileID        uuid.UUID       `json:"profile_id"`
 	Prompt           string          `json:"prompt"`
 	RequestPayload   json.RawMessage `json:"request_payload"`
 	ResponseText     string          `json:"response_text"`
@@ -55,6 +56,7 @@ type AiCityResponse struct {
 
 type GenAIResponse struct {
 	SessionID            string      `json:"session_id"`
+	LlmInteractionID     uuid.UUID   `json:"llm_interaction_id"`
 	City                 string      `json:"city,omitempty"`
 	Country              string      `json:"country,omitempty"`
 	StateProvince        string      `json:"state_province,omitempty"` // New

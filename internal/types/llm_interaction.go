@@ -1,6 +1,7 @@
 package types
 
 import (
+	"database/sql"
 	"encoding/json"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 )
 
 type LlmInteraction struct {
+	ID               uuid.UUID       `json:"id"`
 	SessionID        uuid.UUID       `json:"session_id"`
 	UserID           uuid.UUID       `json:"user_id"`
 	ProfileID        uuid.UUID       `json:"profile_id"`
@@ -91,4 +93,28 @@ type ChatSession struct {
 type UserLocation struct {
 	UserLat float64
 	UserLon float64
+}
+
+type UserSavedItinerary struct {
+	ID                     uuid.UUID
+	UserID                 uuid.UUID
+	SourceLlmInteractionID uuid.NullUUID // or uuid.UUID if always present for a bookmark
+	PrimaryCityID          uuid.NullUUID
+	Title                  string
+	Description            sql.NullString
+	MarkdownContent        string
+	Tags                   []string // pgx handles TEXT[] as []string
+	EstimatedDurationDays  sql.NullInt32
+	EstimatedCostLevel     sql.NullInt32
+	IsPublic               bool
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+}
+
+type BookmarkRequest struct {
+	LlmInteractionID uuid.UUID `json:"llm_interaction_id"`
+	Title            string    `json:"title"`
+	Description      *string   `json:"description"` // Optional
+	Tags             []string  `json:"tags"`        // Optional
+	IsPublic         *bool     `json:"is_public"`   // Optional
 }

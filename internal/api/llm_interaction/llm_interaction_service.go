@@ -41,6 +41,8 @@ var _ LlmInteractiontService = (*LlmInteractiontServiceImpl)(nil)
 // LlmInteractiontService defines the business logic contract for user operations.
 type LlmInteractiontService interface {
 	GetPromptResponse(ctx context.Context, cityName string, userID, profileID uuid.UUID, userLocation *types.UserLocation) (*types.AiCityResponse, error)
+	SaveItenerary(ctx context.Context, userID uuid.UUID, req types.BookmarkRequest) (uuid.UUID, error)
+	RemoveItenerary(ctx context.Context, userID, itineraryID uuid.UUID) error
 }
 
 // LlmInteractiontServiceImpl provides the implementation for LlmInteractiontService.
@@ -545,4 +547,75 @@ func TruncateString(str string, num int) string {
 		return str[0:num] + "..."
 	}
 	return str
+}
+
+func (l *LlmInteractiontServiceImpl) SaveItenerary(ctx context.Context, userID uuid.UUID, req types.BookmarkRequest) (uuid.UUID, error) {
+	l.logger.InfoContext(ctx, "Attempting to bookmark interaction",
+		slog.String("userID", userID.String()),
+		slog.String("llmInteractionID", req.LlmInteractionID.String()),
+		slog.String("title", req.Title))
+
+	originalInteraction, err := l.llmInteractionRepo.GetInteractionByID(ctx, req.LlmInteractionID)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to fetch original LLM interaction for bookmarking", slog.Any("error", err))
+		return uuid.Nil, fmt.Errorf("could not retrieve original interaction: %w", err)
+	}
+	if originalInteraction == nil { // Or however you check for not found
+		l.logger.WarnContext(ctx, "LLM interaction not found for bookmarking", slog.String("llmInteractionID", req.LlmInteractionID.String()))
+		return uuid.Nil, fmt.Errorf("original interaction %s not found", req.LlmInteractionID)
+	}
+	markdownContent := originalInteraction.ResponseText
+
+	//markdownContent := "Placeholder: Content from LLM Interaction " + req.LlmInteractionID.String() + ". This should be fetched from the DB."
+	l.logger.WarnContext(ctx, "Using placeholder markdownContent for bookmark. Implement fetching original interaction text.",
+		slog.String("llmInteractionID", req.LlmInteractionID.String()))
+
+	var description sql.NullString
+	if req.Description != nil {
+		description.String = *req.Description
+		description.Valid = true
+	}
+
+	isPublic := false // Default
+	if req.IsPublic != nil {
+		isPublic = *req.IsPublic
+	}
+
+	newBookmark := &types.UserSavedItinerary{
+		UserID:                 userID,
+		SourceLlmInteractionID: uuid.NullUUID{UUID: req.LlmInteractionID, Valid: true},
+		Title:                  req.Title,
+		Description:            description,
+		MarkdownContent:        markdownContent,
+		Tags:                   req.Tags, // pgx handles nil []string as NULL for TEXT[]
+		IsPublic:               isPublic,
+	}
+
+	savedID, err := l.llmInteractionRepo.AddChatToBookmark(ctx, newBookmark)
+	if err != nil {
+		return uuid.Nil, err // Error already logged by repo
+	}
+
+	l.logger.InfoContext(ctx, "Successfully bookmarked interaction", slog.String("savedItineraryID", savedID.String()))
+	return savedID, nil
+
+	// Save the itinerary using the repository
+	// itineraryID, err := l.llmInteractionRepo.SaveItinerary(ctx, itinerary)
+	// if err != nil {
+	// 	return uuid.Nil, fmt.Errorf("failed to save itinerary: %w", err)
+	// }
+
+	// l.logger.InfoContext(ctx, "Itinerary saved successfully", slog.String("itinerary_id", itineraryID.String()))
+	// return itineraryID, nil
+}
+
+func (l *LlmInteractiontServiceImpl) RemoveItenerary(ctx context.Context, userID, itineraryID uuid.UUID) error {
+	l.logger.InfoContext(ctx, "Attempting to remove chat from bookmark",
+		slog.String("itineraryID", itineraryID.String()))
+	if err := l.llmInteractionRepo.RemoveChatFromBookmark(ctx, userID, itineraryID); err != nil {
+		l.logger.ErrorContext(ctx, "Failed to remove chat from bookmark", slog.Any("error", err))
+		return fmt.Errorf("failed to remove chat from bookmark: %w", err)
+	}
+	l.logger.InfoContext(ctx, "Successfully removed chat from bookmark", slog.String("itineraryID", itineraryID.String()))
+	return nil
 }

@@ -10,6 +10,7 @@ import (
 
 	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	llmInteraction "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_interaction"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
 	userProfiles "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_search_profiles"
@@ -28,6 +29,7 @@ type Config struct {
 	UserSearchProfileHandler *userProfiles.UserSearchProfileHandler
 	UserTagsHandler          *userTags.UserTagsHandler
 	LLMInteractionHandler    *llmInteraction.LlmInteractionHandler
+	PointsOfInterestHandler  *poi.POIHandler
 }
 
 // SetupRouter initializes and configures the main application router.
@@ -81,6 +83,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			r.Mount("/user/search-profile", UserSearchProfileRoutes(cfg.UserSearchProfileHandler))
 			r.Mount("/user/tags", UserTagsRoutes(cfg.UserTagsHandler))
 			r.Mount("/llm", LLMInteractionRoutes(cfg.LLMInteractionHandler))
+			r.Mount("/pois", POIRoutes(cfg.PointsOfInterestHandler)) // Points of Interest routes
 			// r.Mount("/pois", POIRoutes(cfg.POIHandler))   // Example for POI routes
 		})
 
@@ -178,8 +181,19 @@ func UserSearchProfileRoutes(handler *userProfiles.UserSearchProfileHandler) htt
 func LLMInteractionRoutes(handler *llmInteraction.LlmInteractionHandler) http.Handler {
 	r := chi.NewRouter()
 	// LLM interaction routes
-	r.Post("/prompt-response/profile/{profileID}", handler.GetPrompResponse) // GET http://localhost:8000/api/v1/user/interests
+	r.Post("/prompt-response/profile/{profileID}", handler.GetPrompResponse)     // GET http://localhost:8000/api/v1/user/interests
+	r.Post("/prompt-response/bookmark", handler.SaveItenerary)                   // POST http://localhost:8000/api/v1/llm/prompt-response
+	r.Delete("/prompt-response/bookmark/{itineraryID}", handler.RemoveItenerary) // DELETE http://localhost:8000/api/v1/llm/bookmark/{bookmarkID}
+	return r
+}
 
+func POIRoutes(handler *poi.POIHandler) http.Handler {
+	r := chi.NewRouter()
+	// Points of Interest routes
+	r.Get("/favourites", handler.GetFavouritePOIsByUserID)   // GET http://localhost:8000/api/v1/pois/favourites
+	r.Post("/favourites", handler.AddPoiToFavourites)        // POST http://localhost:8000/api/v1/pois/favourites
+	r.Delete("/favourites", handler.RemovePoiFromFavourites) // DELETE http://localhost:8000/api/v1/pois/favourites/{poiID}
+	r.Get("/city/{cityID}", handler.GetPOIsByCityID)
 	return r
 }
 

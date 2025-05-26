@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 
@@ -83,14 +84,14 @@ func RunLLM(ctx context.Context) {
 	}
 }
 
-func (u *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r *http.Request) {
+func (handler *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "GetPrompResponse", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/interests"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "GetUserProfile"))
+	l := handler.logger.With(slog.String("handler", "GetUserProfile"))
 	l.DebugContext(ctx, "Fetching user profile")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -137,7 +138,7 @@ func (u *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r *http.
 		UserLon: 2.1734,
 	}
 
-	itineraryResponse, err := u.llmInteractionService.GetPromptResponse(ctx, cityName, userID, profileID, userLocation)
+	itineraryResponse, err := handler.llmInteractionService.GetPromptResponse(ctx, cityName, userID, profileID, userLocation)
 	if err != nil {
 		l.ErrorContext(ctx, "Service failed to generate prompt response", slog.Any("error", err))
 		span.RecordError(err)
@@ -167,5 +168,106 @@ func (u *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r *http.
 	span.SetStatus(codes.Ok, "Itinerary generated")
 	l.InfoContext(ctx, "User preference profile created successfully")
 	api.WriteJSONResponse(w, r, http.StatusCreated, itineraryResponse)
+}
 
+func (handler *LlmInteractionHandler) SaveItenerary(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "SaveItenerary", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm_interaction/save_itinerary"),
+	))
+	defer span.End()
+
+	l := handler.logger.With(slog.String("handler", "SaveItenerary"))
+	l.DebugContext(ctx, "Saving itinerary")
+
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+	span.SetAttributes(semconv.EnduserIDKey.String(userID.String()))
+	l = l.With(slog.String("userID", userID.String()))
+
+	var req types.BookmarkRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		l.ErrorContext(ctx, "Failed to decode request body", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.LlmInteractionID == uuid.Nil {
+		l.ErrorContext(ctx, "LlmInteractionID is required", slog.Any("itinerary", req))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "LlmInteractionID is required")
+		return
+	}
+
+	if strings.TrimSpace(req.Title) == "" {
+		l.ErrorContext(ctx, "Title is required", slog.Any("title", req))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Title is required")
+		return
+	}
+
+	savedItinerary, err := handler.llmInteractionService.SaveItenerary(ctx, userID, req)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to save itinerary", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to save itinerary: %s", err.Error()))
+		return
+	}
+
+	l.InfoContext(ctx, "Itinerary saved successfully")
+	api.WriteJSONResponse(w, r, http.StatusCreated, savedItinerary)
+}
+
+func (handler *LlmInteractionHandler) RemoveItenerary(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "RemoveItenerary", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm_interaction/remove_itinerary"),
+	))
+	defer span.End()
+
+	l := handler.logger.With(slog.String("handler", "RemoveItenerary"))
+	l.DebugContext(ctx, "Removing itinerary")
+
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+	span.SetAttributes(semconv.EnduserIDKey.String(userID.String()))
+	l = l.With(slog.String("userID", userID.String()))
+
+	itineraryIDStr := chi.URLParam(r, "itineraryID")
+	itineraryID, err := uuid.Parse(itineraryIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid itinerary ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid itinerary ID format")
+		return
+	}
+	span.SetAttributes(attribute.String("app.itinerary.id", itineraryID.String()))
+	l = l.With(slog.String("itineraryID", itineraryID.String()))
+
+	if err := handler.llmInteractionService.RemoveItenerary(ctx, userID, itineraryID); err != nil {
+		l.ErrorContext(ctx, "Failed to remove itinerary", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to remove itinerary: %s", err.Error()))
+		return
+	}
+
+	l.InfoContext(ctx, "Itinerary removed successfully")
+	api.WriteJSONResponse(w, r, http.StatusNoContent, nil)
 }

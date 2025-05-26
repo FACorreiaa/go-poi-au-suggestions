@@ -128,6 +128,7 @@ func main() {
 		UserTagsHandler:          c.UserTagsHandler,
 		UserSearchProfileHandler: c.UserProfileHandler,
 		LLMInteractionHandler:    c.LLMInteractionHandler,
+		PointsOfInterestHandler:  c.POIHandler,
 		AuthenticateMiddleware:   authenticateMiddleware,
 		Logger:                   logger,
 	}

@@ -32,3 +32,7 @@ type POIDetail struct {
 	// LocationWebsite      string    `json:"location_website"`
 	// LocationOpeningHours string    `json:"location_opening_hours"`
 }
+
+type AddPoiRequest struct {
+	ID string `json:"poi_id"`
+}

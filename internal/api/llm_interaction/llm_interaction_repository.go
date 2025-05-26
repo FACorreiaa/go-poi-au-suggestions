@@ -18,9 +18,11 @@ var _ LLmInteractionRepository = (*PostgresLlmInteractionRepo)(nil)
 
 type LLmInteractionRepository interface {
 	SaveInteraction(ctx context.Context, interaction types.LlmInteraction) (uuid.UUID, error)
-
 	SaveLlmSuggestedPOIsBatch(ctx context.Context, pois []types.POIDetail, userID, searchProfileID, llmInteractionID, cityID uuid.UUID) error
 	GetLlmSuggestedPOIsByInteractionSortedByDistance(ctx context.Context, llmInteractionID uuid.UUID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error)
+	AddChatToBookmark(ctx context.Context, itinerary *types.UserSavedItinerary) (uuid.UUID, error)
+	RemoveChatFromBookmark(ctx context.Context, userID, itineraryID uuid.UUID) error
+	GetInteractionByID(ctx context.Context, interactionID uuid.UUID) (*types.LlmInteraction, error)
 }
 
 type PostgresLlmInteractionRepo struct {
@@ -162,6 +164,101 @@ func (r *PostgresLlmInteractionRepo) GetLlmSuggestedPOIsByInteractionSortedByDis
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating llm_suggested_poi rows: %w", err)
 	}
-
 	return resultPois, nil
+}
+
+func (r *PostgresLlmInteractionRepo) AddChatToBookmark(ctx context.Context, itinerary *types.UserSavedItinerary) (uuid.UUID, error) {
+	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+		INSERT INTO user_saved_itineraries (
+			user_id, source_llm_interaction_id, primary_city_id, title, description,
+			markdown_content, tags, estimated_duration_days, estimated_cost_level, is_public
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		RETURNING id
+	`
+	var savedItineraryID uuid.UUID
+	if err := tx.QueryRow(ctx, query,
+		&itinerary.UserID,
+		&itinerary.SourceLlmInteractionID,
+		&itinerary.PrimaryCityID,
+		&itinerary.Title,
+		&itinerary.Description,
+		&itinerary.MarkdownContent,
+		&itinerary.Tags,
+		&itinerary.EstimatedDurationDays,
+		&itinerary.EstimatedCostLevel,
+		&itinerary.IsPublic,
+	).Scan(&savedItineraryID); err != nil {
+		return uuid.Nil, fmt.Errorf("failed to insert user_saved_itineraries: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return savedItineraryID, nil
+}
+
+func (r *PostgresLlmInteractionRepo) GetInteractionByID(ctx context.Context, interactionID uuid.UUID) (*types.LlmInteraction, error) {
+	query := `
+		SELECT 
+			id, user_id, prompt, response_text, model_used, latency_ms,
+			prompt_tokens, completion_tokens, total_tokens,
+			request_payload, response_payload
+		FROM llm_interactions
+		WHERE id = $1
+	`
+	row := r.pgpool.QueryRow(ctx, query, interactionID)
+
+	var interaction types.LlmInteraction
+
+	nullPromptTokens := sql.NullInt64{}
+	nullCompletionTokens := sql.NullInt64{}
+	nullTotalTokens := sql.NullInt64{}
+	nullRequestPayload := sql.NullString{}
+	nullResponsePayload := sql.NullString{}
+
+	if err := row.Scan(
+		&interaction.ID,
+		&interaction.UserID,
+		&interaction.Prompt,
+		&interaction.ResponseText,
+		&interaction.ModelUsed,
+		&interaction.LatencyMs,
+		&nullPromptTokens,
+		&nullCompletionTokens,
+		&nullTotalTokens,
+		&nullRequestPayload,
+		&nullResponsePayload,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("no interaction found with ID %s", interactionID)
+		}
+		return nil, fmt.Errorf("failed to scan llm_interaction row: %w", err)
+	}
+	return &interaction, nil
+}
+
+func (r *PostgresLlmInteractionRepo) RemoveChatFromBookmark(ctx context.Context, userID, itineraryID uuid.UUID) error {
+	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+		DELETE FROM user_saved_itineraries
+		WHERE id = $1 AND user_id = $2
+	`
+	if _, err := tx.Exec(ctx, query, itineraryID, userID); err != nil {
+		return fmt.Errorf("failed to delete user_saved_itinerary with ID %s: %w", itineraryID, err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
 }

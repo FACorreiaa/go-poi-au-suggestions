@@ -31,6 +31,7 @@ type Container struct {
 	UserTagsHandler       *userTags.UserTagsHandler
 	UserProfileHandler    *userSearchProfile.UserSearchProfileHandler
 	LLMInteractionHandler *llmInteraction.LlmInteractionHandler
+	POIHandler            *poi.POIHandler
 	// Add other handlers, services, and repositories as needed
 }
 
@@ -94,6 +95,10 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 		poiRepo,
 		logger)
 	llmInteractionHandler := llmInteraction.NewLLMHandler(llmInteractionService, logger)
+
+	poiRepository := poi.NewPOIRepository(pool, logger)
+	poiService := poi.NewPOIServiceImpl(poiRepository, logger)
+	poiHandler := poi.NewPOIHandler(poiService, logger)
 	return &Container{
 		Config:                cfg,
 		Logger:                logger,
@@ -105,6 +110,7 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 		UserTagsHandler:       userTagsHandler,
 		UserProfileHandler:    userSearchProfilesHandler,
 		LLMInteractionHandler: llmInteractionHandler,
+		POIHandler:            poiHandler,
 		// Add other handlers, services, and repositories as needed
 	}, nil
 }

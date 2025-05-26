@@ -85,3 +85,20 @@ func GetPersonalizedPOI(interestNames []string, cityName, tagsPromptPart, userPr
             ]
             }`, cityName, strings.Join(interestNames, ", "), tagsPromptPart, userPrefs, cityName)
 }
+
+// GetPOIDetails TODO build the POI details method for the user to have detailed
+func GetPOIDetails(city string, lat, lon float64) string {
+	return fmt.Sprintf(`
+		Generate details for the following POI on the city of %s with the coordinates %0.2f , %0.2f.
+		The result should be in the following JSON format:
+		{
+			"name": "Name of the Point of Interest",
+			"description": "Detailed description of the POI and why it's relevant to the user's interest.",
+    		"address": "address of the point of interest",
+    		"website": "website of the POI if available",
+    		"phone_number": "phone number of the POI if available",
+    		"opening_hours": "JSONB, -- Store opening hours structured (e.g., OSM opening_hours format or custom JSON)"
+    		"price_level": "price level if available" 
+		}
+	`, city, lat, lon)
+}

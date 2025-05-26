@@ -13,14 +13,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/otel/codes"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
-	generativeAI "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	generativeAI "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 
 	"google.golang.org/genai"
 )

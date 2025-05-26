@@ -11,6 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+	"google.golang.org/genai"
+
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
 	generativeAI "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
@@ -18,8 +21,6 @@ import (
 	userSearchProfile "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_search_profiles"
 	userTags "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_tags"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
-	"github.com/google/uuid"
-	"google.golang.org/genai"
 )
 
 const (

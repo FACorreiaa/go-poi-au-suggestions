@@ -95,18 +95,18 @@ func (cs *ChatSession) SendMessage(ctx context.Context, message string) (string,
 	return result.Text(), nil
 }
 
-// func main() {
-// 	ctx := context.Background()
-// 	aiClient, err := NewAIClient(ctx)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer aiClient.client.Close()
-
-// 	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.5)}
-// 	response, err := aiClient.GenerateResponse(ctx, "What's the weather in San Francisco?", config)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	fmt.Println(response)
-// }
+//func GenerateEmbedding(ctx context.Context, client *genai.Client, text string) ([]float32, error) {
+//	req := &genaipb.EmbedContentRequest{
+//		Model: "models/embedding-001", // replace with actual embedding model name
+//		Content: &genaipb.Content{
+//			Parts: []*genaipb.Part{
+//				{Value: &genaipb.Part_Text{Text: text}},
+//			},
+//		},
+//	}
+//	resp, err := client.EmbedContent(ctx, req)
+//	if err != nil {
+//		return nil, err
+//	}
+//	return resp.Embedding.Values, nil
+//}

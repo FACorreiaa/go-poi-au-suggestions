@@ -9,8 +9,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 var _ LLmInteractionRepository = (*PostgresLlmInteractionRepo)(nil)

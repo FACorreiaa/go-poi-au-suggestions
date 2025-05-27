@@ -34,11 +34,11 @@ func NewAuthHandler(authService AuthService, logger *slog.Logger) *AuthHandler {
 // @Tags         Auth
 // @Accept       json
 // @Produce      json
-// @Param        credentials body LoginRequest true "Login Credentials"
-// @Success      200 {object} LoginResponse "Successful Login"
-// @Failure      400 {object} Response "Invalid Input"
-// @Failure      401 {object} Response "Authentication Failed"
-// @Failure      500 {object} Response "Internal Server Error"
+// @Param        credentials body types.LoginRequest true "Login Credentials"
+// @Success      200 {object} types.LoginResponse "Successful Login"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Authentication Failed"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Router       /auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -92,10 +92,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 // @Tags         Auth
 // @Accept       json
 // @Produce      json
-// @Param        token body LogoutRequest false "Logout Request (only needed if sending refresh_token in body)"
-// @Success      200 {object} Response "Logout Successful"
-// @Failure      400 {object} Response "Bad Request (e.g., malformed body if used)"
-// @Failure      500 {object} Response "Internal Server Error"
+// @Param        token body types.LogoutRequest false "Logout Request (only needed if sending refresh_token in body)"
+// @Success      200 {object} types.Response "Logout Successful"
+// @Failure      400 {object} types.Response "Bad Request (e.g., malformed body if used)"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /auth/logout [post]
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -148,11 +148,11 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 // @Tags         Auth
 // @Accept       json
 // @Produce      json
-// @Param        token body RefreshTokenRequest false "Refresh Token Request (only needed if sending refresh_token in body)"
-// @Success      200 {object} TokenResponse "New Access Token (Refresh Token set in cookie)"
-// @Failure      400 {object} Response "Bad Request (e.g., missing token)"
-// @Failure      401 {object} Response "Invalid or Expired Refresh Token"
-// @Failure      500 {object} Response "Internal Server Error"
+// @Param        token body types.RefreshTokenRequest false "Refresh Token Request (only needed if sending refresh_token in body)"
+// @Success      200 {object} types.TokenResponse "New Access Token (Refresh Token set in cookie)"
+// @Failure      400 {object} types.Response "Bad Request (e.g., missing token)"
+// @Failure      401 {object} types.Response "Invalid or Expired Refresh Token"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Router       /auth/refresh [post]
 func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -207,11 +207,11 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 // @Tags         Auth
 // @Accept       json
 // @Produce      json
-// @Param        user body RegisterRequest true "User Registration Details"
-// @Success      201 {object} Response "User Registered Successfully"
-// @Failure      400 {object} Response "Invalid Input"
-// @Failure      409 {object} Response "Email or Username already exists"
-// @Failure      500 {object} Response "Internal Server Error"
+// @Param        user body types.RegisterRequest true "User Registration Details"
+// @Success      201 {object} types.Response "User Registered Successfully"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      409 {object} types.Response "Email or Username already exists"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Router       /auth/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("RegisterHandler").Start(r.Context(), "RegisterHandler", trace.WithAttributes(
@@ -264,7 +264,17 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSONResponse(w, r, http.StatusCreated, types.Response{Success: true, Message: "User registered successfully"})
 }
 
-// ValidateSession checks if a session is valid
+// ValidateSession godoc
+// @Summary      Validate User Session
+// @Description  Checks if a session ID is valid and returns user information if it is.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        session body types.ValidateSessionRequest true "Session ID to validate"
+// @Success      200 {object} types.ValidateSessionResponse "Session validation result with user info if valid"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Router       /auth/validate [post]
 func (h *AuthHandler) ValidateSession(w http.ResponseWriter, r *http.Request) {
 	var req types.ValidateSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -312,11 +322,11 @@ func (h *AuthHandler) ValidateSession(w http.ResponseWriter, r *http.Request) {
 // @Tags         Auth
 // @Accept       json
 // @Produce      json
-// @Param        passwords body ChangePasswordRequest true "Old and New Passwords"
-// @Success      200 {object} Response "Password Updated Successfully"
-// @Failure      400 {object} Response "Invalid Input"
-// @Failure      401 {object} Response "Unauthorized (Invalid old password or bad token)"
-// @Failure      500 {object} Response "Internal Server Error"
+// @Param        passwords body types.ChangePasswordRequest true "Old and New Passwords"
+// @Success      200 {object} types.Response "Password Updated Successfully"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Unauthorized (Invalid old password or bad token)"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /auth/password [put]
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
@@ -364,7 +374,19 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSONResponse(w, r, http.StatusOK, types.Response{Success: true, Message: "Password updated successfully"})
 }
 
-// ChangeEmail updates a user's email
+// ChangeEmail godoc
+// @Summary      Change User Email
+// @Description  Allows an authenticated user to change their email address after verifying their password.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        email_change body types.ChangeEmailRequest true "Password verification and new email"
+// @Success      200 {object} types.Response "Email Updated Successfully"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Unauthorized (Invalid password or bad token)"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /auth/email [put]
 func (h *AuthHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) {
 	var req types.ChangeEmailRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -425,6 +447,11 @@ func (h *AuthHandler) respondWithJSON(w http.ResponseWriter, code int, payload i
 	}
 }
 
+// AuthenticateMiddleware godoc
+// @Summary      Authentication Middleware
+// @Description  Middleware that authenticates requests using JWT tokens and adds user information to the request context.
+// @Tags         Auth
+// @Security     BearerAuth
 func (h *AuthHandler) AuthenticateMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Implement your authentication logic here
@@ -432,6 +459,18 @@ func (h *AuthHandler) AuthenticateMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// RefreshSession godoc
+// @Summary      Refresh User Session
+// @Description  Refreshes a user's session using a refresh token provided in the request body.
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        token body types.RefreshTokenRequest true "Refresh Token"
+// @Success      200 {object} types.TokenResponse "New Access Token"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Invalid or Expired Refresh Token"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Router       /auth/refresh-session [post]
 func (h *AuthHandler) RefreshSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l := h.logger.With(slog.String("handler", "RefreshSession"))

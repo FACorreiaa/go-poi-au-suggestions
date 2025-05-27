@@ -45,8 +45,8 @@ func NewUserInterestHandler(userInterestService UserInterestService, logger *slo
 // @Tags         User
 // @Accept       json
 // @Produce      json
-// @Success      200 {array} api.Interest "All Interests"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Success      200 {array} types.Interest "All Interests"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Router       /user/interests [get]
 func (h *UserInterestHandler) GetAllInterests(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "GetAllInterests", trace.WithAttributes(
@@ -77,11 +77,11 @@ func (h *UserInterestHandler) GetAllInterests(w http.ResponseWriter, r *http.Req
 // @Accept       json
 // @Produce      json
 // @Param        interestId path string true "Interest ID to remove"
-// @Success      200 {object} api.Response "Interest Removed Successfully"
-// @Failure      400 {object} api.Response "Invalid Input"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      404 {object} api.Response "Interest Not Found"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Success      200 {object} types.Response "Interest Removed Successfully"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      404 {object} types.Response "Interest Not Found"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/preferences/interests/{interestId} [delete]
 func (h *UserInterestHandler) RemoveUserInterest(w http.ResponseWriter, r *http.Request) {
@@ -147,12 +147,12 @@ func (h *UserInterestHandler) RemoveUserInterest(w http.ResponseWriter, r *http.
 // @Tags         User
 // @Accept       json
 // @Produce      json
-// @Param        interest body CreateInterestRequest true "Interest details to create"
-// @Success      201 {object} api.Interest "Created Interest"
-// @Failure      400 {object} api.Response "Invalid Input"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      409 {object} api.Response "Interest Already Exists"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Param        interest body types.CreateInterestRequest true "Interest details to create"
+// @Success      201 {object} types.Interest "Created Interest"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      409 {object} types.Response "Interest Already Exists"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/interests/create [post]
 func (h *UserInterestHandler) CreateInterest(w http.ResponseWriter, r *http.Request) {
@@ -174,7 +174,7 @@ func (h *UserInterestHandler) CreateInterest(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Parse request body
-	var req CreateInterestRequest
+	var req types.CreateInterestRequest
 	if err := api.DecodeJSONBody(w, r, &req); err != nil {
 		l.WarnContext(ctx, "Failed to decode request", slog.Any("error", err))
 		span.RecordError(err)
@@ -216,9 +216,9 @@ func (h *UserInterestHandler) CreateInterest(w http.ResponseWriter, r *http.Requ
 // @Tags         User
 // @Accept       json
 // @Produce      json
-// @Success      200 {array} api.EnhancedInterest "User Enhanced Interests"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Success      200 {array} types.EnhancedInterest "User Enhanced Interests"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/preferences/enhanced [get]
 //func (h *UserInterestHandler) GetUserEnhancedInterests(w http.ResponseWriter, r *http.Request) {
@@ -268,14 +268,14 @@ func (h *UserInterestHandler) CreateInterest(w http.ResponseWriter, r *http.Requ
 // @Accept       json
 // @Produce      json
 // @Param        interestID path string true "ID of the custom interest to update" Format(uuid)
-// @Param        interest body user.UpdateUserCustomInterestParams true "Fields to update"
-// @Success      200 {object} api.Response "Interest Updated Successfully"
-// @Failure      400 {object} api.Response "Invalid Input or Bad Request"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      403 {object} api.Response "Forbidden (Interest does not belong to user)"
-// @Failure      404 {object} api.Response "Interest Not Found"
-// @Failure      409 {object} api.Response "Conflict (e.g., duplicate name for user)"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Param        interest body types.UpdateUserInterestParams true "Fields to update"
+// @Success      200 {object} types.Response "Interest Updated Successfully"
+// @Failure      400 {object} types.Response "Invalid Input or Bad Request"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      403 {object} types.Response "Forbidden (Interest does not belong to user)"
+// @Failure      404 {object} types.Response "Interest Not Found"
+// @Failure      409 {object} types.Response "Conflict (e.g., duplicate name for user)"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/custom-interests/{interestID} [put] // Changed route for clarity
 func (h *UserInterestHandler) UpdateUserInterest(w http.ResponseWriter, r *http.Request) {
@@ -362,26 +362,4 @@ func (h *UserInterestHandler) UpdateUserInterest(w http.ResponseWriter, r *http.
 	l.InfoContext(ctx, "Custom interest updated successfully")
 	span.SetStatus(codes.Ok, "Custom interest updated")
 	api.WriteJSONResponse(w, r, http.StatusOK, types.Response{Success: true, Message: "Interest updated successfully"})
-}
-
-// Request and Response structures for the handlers
-type AddInterestRequest struct {
-	InterestID string `json:"interest_id" binding:"required" example:"d290f1ee-6c54-4b01-90e6-d701748f0851"`
-}
-
-type CreateInterestRequest struct {
-	Name        string  `json:"name" binding:"required" example:"Hiking"`
-	Description *string `json:"description,omitempty" example:"Outdoor hiking activities"`
-	Active      bool    `json:"active" example:"true"`
-}
-
-type UpdatePreferenceLevelRequest struct {
-	PreferenceLevel int `json:"preference_level" binding:"required" example:"2"`
-}
-
-type UpdateInterestRequest struct {
-	ID          string  `json:"interest_id" binding:"required" example:"d290f1ee-6c54-4b01-90e6-d701748f0851"`
-	Name        string  `json:"name" binding:"required" example:"Hiking"`
-	Description *string `json:"description,omitempty" example:"Outdoor hiking activities"`
-	Active      bool    `json:"active" example:"true"`
 }

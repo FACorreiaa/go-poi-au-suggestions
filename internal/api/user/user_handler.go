@@ -39,10 +39,10 @@ func NewHandlerUser(userService UserService, logger *slog.Logger) *HandlerUser {
 // @Tags         User
 // @Accept       json
 // @Produce      json
-// @Success      200 {object} api.UserProfile "User Profile"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      404 {object} api.Response "User Not Found"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Success      200 {object} types.UserProfile "User Profile"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      404 {object} types.Response "User Not Found"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profile [get]
 func (h *HandlerUser) GetUserProfile(w http.ResponseWriter, r *http.Request) {
@@ -84,11 +84,11 @@ func (h *HandlerUser) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 // @Tags         User
 // @Accept       json
 // @Produce      json
-// @Param        profile body api.UpdateProfileParams true "Profile Update Parameters"
-// @Success      200 {object} api.Response "Profile Updated Successfully"
-// @Failure      400 {object} api.Response "Invalid Input"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Param        profile body types.UpdateProfileParams true "Profile Update Parameters"
+// @Success      200 {object} types.Response "Profile Updated Successfully"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profile [put]
 func (h *HandlerUser) UpdateUserProfile(w http.ResponseWriter, r *http.Request) {

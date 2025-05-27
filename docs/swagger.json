@@ -18,6 +18,63 @@
     "host": "localhost:8000 // Adjust to your actual host/port",
     "basePath": "/api/v1        // Base path for all API routes",
     "paths": {
+        "/auth/email": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Allows an authenticated user to change their email address after verifying their password.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Change User Email",
+                "parameters": [
+                    {
+                        "description": "Password verification and new email",
+                        "name": "email_change",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.ChangeEmailRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Email Updated Successfully",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Input",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized (Invalid password or bad token)",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "description": "Authenticates a user and returns JWT access and refresh tokens.",
@@ -38,7 +95,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/auth.LoginRequest"
+                            "$ref": "#/definitions/types.LoginRequest"
                         }
                     }
                 ],
@@ -46,25 +103,25 @@
                     "200": {
                         "description": "Successful Login",
                         "schema": {
-                            "$ref": "#/definitions/auth.LoginResponse"
+                            "$ref": "#/definitions/types.LoginResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid Input",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "401": {
                         "description": "Authentication Failed",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     }
                 }
@@ -94,7 +151,7 @@
                         "name": "token",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/auth.LogoutRequest"
+                            "$ref": "#/definitions/types.LogoutRequest"
                         }
                     }
                 ],
@@ -102,19 +159,19 @@
                     "200": {
                         "description": "Logout Successful",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "400": {
                         "description": "Bad Request (e.g., malformed body if used)",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     }
                 }
@@ -145,7 +202,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/auth.ChangePasswordRequest"
+                            "$ref": "#/definitions/types.ChangePasswordRequest"
                         }
                     }
                 ],
@@ -153,25 +210,25 @@
                     "200": {
                         "description": "Password Updated Successfully",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "400": {
                         "description": "Invalid Input",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "401": {
                         "description": "Unauthorized (Invalid old password or bad token)",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     }
                 }
@@ -196,7 +253,7 @@
                         "name": "token",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/auth.RefreshTokenRequest"
+                            "$ref": "#/definitions/types.RefreshTokenRequest"
                         }
                     }
                 ],
@@ -204,25 +261,77 @@
                     "200": {
                         "description": "New Access Token (Refresh Token set in cookie)",
                         "schema": {
-                            "$ref": "#/definitions/auth.TokenResponse"
+                            "$ref": "#/definitions/types.TokenResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request (e.g., missing token)",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "401": {
                         "description": "Invalid or Expired Refresh Token",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/refresh-session": {
+            "post": {
+                "description": "Refreshes a user's session using a refresh token provided in the request body.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Refresh User Session",
+                "parameters": [
+                    {
+                        "description": "Refresh Token",
+                        "name": "token",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.RefreshTokenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "New Access Token",
+                        "schema": {
+                            "$ref": "#/definitions/types.TokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Input",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid or Expired Refresh Token",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
                         }
                     }
                 }
@@ -248,7 +357,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/auth.RegisterRequest"
+                            "$ref": "#/definitions/types.RegisterRequest"
                         }
                     }
                 ],
@@ -256,25 +365,1148 @@
                     "201": {
                         "description": "User Registered Successfully",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "400": {
                         "description": "Invalid Input",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "409": {
                         "description": "Email or Username already exists",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/auth.Response"
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/validate": {
+            "post": {
+                "description": "Checks if a session ID is valid and returns user information if it is.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Validate User Session",
+                "parameters": [
+                    {
+                        "description": "Session ID to validate",
+                        "name": "session",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.ValidateSessionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Session validation result with user info if valid",
+                        "schema": {
+                            "$ref": "#/definitions/types.ValidateSessionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Input",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/poi/city/{cityID}": {
+            "get": {
+                "description": "Retrieves all points of interest for a specific city",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "POI"
+                ],
+                "summary": "Get POIs by City ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "City ID",
+                        "name": "cityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of POIs in the city",
+                        "schema": {
+                            "type": "array",
+                            "items": {}
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Input",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/poi/favourites": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves all points of interest that the authenticated user has marked as favourites",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "POI"
+                ],
+                "summary": "Get User's Favourite POIs",
+                "responses": {
+                    "200": {
+                        "description": "List of favourite POIs",
+                        "schema": {
+                            "type": "array",
+                            "items": {}
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Input",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Adds a point of interest to the user's favourites list",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "POI"
+                ],
+                "summary": "Add POI to Favourites",
+                "parameters": [
+                    {
+                        "description": "POI ID to add to favourites",
+                        "name": "poi",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.AddPoiRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "POI added to favourites successfully",
+                        "schema": {}
+                    },
+                    "400": {
+                        "description": "Invalid Input",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a point of interest from the user's favourites list",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "POI"
+                ],
+                "summary": "Remove POI from Favourites",
+                "parameters": [
+                    {
+                        "description": "POI ID to remove from favourites",
+                        "name": "poi",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.AddPoiRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "POI removed from favourites successfully",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Input",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/custom-interests/{interestID}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates a specific interest created by the authenticated user.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Preferences"
+                ],
+                "summary": "Update Custom Interest",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "ID of the custom interest to update",
+                        "name": "interestID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "interest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.UpdateUserInterestParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Interest Updated Successfully",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Input or Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (Interest does not belong to user)",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Interest Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict (e.g., duplicate name for user)",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/interests": {
+            "get": {
+                "description": "Retrieves all available interests.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User"
+                ],
+                "summary": "Get All Interests",
+                "responses": {
+                    "200": {
+                        "description": "All Interests",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/types.Interest"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/interests/create": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a new interest in the system.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User"
+                ],
+                "summary": "Create New Interest",
+                "parameters": [
+                    {
+                        "description": "Interest details to create",
+                        "name": "interest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.CreateInterestRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created Interest",
+                        "schema": {
+                            "$ref": "#/definitions/types.Interest"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Input",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "Interest Already Exists",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/preferences": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves the authenticated user's preferences (profiles).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User"
+                ],
+                "summary": "Get User Preferences",
+                "responses": {
+                    "200": {
+                        "description": "User Preferences",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/types.UserSettings"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/preferences/interests/{interestId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes an interest from the authenticated user's preferences.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User"
+                ],
+                "summary": "Remove User Interest",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Interest ID to remove",
+                        "name": "interestId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Interest Removed Successfully",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Input",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Interest Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/preferences/{profileID}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates the authenticated user's preferences (profiles).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User"
+                ],
+                "summary": "Update User Preferences",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Profile ID",
+                        "name": "profileID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Preferences Update Parameters",
+                        "name": "preferences",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.UpdateUserSettingsParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Preferences Updated Successfully",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/profile": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves the authenticated user's profile information.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User"
+                ],
+                "summary": "Get User Profile",
+                "responses": {
+                    "200": {
+                        "description": "User Profile",
+                        "schema": {
+                            "$ref": "#/definitions/types.UserProfile"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "User Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates the authenticated user's profile information.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User"
+                ],
+                "summary": "Update User Profile",
+                "parameters": [
+                    {
+                        "description": "Profile Update Parameters",
+                        "name": "profile",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.UpdateProfileParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Profile Updated Successfully",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Input",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/profiles": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Fetches all preference profiles for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profiles"
+                ],
+                "summary": "Get User Preference Profiles",
+                "responses": {
+                    "200": {
+                        "description": "User Preference Profiles",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/types.UserPreferenceProfileResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a new preference profile for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profiles"
+                ],
+                "summary": "Create User Preference Profile",
+                "parameters": [
+                    {
+                        "description": "Profile Creation Parameters",
+                        "name": "profile",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.CreateUserPreferenceProfileParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created Profile",
+                        "schema": {
+                            "$ref": "#/definitions/types.UserPreferenceProfileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/profiles/default": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Fetches the default preference profile for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profiles"
+                ],
+                "summary": "Get Default User Preference Profile",
+                "responses": {
+                    "200": {
+                        "description": "Default User Preference Profile",
+                        "schema": {
+                            "$ref": "#/definitions/types.UserPreferenceProfileResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/profiles/default/{profileID}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets an existing preference profile as the default for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profiles"
+                ],
+                "summary": "Set Default User Preference Profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Profile ID",
+                        "name": "profileID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Default User Preference Profile",
+                        "schema": {
+                            "$ref": "#/definitions/types.UserPreferenceProfileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/profiles/{profileID}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Fetches a specific preference profile for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profiles"
+                ],
+                "summary": "Get User Preference Profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Profile ID",
+                        "name": "profileID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User Preference Profile",
+                        "schema": {
+                            "$ref": "#/definitions/types.UserPreferenceProfileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates an existing preference profile for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profiles"
+                ],
+                "summary": "Update User Preference Profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Profile ID",
+                        "name": "profileID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Profile Update Parameters",
+                        "name": "profile",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/types.UpdateUserPreferenceProfileParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated Profile",
+                        "schema": {
+                            "$ref": "#/definitions/types.UserPreferenceProfileResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes an existing preference profile for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Profiles"
+                ],
+                "summary": "Delete User Preference Profile",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Profile ID",
+                        "name": "profileID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/tags": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves all tags created by the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User Tags"
+                ],
+                "summary": "Get All User Tags",
+                "responses": {
+                    "200": {
+                        "description": "User Tags",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/types.Tags"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/types.Response"
                         }
                     }
                 }
@@ -282,7 +1514,34 @@
         }
     },
     "definitions": {
-        "auth.ChangePasswordRequest": {
+        "types.AddPoiRequest": {
+            "type": "object",
+            "properties": {
+                "poi_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.ChangeEmailRequest": {
+            "type": "object",
+            "required": [
+                "new_email",
+                "password"
+            ],
+            "properties": {
+                "new_email": {
+                    "description": "Desired new email address.",
+                    "type": "string",
+                    "example": "new.email@example.com"
+                },
+                "password": {
+                    "description": "User's current password for verification.",
+                    "type": "string",
+                    "example": "currentPassword123"
+                }
+            }
+        },
+        "types.ChangePasswordRequest": {
             "type": "object",
             "required": [
                 "new_password",
@@ -302,7 +1561,141 @@
                 }
             }
         },
-        "auth.LoginRequest": {
+        "types.CreateInterestRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Outdoor hiking activities"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Hiking"
+                }
+            }
+        },
+        "types.CreateUserPreferenceProfileParams": {
+            "type": "object",
+            "required": [
+                "profile_name",
+                "user_id"
+            ],
+            "properties": {
+                "budget_level": {
+                    "type": "integer"
+                },
+                "dietary_needs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "interests": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "is_default": {
+                    "description": "Default is FALSE in DB",
+                    "type": "boolean"
+                },
+                "prefer_accessible_pois": {
+                    "type": "boolean"
+                },
+                "prefer_dog_friendly": {
+                    "type": "boolean"
+                },
+                "prefer_outdoor_seating": {
+                    "type": "boolean"
+                },
+                "preferred_pace": {
+                    "$ref": "#/definitions/types.SearchPace"
+                },
+                "preferred_time": {
+                    "$ref": "#/definitions/types.DayPreference"
+                },
+                "preferred_transport": {
+                    "$ref": "#/definitions/types.TransportPreference"
+                },
+                "preferred_vibes": {
+                    "description": "Use empty slice if not provided?",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "profile_name": {
+                    "type": "string"
+                },
+                "search_radius_km": {
+                    "type": "number"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "user_id": {
+                    "description": "Added for clarity",
+                    "type": "string"
+                }
+            }
+        },
+        "types.DayPreference": {
+            "type": "string",
+            "enum": [
+                "any",
+                "day",
+                "night"
+            ],
+            "x-enum-comments": {
+                "DayPreferenceAny": "No specific preference",
+                "DayPreferenceDay": "Primarily daytime activities",
+                "DayPreferenceNight": "Primarily evening/night activities"
+            },
+            "x-enum-varnames": [
+                "DayPreferenceAny",
+                "DayPreferenceDay",
+                "DayPreferenceNight"
+            ]
+        },
+        "types.Interest": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "description": "Use pointer if nullable",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.LoginRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -321,7 +1714,7 @@
                 }
             }
         },
-        "auth.LoginResponse": {
+        "types.LoginResponse": {
             "type": "object",
             "properties": {
                 "access_token": {
@@ -341,7 +1734,7 @@
                 }
             }
         },
-        "auth.LogoutRequest": {
+        "types.LogoutRequest": {
             "type": "object",
             "required": [
                 "refresh_token"
@@ -353,7 +1746,7 @@
                 }
             }
         },
-        "auth.RefreshTokenRequest": {
+        "types.RefreshTokenRequest": {
             "type": "object",
             "required": [
                 "refresh_token"
@@ -366,7 +1759,7 @@
                 }
             }
         },
-        "auth.RegisterRequest": {
+        "types.RegisterRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -397,7 +1790,7 @@
                 }
             }
         },
-        "auth.Response": {
+        "types.Response": {
             "type": "object",
             "properties": {
                 "error": {
@@ -417,7 +1810,55 @@
                 }
             }
         },
-        "auth.TokenResponse": {
+        "types.SearchPace": {
+            "type": "string",
+            "enum": [
+                "any",
+                "relaxed",
+                "moderate",
+                "fast"
+            ],
+            "x-enum-comments": {
+                "SearchPaceAny": "No preference",
+                "SearchPaceFast": "Pack in many activities",
+                "SearchPaceModerate": "Standard pace",
+                "SearchPaceRelaxed": "Fewer, longer activities"
+            },
+            "x-enum-varnames": [
+                "SearchPaceAny",
+                "SearchPaceRelaxed",
+                "SearchPaceModerate",
+                "SearchPaceFast"
+            ]
+        },
+        "types.Tags": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "tag_type": {
+                    "description": "Consider using a specific enum type",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.TokenResponse": {
             "type": "object",
             "properties": {
                 "access_token": {
@@ -429,6 +1870,374 @@
                     "description": "The *new* longer-lived refresh token (if rotation is enabled, often set in cookie).",
                     "type": "string",
                     "example": "9a8b7c..."
+                }
+            }
+        },
+        "types.TransportPreference": {
+            "type": "string",
+            "enum": [
+                "any",
+                "walk",
+                "public",
+                "car"
+            ],
+            "x-enum-varnames": [
+                "TransportPreferenceAny",
+                "TransportPreferenceWalk",
+                "TransportPreferencePublic",
+                "TransportPreferenceCar"
+            ]
+        },
+        "types.UpdateProfileParams": {
+            "type": "object",
+            "properties": {
+                "about_you": {
+                    "type": "string"
+                },
+                "age": {
+                    "type": "integer"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "country": {
+                    "type": "string"
+                },
+                "displayName": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "firstname": {
+                    "type": "string"
+                },
+                "lastname": {
+                    "type": "string"
+                },
+                "profileImageURL": {
+                    "type": "string"
+                },
+                "username": {
+                    "description": "Pointer allows distinguishing between empty string and not provided",
+                    "type": "string"
+                }
+            }
+        },
+        "types.UpdateUserInterestParams": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.UpdateUserPreferenceProfileParams": {
+            "type": "object",
+            "required": [
+                "profile_name"
+            ],
+            "properties": {
+                "budget_level": {
+                    "type": "integer"
+                },
+                "dietary_needs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "interests": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "is_default": {
+                    "description": "Default is FALSE in DB",
+                    "type": "boolean"
+                },
+                "prefer_accessible_pois": {
+                    "type": "boolean"
+                },
+                "prefer_dog_friendly": {
+                    "type": "boolean"
+                },
+                "prefer_outdoor_seating": {
+                    "type": "boolean"
+                },
+                "preferred_pace": {
+                    "$ref": "#/definitions/types.SearchPace"
+                },
+                "preferred_time": {
+                    "$ref": "#/definitions/types.DayPreference"
+                },
+                "preferred_transport": {
+                    "$ref": "#/definitions/types.TransportPreference"
+                },
+                "preferred_vibes": {
+                    "description": "Use empty slice if not provided?",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "profile_name": {
+                    "type": "string"
+                },
+                "search_radius_km": {
+                    "type": "number"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "updated_at": {
+                    "description": "Optional, can be set to nil",
+                    "type": "string"
+                }
+            }
+        },
+        "types.UpdateUserSettingsParams": {
+            "type": "object",
+            "properties": {
+                "default_budget_level": {
+                    "type": "integer"
+                },
+                "default_search_radius_km": {
+                    "type": "number"
+                },
+                "prefer_accessible_pois": {
+                    "type": "boolean"
+                },
+                "prefer_dog_friendly": {
+                    "type": "boolean"
+                },
+                "prefer_outdoor_seating": {
+                    "type": "boolean"
+                },
+                "preferred_pace": {
+                    "$ref": "#/definitions/types.SearchPace"
+                },
+                "preferred_time": {
+                    "$ref": "#/definitions/types.DayPreference"
+                }
+            }
+        },
+        "types.UserPreferenceProfileResponse": {
+            "type": "object",
+            "properties": {
+                "budget_level": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "dietary_needs": {
+                    "description": "Assuming TEXT[] maps to []string",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "interests": {
+                    "description": "Interests linked to this profile",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.Interest"
+                    }
+                },
+                "is_default": {
+                    "type": "boolean"
+                },
+                "prefer_accessible_pois": {
+                    "type": "boolean"
+                },
+                "prefer_dog_friendly": {
+                    "type": "boolean"
+                },
+                "prefer_outdoor_seating": {
+                    "type": "boolean"
+                },
+                "preferred_pace": {
+                    "$ref": "#/definitions/types.SearchPace"
+                },
+                "preferred_time": {
+                    "$ref": "#/definitions/types.DayPreference"
+                },
+                "preferred_transport": {
+                    "$ref": "#/definitions/types.TransportPreference"
+                },
+                "preferred_vibes": {
+                    "description": "Assuming TEXT[] maps to []string",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "profile_name": {
+                    "type": "string"
+                },
+                "search_radius_km": {
+                    "type": "number"
+                },
+                "tags": {
+                    "description": "Tags to avoid for this profile",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.Tags"
+                    }
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "description": "Might omit in some API responses",
+                    "type": "string"
+                },
+                "user_latitude": {
+                    "type": "number"
+                },
+                "user_longitude": {
+                    "type": "number"
+                }
+            }
+        },
+        "types.UserProfile": {
+            "type": "object",
+            "properties": {
+                "about_you": {
+                    "type": "string"
+                },
+                "age": {
+                    "type": "integer"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "country": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "display_name": {
+                    "description": "Use pointer if nullable",
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "email_verified_at": {
+                    "description": "Use pointer if nullable",
+                    "type": "string"
+                },
+                "firstname": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "last_login_at": {
+                    "description": "Use pointer if nullable",
+                    "type": "string"
+                },
+                "lastname": {
+                    "type": "string"
+                },
+                "profile_image_url": {
+                    "description": "Use pointer if nullable",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "username": {
+                    "description": "Use pointer if nullable/optional unique",
+                    "type": "string"
+                }
+            }
+        },
+        "types.UserSettings": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "default_budget_level": {
+                    "type": "integer"
+                },
+                "default_search_radius_km": {
+                    "description": "Use float64 for NUMERIC",
+                    "type": "number"
+                },
+                "prefer_accessible_pois": {
+                    "type": "boolean"
+                },
+                "prefer_dog_friendly": {
+                    "type": "boolean"
+                },
+                "prefer_outdoor_seating": {
+                    "type": "boolean"
+                },
+                "preferred_pace": {
+                    "$ref": "#/definitions/types.SearchPace"
+                },
+                "preferred_time": {
+                    "$ref": "#/definitions/types.DayPreference"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.ValidateSessionRequest": {
+            "type": "object",
+            "required": [
+                "session_id"
+            ],
+            "properties": {
+                "session_id": {
+                    "description": "The session identifier (might be an access token).",
+                    "type": "string"
+                }
+            }
+        },
+        "types.ValidateSessionResponse": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "description": "Email associated with the session/token.",
+                    "type": "string"
+                },
+                "user_id": {
+                    "description": "User ID associated with the session/token.",
+                    "type": "string"
+                },
+                "username": {
+                    "description": "Username associated with the session/token.",
+                    "type": "string"
+                },
+                "valid": {
+                    "description": "True if the session/token is valid.",
+                    "type": "boolean"
                 }
             }
         }

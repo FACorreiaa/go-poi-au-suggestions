@@ -9,12 +9,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 type POIHandler struct {
@@ -29,7 +30,19 @@ func NewPOIHandler(poiService POIService, logger *slog.Logger) *POIHandler {
 	}
 }
 
-// AddPoiToFavourites adds a POI to the user's favourites.
+// AddPoiToFavourites godoc
+// @Summary      Add POI to Favourites
+// @Description  Adds a point of interest to the user's favourites list
+// @Tags         POI
+// @Accept       json
+// @Produce      json
+// @Param        poi body types.AddPoiRequest true "POI ID to add to favourites"
+// @Success      201 {object} interface{} "POI added to favourites successfully"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Authentication required"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /poi/favourites [post]
 func (h *POIHandler) AddPoiToFavourites(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("AddPoiToFavourites").Start(r.Context(), "AddPoiToFavourites", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
@@ -87,7 +100,19 @@ func (h *POIHandler) AddPoiToFavourites(w http.ResponseWriter, r *http.Request) 
 	api.WriteJSONResponse(w, r, http.StatusCreated, savedItinerary)
 }
 
-// RemovePoiFromFavourites removes a POI from the user's favourites.
+// RemovePoiFromFavourites godoc
+// @Summary      Remove POI from Favourites
+// @Description  Removes a point of interest from the user's favourites list
+// @Tags         POI
+// @Accept       json
+// @Produce      json
+// @Param        poi body types.AddPoiRequest true "POI ID to remove from favourites"
+// @Success      200 {object} map[string]string "POI removed from favourites successfully"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Authentication required"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /poi/favourites [delete]
 func (h *POIHandler) RemovePoiFromFavourites(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("RemovePoiFromFavourites").Start(r.Context(), "RemovePoiFromFavourites", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
@@ -136,6 +161,18 @@ func (h *POIHandler) RemovePoiFromFavourites(w http.ResponseWriter, r *http.Requ
 	api.WriteJSONResponse(w, r, http.StatusOK, map[string]string{"message": "POI removed from favourites successfully"})
 }
 
+// GetFavouritePOIsByUserID godoc
+// @Summary      Get User's Favourite POIs
+// @Description  Retrieves all points of interest that the authenticated user has marked as favourites
+// @Tags         POI
+// @Accept       json
+// @Produce      json
+// @Success      200 {array} interface{} "List of favourite POIs"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Authentication required"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /poi/favourites [get]
 func (handler *POIHandler) GetFavouritePOIsByUserID(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetFavouritePOIsByUserID", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
@@ -173,7 +210,17 @@ func (handler *POIHandler) GetFavouritePOIsByUserID(w http.ResponseWriter, r *ht
 	api.WriteJSONResponse(w, r, http.StatusOK, favouritePOIs)
 }
 
-// GetPOIsByCityID retrieves POIs by city ID.
+// GetPOIsByCityID godoc
+// @Summary      Get POIs by City ID
+// @Description  Retrieves all points of interest for a specific city
+// @Tags         POI
+// @Accept       json
+// @Produce      json
+// @Param        cityID path string true "City ID"
+// @Success      200 {array} interface{} "List of POIs in the city"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Router       /poi/city/{cityID} [get]
 func (h *POIHandler) GetPOIsByCityID(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("GetPOIsByCityID").Start(r.Context(), "GetPOIsByCityID", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),

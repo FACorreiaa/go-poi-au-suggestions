@@ -43,9 +43,9 @@ func NewSettingsHandler(userprofileService SettingsService, logger *slog.Logger)
 // @Tags         User
 // @Accept       json
 // @Produce      json
-// @Success      200 {array} api.profile "User Preferences"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Success      200 {array} types.UserSettings "User Preferences"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/preferences [get]
 func (h *SettingsHandler) GetUserSettings(w http.ResponseWriter, r *http.Request) {
@@ -94,8 +94,14 @@ func (h *SettingsHandler) GetUserSettings(w http.ResponseWriter, r *http.Request
 // @Tags         User
 // @Accept       json
 // @Produce      json
-// @Param        preferences body api.UpdatePreferencesParams true "Preferences Update Parameters"
-// @Success      200 {object} api.Response "Preferences Updated Successfully"
+// @Param        profileID path string true "Profile ID"
+// @Param        preferences body types.UpdateUserSettingsParams true "Preferences Update Parameters"
+// @Success      200 {object} types.Response "Preferences Updated Successfully"
+// @Failure      400 {object} types.Response "Bad Request"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /user/preferences/{profileID} [put]
 func (h *SettingsHandler) UpdateUserSettings(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("UserprofileHandler").Start(r.Context(), "UpdateUserPreferences", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),

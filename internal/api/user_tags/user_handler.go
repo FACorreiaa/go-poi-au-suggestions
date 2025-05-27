@@ -37,6 +37,17 @@ func NewUserTagsHandler(userService UserTagsService, logger *slog.Logger) *UserT
 	}
 }
 
+// GetTags godoc
+// @Summary      Get All User Tags
+// @Description  Retrieves all tags created by the authenticated user
+// @Tags         User Tags
+// @Accept       json
+// @Produce      json
+// @Success      200 {array} types.Tags "User Tags"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /user/tags [get]
 func (u *UserTagsHandler) GetTags(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("GetTagsHandler").Start(r.Context(), "GetTags", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),

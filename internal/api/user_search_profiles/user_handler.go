@@ -40,6 +40,20 @@ func NewUserHandler(userService UserSearchProfilesService, logger *slog.Logger) 
 	}
 }
 
+// GetSearchProfile godoc
+// @Summary      Get User Preference Profile
+// @Description  Fetches a specific preference profile for the authenticated user
+// @Tags         User Profiles
+// @Accept       json
+// @Produce      json
+// @Param        profileID path string true "Profile ID"
+// @Success      200 {object} types.UserPreferenceProfileResponse "User Preference Profile"
+// @Failure      400 {object} types.Response "Bad Request"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      404 {object} types.Response "Not Found"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /user/profiles/{profileID} [get]
 func (u *UserSearchProfileHandler) GetSearchProfile(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "GetAllInterests", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
@@ -92,9 +106,9 @@ func (u *UserSearchProfileHandler) GetSearchProfile(w http.ResponseWriter, r *ht
 // @Tags         User Profiles
 // @Accept       json
 // @Produce      json
-// @Success      200 {array} api.UserPreferenceProfile "User Preference Profiles"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Success      200 {array} types.UserPreferenceProfileResponse "User Preference Profiles"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles [get]
 // Assuming this is in a handler file
@@ -140,11 +154,11 @@ func (u *UserSearchProfileHandler) GetSearchProfiles(w http.ResponseWriter, r *h
 // @Tags         User Profiles
 // @Accept       json
 // @Produce      json
-// @Param        profile body api.CreateUserPreferenceProfileParams true "Profile Creation Parameters"
-// @Success      201 {object} api.UserPreferenceProfile "Created Profile"
-// @Failure      400 {object} api.Response "Bad Request"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Param        profile body types.CreateUserPreferenceProfileParams true "Profile Creation Parameters"
+// @Success      201 {object} types.UserPreferenceProfileResponse "Created Profile"
+// @Failure      400 {object} types.Response "Bad Request"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles [post]
 // Assuming this is in a handler file
@@ -221,9 +235,9 @@ func (u *UserSearchProfileHandler) CreateSearchProfile(w http.ResponseWriter, r 
 // @Tags         User Profiles
 // @Accept       json
 // @Produce      json
-// @Success      200 {object} api.UserPreferenceProfile "Default User Preference Profile"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Success      200 {object} types.UserPreferenceProfileResponse "Default User Preference Profile"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles/default [get]
 // Assuming this is in a handler file
@@ -285,12 +299,12 @@ func (u *UserSearchProfileHandler) GetDefaultSearchProfile(w http.ResponseWriter
 // @Accept       json
 // @Produce      json
 // @Param        profileID path string true "Profile ID"
-// @Param        profile body api.UpdateUserPreferenceProfileParams true "Profile Update Parameters"
-// @Success      200 {object} api.UserPreferenceProfile "Updated Profile"
-// @Failure      400 {object} api.Response "Bad Request"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      404 {object} api.Response "Not Found"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Param        profile body types.UpdateUserPreferenceProfileParams true "Profile Update Parameters"
+// @Success      200 {object} types.UserPreferenceProfileResponse "Updated Profile"
+// @Failure      400 {object} types.Response "Bad Request"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      404 {object} types.Response "Not Found"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles/{profileID} [put]
 // Assuming this is in a handler file
@@ -378,10 +392,10 @@ func (u *UserSearchProfileHandler) UpdateSearchProfile(w http.ResponseWriter, r 
 // @Produce      json
 // @Param        profileID path string true "Profile ID"
 // @Success      204 {object} nil "No Content"
-// @Failure      400 {object} api.Response "Bad Request"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      404 {object} api.Response "Not Found"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Failure      400 {object} types.Response "Bad Request"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      404 {object} types.Response "Not Found"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles/{profileID} [delete]
 // Assuming this is in a handler file
@@ -451,11 +465,11 @@ func (u *UserSearchProfileHandler) DeleteSearchProfile(w http.ResponseWriter, r 
 // @Accept       json
 // @Produce      json
 // @Param        profileID path string true "Profile ID"
-// @Success      200 {object} api.UserPreferenceProfile "Default User Preference Profile"
-// @Failure      400 {object} api.Response "Bad Request"
-// @Failure      401 {object} api.Response "Unauthorized"
-// @Failure      404 {object} api.Response "Not Found"
-// @Failure      500 {object} api.Response "Internal Server Error"
+// @Success      200 {object} types.UserPreferenceProfileResponse "Default User Preference Profile"
+// @Failure      400 {object} types.Response "Bad Request"
+// @Failure      401 {object} types.Response "Unauthorized"
+// @Failure      404 {object} types.Response "Not Found"
+// @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles/default/{profileID} [put]
 // Assuming this is in a handler file

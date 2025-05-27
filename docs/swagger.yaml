@@ -1,6 +1,25 @@
 basePath: /api/v1        // Base path for all API routes
 definitions:
-  auth.ChangePasswordRequest:
+  types.AddPoiRequest:
+    properties:
+      poi_id:
+        type: string
+    type: object
+  types.ChangeEmailRequest:
+    properties:
+      new_email:
+        description: Desired new email address.
+        example: new.email@example.com
+        type: string
+      password:
+        description: User's current password for verification.
+        example: currentPassword123
+        type: string
+    required:
+    - new_email
+    - password
+    type: object
+  types.ChangePasswordRequest:
     properties:
       new_password:
         description: User's desired new password.
@@ -15,7 +34,100 @@ definitions:
     - new_password
     - old_password
     type: object
-  auth.LoginRequest:
+  types.CreateInterestRequest:
+    properties:
+      active:
+        example: true
+        type: boolean
+      description:
+        example: Outdoor hiking activities
+        type: string
+      name:
+        example: Hiking
+        type: string
+    required:
+    - name
+    type: object
+  types.CreateUserPreferenceProfileParams:
+    properties:
+      budget_level:
+        type: integer
+      dietary_needs:
+        items:
+          type: string
+        type: array
+      interests:
+        items:
+          type: string
+        type: array
+      is_default:
+        description: Default is FALSE in DB
+        type: boolean
+      prefer_accessible_pois:
+        type: boolean
+      prefer_dog_friendly:
+        type: boolean
+      prefer_outdoor_seating:
+        type: boolean
+      preferred_pace:
+        $ref: '#/definitions/types.SearchPace'
+      preferred_time:
+        $ref: '#/definitions/types.DayPreference'
+      preferred_transport:
+        $ref: '#/definitions/types.TransportPreference'
+      preferred_vibes:
+        description: Use empty slice if not provided?
+        items:
+          type: string
+        type: array
+      profile_name:
+        type: string
+      search_radius_km:
+        type: number
+      tags:
+        items:
+          type: string
+        type: array
+      user_id:
+        description: Added for clarity
+        type: string
+    required:
+    - profile_name
+    - user_id
+    type: object
+  types.DayPreference:
+    enum:
+    - any
+    - day
+    - night
+    type: string
+    x-enum-comments:
+      DayPreferenceAny: No specific preference
+      DayPreferenceDay: Primarily daytime activities
+      DayPreferenceNight: Primarily evening/night activities
+    x-enum-varnames:
+    - DayPreferenceAny
+    - DayPreferenceDay
+    - DayPreferenceNight
+  types.Interest:
+    properties:
+      active:
+        type: boolean
+      created_at:
+        type: string
+      description:
+        description: Use pointer if nullable
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      source:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  types.LoginRequest:
     properties:
       email:
         description: User's email address for login.
@@ -29,7 +141,7 @@ definitions:
     - email
     - password
     type: object
-  auth.LoginResponse:
+  types.LoginResponse:
     properties:
       access_token:
         description: Short-lived JWT access token.
@@ -44,7 +156,7 @@ definitions:
         example: 4f1trt8s...
         type: string
     type: object
-  auth.LogoutRequest:
+  types.LogoutRequest:
     properties:
       refresh_token:
         description: Refresh token to invalidate.
@@ -52,7 +164,7 @@ definitions:
     required:
     - refresh_token
     type: object
-  auth.RefreshTokenRequest:
+  types.RefreshTokenRequest:
     properties:
       refresh_token:
         description: The refresh token obtained during login.
@@ -61,7 +173,7 @@ definitions:
     required:
     - refresh_token
     type: object
-  auth.RegisterRequest:
+  types.RegisterRequest:
     properties:
       email:
         description: User's email address. Must be unique.
@@ -85,7 +197,7 @@ definitions:
     - password
     - username
     type: object
-  auth.Response:
+  types.Response:
     properties:
       error:
         description: Optional error message.
@@ -100,7 +212,42 @@ definitions:
         example: true
         type: boolean
     type: object
-  auth.TokenResponse:
+  types.SearchPace:
+    enum:
+    - any
+    - relaxed
+    - moderate
+    - fast
+    type: string
+    x-enum-comments:
+      SearchPaceAny: No preference
+      SearchPaceFast: Pack in many activities
+      SearchPaceModerate: Standard pace
+      SearchPaceRelaxed: Fewer, longer activities
+    x-enum-varnames:
+    - SearchPaceAny
+    - SearchPaceRelaxed
+    - SearchPaceModerate
+    - SearchPaceFast
+  types.Tags:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      source:
+        type: string
+      tag_type:
+        description: Consider using a specific enum type
+        type: string
+      updated_at:
+        type: string
+    type: object
+  types.TokenResponse:
     properties:
       access_token:
         description: The new short-lived JWT access token.
@@ -111,6 +258,257 @@ definitions:
           often set in cookie).
         example: 9a8b7c...
         type: string
+    type: object
+  types.TransportPreference:
+    enum:
+    - any
+    - walk
+    - public
+    - car
+    type: string
+    x-enum-varnames:
+    - TransportPreferenceAny
+    - TransportPreferenceWalk
+    - TransportPreferencePublic
+    - TransportPreferenceCar
+  types.UpdateProfileParams:
+    properties:
+      about_you:
+        type: string
+      age:
+        type: integer
+      city:
+        type: string
+      country:
+        type: string
+      displayName:
+        type: string
+      email:
+        type: string
+      firstname:
+        type: string
+      lastname:
+        type: string
+      profileImageURL:
+        type: string
+      username:
+        description: Pointer allows distinguishing between empty string and not provided
+        type: string
+    type: object
+  types.UpdateUserInterestParams:
+    properties:
+      active:
+        type: boolean
+      description:
+        type: string
+      name:
+        type: string
+    type: object
+  types.UpdateUserPreferenceProfileParams:
+    properties:
+      budget_level:
+        type: integer
+      dietary_needs:
+        items:
+          type: string
+        type: array
+      interests:
+        items:
+          type: string
+        type: array
+      is_default:
+        description: Default is FALSE in DB
+        type: boolean
+      prefer_accessible_pois:
+        type: boolean
+      prefer_dog_friendly:
+        type: boolean
+      prefer_outdoor_seating:
+        type: boolean
+      preferred_pace:
+        $ref: '#/definitions/types.SearchPace'
+      preferred_time:
+        $ref: '#/definitions/types.DayPreference'
+      preferred_transport:
+        $ref: '#/definitions/types.TransportPreference'
+      preferred_vibes:
+        description: Use empty slice if not provided?
+        items:
+          type: string
+        type: array
+      profile_name:
+        type: string
+      search_radius_km:
+        type: number
+      tags:
+        items:
+          type: string
+        type: array
+      updated_at:
+        description: Optional, can be set to nil
+        type: string
+    required:
+    - profile_name
+    type: object
+  types.UpdateUserSettingsParams:
+    properties:
+      default_budget_level:
+        type: integer
+      default_search_radius_km:
+        type: number
+      prefer_accessible_pois:
+        type: boolean
+      prefer_dog_friendly:
+        type: boolean
+      prefer_outdoor_seating:
+        type: boolean
+      preferred_pace:
+        $ref: '#/definitions/types.SearchPace'
+      preferred_time:
+        $ref: '#/definitions/types.DayPreference'
+    type: object
+  types.UserPreferenceProfileResponse:
+    properties:
+      budget_level:
+        type: integer
+      created_at:
+        type: string
+      dietary_needs:
+        description: Assuming TEXT[] maps to []string
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      interests:
+        description: Interests linked to this profile
+        items:
+          $ref: '#/definitions/types.Interest'
+        type: array
+      is_default:
+        type: boolean
+      prefer_accessible_pois:
+        type: boolean
+      prefer_dog_friendly:
+        type: boolean
+      prefer_outdoor_seating:
+        type: boolean
+      preferred_pace:
+        $ref: '#/definitions/types.SearchPace'
+      preferred_time:
+        $ref: '#/definitions/types.DayPreference'
+      preferred_transport:
+        $ref: '#/definitions/types.TransportPreference'
+      preferred_vibes:
+        description: Assuming TEXT[] maps to []string
+        items:
+          type: string
+        type: array
+      profile_name:
+        type: string
+      search_radius_km:
+        type: number
+      tags:
+        description: Tags to avoid for this profile
+        items:
+          $ref: '#/definitions/types.Tags'
+        type: array
+      updated_at:
+        type: string
+      user_id:
+        description: Might omit in some API responses
+        type: string
+      user_latitude:
+        type: number
+      user_longitude:
+        type: number
+    type: object
+  types.UserProfile:
+    properties:
+      about_you:
+        type: string
+      age:
+        type: integer
+      city:
+        type: string
+      country:
+        type: string
+      created_at:
+        type: string
+      display_name:
+        description: Use pointer if nullable
+        type: string
+      email:
+        type: string
+      email_verified_at:
+        description: Use pointer if nullable
+        type: string
+      firstname:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      last_login_at:
+        description: Use pointer if nullable
+        type: string
+      lastname:
+        type: string
+      profile_image_url:
+        description: Use pointer if nullable
+        type: string
+      updated_at:
+        type: string
+      username:
+        description: Use pointer if nullable/optional unique
+        type: string
+    type: object
+  types.UserSettings:
+    properties:
+      created_at:
+        type: string
+      default_budget_level:
+        type: integer
+      default_search_radius_km:
+        description: Use float64 for NUMERIC
+        type: number
+      prefer_accessible_pois:
+        type: boolean
+      prefer_dog_friendly:
+        type: boolean
+      prefer_outdoor_seating:
+        type: boolean
+      preferred_pace:
+        $ref: '#/definitions/types.SearchPace'
+      preferred_time:
+        $ref: '#/definitions/types.DayPreference'
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  types.ValidateSessionRequest:
+    properties:
+      session_id:
+        description: The session identifier (might be an access token).
+        type: string
+    required:
+    - session_id
+    type: object
+  types.ValidateSessionResponse:
+    properties:
+      email:
+        description: Email associated with the session/token.
+        type: string
+      user_id:
+        description: User ID associated with the session/token.
+        type: string
+      username:
+        description: Username associated with the session/token.
+        type: string
+      valid:
+        description: True if the session/token is valid.
+        type: boolean
     type: object
 host: localhost:8000 // Adjust to your actual host/port
 info:
@@ -126,6 +524,43 @@ info:
   title: WanderWiseAI API
   version: "1.0"
 paths:
+  /auth/email:
+    put:
+      consumes:
+      - application/json
+      description: Allows an authenticated user to change their email address after
+        verifying their password.
+      parameters:
+      - description: Password verification and new email
+        in: body
+        name: email_change
+        required: true
+        schema:
+          $ref: '#/definitions/types.ChangeEmailRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Email Updated Successfully
+          schema:
+            $ref: '#/definitions/types.Response'
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Unauthorized (Invalid password or bad token)
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Change User Email
+      tags:
+      - Auth
   /auth/login:
     post:
       consumes:
@@ -137,26 +572,26 @@ paths:
         name: credentials
         required: true
         schema:
-          $ref: '#/definitions/auth.LoginRequest'
+          $ref: '#/definitions/types.LoginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: Successful Login
           schema:
-            $ref: '#/definitions/auth.LoginResponse'
+            $ref: '#/definitions/types.LoginResponse'
         "400":
           description: Invalid Input
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "401":
           description: Authentication Failed
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
       summary: User Login
       tags:
       - Auth
@@ -172,22 +607,22 @@ paths:
         in: body
         name: token
         schema:
-          $ref: '#/definitions/auth.LogoutRequest'
+          $ref: '#/definitions/types.LogoutRequest'
       produces:
       - application/json
       responses:
         "200":
           description: Logout Successful
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "400":
           description: Bad Request (e.g., malformed body if used)
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
       security:
       - BearerAuth: []
       summary: User Logout
@@ -204,26 +639,26 @@ paths:
         name: passwords
         required: true
         schema:
-          $ref: '#/definitions/auth.ChangePasswordRequest'
+          $ref: '#/definitions/types.ChangePasswordRequest'
       produces:
       - application/json
       responses:
         "200":
           description: Password Updated Successfully
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "400":
           description: Invalid Input
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "401":
           description: Unauthorized (Invalid old password or bad token)
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
       security:
       - BearerAuth: []
       summary: Change User Password
@@ -242,27 +677,62 @@ paths:
         in: body
         name: token
         schema:
-          $ref: '#/definitions/auth.RefreshTokenRequest'
+          $ref: '#/definitions/types.RefreshTokenRequest'
       produces:
       - application/json
       responses:
         "200":
           description: New Access Token (Refresh Token set in cookie)
           schema:
-            $ref: '#/definitions/auth.TokenResponse'
+            $ref: '#/definitions/types.TokenResponse'
         "400":
           description: Bad Request (e.g., missing token)
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "401":
           description: Invalid or Expired Refresh Token
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
       summary: Refresh Access Token
+      tags:
+      - Auth
+  /auth/refresh-session:
+    post:
+      consumes:
+      - application/json
+      description: Refreshes a user's session using a refresh token provided in the
+        request body.
+      parameters:
+      - description: Refresh Token
+        in: body
+        name: token
+        required: true
+        schema:
+          $ref: '#/definitions/types.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: New Access Token
+          schema:
+            $ref: '#/definitions/types.TokenResponse'
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Invalid or Expired Refresh Token
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      summary: Refresh User Session
       tags:
       - Auth
   /auth/register:
@@ -276,29 +746,751 @@ paths:
         name: user
         required: true
         schema:
-          $ref: '#/definitions/auth.RegisterRequest'
+          $ref: '#/definitions/types.RegisterRequest'
       produces:
       - application/json
       responses:
         "201":
           description: User Registered Successfully
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "400":
           description: Invalid Input
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "409":
           description: Email or Username already exists
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/types.Response'
       summary: Register New User
       tags:
       - Auth
+  /auth/validate:
+    post:
+      consumes:
+      - application/json
+      description: Checks if a session ID is valid and returns user information if
+        it is.
+      parameters:
+      - description: Session ID to validate
+        in: body
+        name: session
+        required: true
+        schema:
+          $ref: '#/definitions/types.ValidateSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Session validation result with user info if valid
+          schema:
+            $ref: '#/definitions/types.ValidateSessionResponse'
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      summary: Validate User Session
+      tags:
+      - Auth
+  /poi/city/{cityID}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves all points of interest for a specific city
+      parameters:
+      - description: City ID
+        in: path
+        name: cityID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of POIs in the city
+          schema:
+            items: {}
+            type: array
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      summary: Get POIs by City ID
+      tags:
+      - POI
+  /poi/favourites:
+    delete:
+      consumes:
+      - application/json
+      description: Removes a point of interest from the user's favourites list
+      parameters:
+      - description: POI ID to remove from favourites
+        in: body
+        name: poi
+        required: true
+        schema:
+          $ref: '#/definitions/types.AddPoiRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: POI removed from favourites successfully
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Remove POI from Favourites
+      tags:
+      - POI
+    get:
+      consumes:
+      - application/json
+      description: Retrieves all points of interest that the authenticated user has
+        marked as favourites
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of favourite POIs
+          schema:
+            items: {}
+            type: array
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Get User's Favourite POIs
+      tags:
+      - POI
+    post:
+      consumes:
+      - application/json
+      description: Adds a point of interest to the user's favourites list
+      parameters:
+      - description: POI ID to add to favourites
+        in: body
+        name: poi
+        required: true
+        schema:
+          $ref: '#/definitions/types.AddPoiRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: POI added to favourites successfully
+          schema: {}
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Authentication required
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Add POI to Favourites
+      tags:
+      - POI
+  /user/custom-interests/{interestID}:
+    put:
+      consumes:
+      - application/json
+      description: Updates a specific interest created by the authenticated user.
+      parameters:
+      - description: ID of the custom interest to update
+        format: uuid
+        in: path
+        name: interestID
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: interest
+        required: true
+        schema:
+          $ref: '#/definitions/types.UpdateUserInterestParams'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Interest Updated Successfully
+          schema:
+            $ref: '#/definitions/types.Response'
+        "400":
+          description: Invalid Input or Bad Request
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "403":
+          description: Forbidden (Interest does not belong to user)
+          schema:
+            $ref: '#/definitions/types.Response'
+        "404":
+          description: Interest Not Found
+          schema:
+            $ref: '#/definitions/types.Response'
+        "409":
+          description: Conflict (e.g., duplicate name for user)
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Update Custom Interest
+      tags:
+      - User Preferences
+  /user/interests:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves all available interests.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: All Interests
+          schema:
+            items:
+              $ref: '#/definitions/types.Interest'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      summary: Get All Interests
+      tags:
+      - User
+  /user/interests/create:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new interest in the system.
+      parameters:
+      - description: Interest details to create
+        in: body
+        name: interest
+        required: true
+        schema:
+          $ref: '#/definitions/types.CreateInterestRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created Interest
+          schema:
+            $ref: '#/definitions/types.Interest'
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "409":
+          description: Interest Already Exists
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Create New Interest
+      tags:
+      - User
+  /user/preferences:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves the authenticated user's preferences (profiles).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User Preferences
+          schema:
+            items:
+              $ref: '#/definitions/types.UserSettings'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Get User Preferences
+      tags:
+      - User
+  /user/preferences/{profileID}:
+    put:
+      consumes:
+      - application/json
+      description: Updates the authenticated user's preferences (profiles).
+      parameters:
+      - description: Profile ID
+        in: path
+        name: profileID
+        required: true
+        type: string
+      - description: Preferences Update Parameters
+        in: body
+        name: preferences
+        required: true
+        schema:
+          $ref: '#/definitions/types.UpdateUserSettingsParams'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Preferences Updated Successfully
+          schema:
+            $ref: '#/definitions/types.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Update User Preferences
+      tags:
+      - User
+  /user/preferences/interests/{interestId}:
+    delete:
+      consumes:
+      - application/json
+      description: Removes an interest from the authenticated user's preferences.
+      parameters:
+      - description: Interest ID to remove
+        in: path
+        name: interestId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Interest Removed Successfully
+          schema:
+            $ref: '#/definitions/types.Response'
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "404":
+          description: Interest Not Found
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Remove User Interest
+      tags:
+      - User
+  /user/profile:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves the authenticated user's profile information.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User Profile
+          schema:
+            $ref: '#/definitions/types.UserProfile'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "404":
+          description: User Not Found
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Get User Profile
+      tags:
+      - User
+    put:
+      consumes:
+      - application/json
+      description: Updates the authenticated user's profile information.
+      parameters:
+      - description: Profile Update Parameters
+        in: body
+        name: profile
+        required: true
+        schema:
+          $ref: '#/definitions/types.UpdateProfileParams'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Profile Updated Successfully
+          schema:
+            $ref: '#/definitions/types.Response'
+        "400":
+          description: Invalid Input
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Update User Profile
+      tags:
+      - User
+  /user/profiles:
+    get:
+      consumes:
+      - application/json
+      description: Fetches all preference profiles for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User Preference Profiles
+          schema:
+            items:
+              $ref: '#/definitions/types.UserPreferenceProfileResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Get User Preference Profiles
+      tags:
+      - User Profiles
+    post:
+      consumes:
+      - application/json
+      description: Creates a new preference profile for the authenticated user
+      parameters:
+      - description: Profile Creation Parameters
+        in: body
+        name: profile
+        required: true
+        schema:
+          $ref: '#/definitions/types.CreateUserPreferenceProfileParams'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created Profile
+          schema:
+            $ref: '#/definitions/types.UserPreferenceProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Create User Preference Profile
+      tags:
+      - User Profiles
+  /user/profiles/{profileID}:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes an existing preference profile for the authenticated user
+      parameters:
+      - description: Profile ID
+        in: path
+        name: profileID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete User Preference Profile
+      tags:
+      - User Profiles
+    get:
+      consumes:
+      - application/json
+      description: Fetches a specific preference profile for the authenticated user
+      parameters:
+      - description: Profile ID
+        in: path
+        name: profileID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User Preference Profile
+          schema:
+            $ref: '#/definitions/types.UserPreferenceProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Get User Preference Profile
+      tags:
+      - User Profiles
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing preference profile for the authenticated user
+      parameters:
+      - description: Profile ID
+        in: path
+        name: profileID
+        required: true
+        type: string
+      - description: Profile Update Parameters
+        in: body
+        name: profile
+        required: true
+        schema:
+          $ref: '#/definitions/types.UpdateUserPreferenceProfileParams'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Updated Profile
+          schema:
+            $ref: '#/definitions/types.UserPreferenceProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Update User Preference Profile
+      tags:
+      - User Profiles
+  /user/profiles/default:
+    get:
+      consumes:
+      - application/json
+      description: Fetches the default preference profile for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Default User Preference Profile
+          schema:
+            $ref: '#/definitions/types.UserPreferenceProfileResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Get Default User Preference Profile
+      tags:
+      - User Profiles
+  /user/profiles/default/{profileID}:
+    put:
+      consumes:
+      - application/json
+      description: Sets an existing preference profile as the default for the authenticated
+        user
+      parameters:
+      - description: Profile ID
+        in: path
+        name: profileID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Default User Preference Profile
+          schema:
+            $ref: '#/definitions/types.UserPreferenceProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/types.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Set Default User Preference Profile
+      tags:
+      - User Profiles
+  /user/tags:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves all tags created by the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User Tags
+          schema:
+            items:
+              $ref: '#/definitions/types.Tags'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/types.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/types.Response'
+      security:
+      - BearerAuth: []
+      summary: Get All User Tags
+      tags:
+      - User Tags
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and JWT token.

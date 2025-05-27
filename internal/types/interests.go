@@ -22,3 +22,25 @@ type UpdateUserInterestParams struct {
 	Description *string `json:"description,omitempty"`
 	Active      *bool   `json:"active,omitempty"`
 }
+
+// Request and Response structures for the handlers
+type AddInterestRequest struct {
+	InterestID string `json:"interest_id" binding:"required" example:"d290f1ee-6c54-4b01-90e6-d701748f0851"`
+}
+
+type CreateInterestRequest struct {
+	Name        string  `json:"name" binding:"required" example:"Hiking"`
+	Description *string `json:"description,omitempty" example:"Outdoor hiking activities"`
+	Active      bool    `json:"active" example:"true"`
+}
+
+type UpdatePreferenceLevelRequest struct {
+	PreferenceLevel int `json:"preference_level" binding:"required" example:"2"`
+}
+
+type UpdateInterestRequest struct {
+	ID          string  `json:"interest_id" binding:"required" example:"d290f1ee-6c54-4b01-90e6-d701748f0851"`
+	Name        string  `json:"name" binding:"required" example:"Hiking"`
+	Description *string `json:"description,omitempty" example:"Outdoor hiking activities"`
+	Active      bool    `json:"active" example:"true"`
+}

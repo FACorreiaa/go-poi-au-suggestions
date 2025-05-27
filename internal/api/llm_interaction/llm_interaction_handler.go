@@ -138,7 +138,30 @@ func (handler *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r 
 		UserLon: 2.1734,
 	}
 
+	// sessionIDParam := r.URL.Query().Get("session_id")
+
+	// isNewConversation := (sessionIDParam == "")
+	// var sessionIDPtr *string
+	// if !isNewConversation {
+	// 	sessionIDPtr = &sessionIDParam
+	// }
+
+	//
+	// userRequest := UserRequest{
+	// 	Interests:  []string{"art", "history"},
+	// 	Tags:       []string{"family-friendly"},
+	// 	Categories: []string{"restaurants"},
+	// }
+
 	itineraryResponse, err := handler.llmInteractionService.GetPromptResponse(ctx, cityName, userID, profileID, userLocation)
+	responsePayload := struct {
+		Data *types.AiCityResponse `json:"data"`
+		//SessionID string                `json:"session_id"` // IMPORTANT: Send this back
+	}{
+		Data: itineraryResponse,
+		//SessionID: chatSessionID,
+	}
+
 	if err != nil {
 		l.ErrorContext(ctx, "Service failed to generate prompt response", slog.Any("error", err))
 		span.RecordError(err)
@@ -167,7 +190,7 @@ func (handler *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r 
 	span.SetAttributes(attribute.String("app.itinerary.name", itineraryResponse.AIItineraryResponse.ItineraryName))
 	span.SetStatus(codes.Ok, "Itinerary generated")
 	l.InfoContext(ctx, "User preference profile created successfully")
-	api.WriteJSONResponse(w, r, http.StatusCreated, itineraryResponse)
+	api.WriteJSONResponse(w, r, http.StatusCreated, responsePayload)
 }
 
 func (handler *LlmInteractionHandler) SaveItenerary(w http.ResponseWriter, r *http.Request) {

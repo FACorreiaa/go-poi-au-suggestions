@@ -118,3 +118,11 @@ type BookmarkRequest struct {
 	Tags             []string  `json:"tags"`        // Optional
 	IsPublic         *bool     `json:"is_public"`   // Optional
 }
+
+type ChatMessage struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Timestamp time.Time
+	Role      string
+	Content   string
+}

@@ -182,6 +182,7 @@ func LLMInteractionRoutes(handler *llmInteraction.LlmInteractionHandler) http.Ha
 	r := chi.NewRouter()
 	// LLM interaction routes
 	r.Post("/prompt-response/profile/{profileID}", handler.GetPrompResponse)     // GET http://localhost:8000/api/v1/user/interests
+	r.Get("/prompt-response/poi/details", handler.GetPOIDetails)                 // GET http://localhost:8000/api/v1/llm/prompt-response/{interactionID}
 	r.Post("/prompt-response/bookmark", handler.SaveItenerary)                   // POST http://localhost:8000/api/v1/llm/prompt-response
 	r.Delete("/prompt-response/bookmark/{itineraryID}", handler.RemoveItenerary) // DELETE http://localhost:8000/api/v1/llm/bookmark/{bookmarkID}
 	return r

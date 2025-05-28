@@ -31,6 +31,27 @@ type POIDetail struct {
 	// LocationPhone        string    `json:"location_phone"`
 	// LocationWebsite      string    `json:"location_website"`
 	// LocationOpeningHours string    `json:"location_opening_hours"`
+	Err error `json:"-"`
+}
+
+type POIDetailedInfo struct {
+	ID               uuid.UUID         `json:"id,omitempty"`
+	City             string            `json:"city"`
+	Name             string            `json:"name"`
+	Latitude         float64           `json:"latitude,omitempty"`
+	Longitude        float64           `json:"longitude,omitempty"`
+	Category         string            `json:"category"`
+	Description      string            `json:"description"`
+	Rating           float64           `json:"rating"`
+	Address          string            `json:"address"`
+	PhoneNumber      string            `json:"phone_number"`
+	Website          string            `json:"website"`
+	OpeningHours     map[string]string `json:"opening_hours"`
+	Images           []string          `json:"images,omitempty"`
+	PriceRange       string            `json:"price_range"`
+	LlmInteractionID uuid.UUID         `json:"llm_interaction_id"`
+	Tags             []string          `json:"tags,omitempty"`
+	Err              error             `json:"-"`
 }
 
 type AddPoiRequest struct {

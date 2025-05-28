@@ -7,6 +7,10 @@ import (
 	"log"
 	"os"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/genai"
 )
 
@@ -22,17 +26,28 @@ type ChatSession struct {
 }
 
 func NewAIClient(ctx context.Context) (*AIClient, error) {
+	ctx, span := otel.Tracer("GenerativeAI").Start(ctx, "NewAIClient")
+	defer span.End()
+
 	apiKey := os.Getenv("GOOGLE_GEMINI_API_KEY")
 	if apiKey == "" {
-		log.Fatal("GOOGLE_GEMINI_API_KEY environment variable is not set")
+		err := fmt.Errorf("GOOGLE_GEMINI_API_KEY environment variable is not set")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "API key not set")
+		log.Fatal(err)
 	}
+
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  apiKey,
 		Backend: genai.BackendGeminiAPI,
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to create Gemini client")
 		return nil, err
 	}
+
+	span.SetStatus(codes.Ok, "AI client created successfully")
 	return &AIClient{
 		client: client,
 		model:  *model,
@@ -56,43 +71,95 @@ func NewAIClient(ctx context.Context) (*AIClient, error) {
 // }
 
 func (ai *AIClient) GenerateContent(ctx context.Context, prompt string, config *genai.GenerateContentConfig) (string, error) {
+	ctx, span := otel.Tracer("GenerativeAI").Start(ctx, "GenerateContent", trace.WithAttributes(
+		attribute.String("prompt.length", fmt.Sprintf("%d", len(prompt))),
+		attribute.String("model", *model),
+	))
+	defer span.End()
+
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  os.Getenv("GOOGLE_GEMINI_API_KEY"),
 		Backend: genai.BackendGeminiAPI,
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to create client")
 		return "", fmt.Errorf("failed to create client: %w", err)
 	}
+
 	result, err := client.Models.GenerateContent(ctx, *model, genai.Text(prompt), config)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to generate content")
 		log.Fatal(err)
 	}
-	return result.Text(), nil
+
+	responseText := result.Text()
+	span.SetAttributes(attribute.Int("response.length", len(responseText)))
+	span.SetStatus(codes.Ok, "Content generated successfully")
+	return responseText, nil
 }
 
 func (ai *AIClient) GenerateResponse(ctx context.Context, prompt string, config *genai.GenerateContentConfig) (*genai.GenerateContentResponse, error) {
+	ctx, span := otel.Tracer("GenerativeAI").Start(ctx, "GenerateResponse", trace.WithAttributes(
+		attribute.String("prompt.length", fmt.Sprintf("%d", len(prompt))),
+		attribute.String("model", ai.model),
+	))
+	defer span.End()
+
 	chat, err := ai.client.Chats.Create(ctx, ai.model, config, nil)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to create chat")
 		return nil, fmt.Errorf("failed to create chat: %w", err)
 	}
-	return chat.SendMessage(ctx, genai.Part{Text: prompt})
+
+	response, err := chat.SendMessage(ctx, genai.Part{Text: prompt})
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to send message")
+		return nil, err
+	}
+
+	span.SetStatus(codes.Ok, "Response generated successfully")
+	return response, nil
 }
 
 func (ai *AIClient) StartChatSession(ctx context.Context, config *genai.GenerateContentConfig) (*ChatSession, error) {
+	ctx, span := otel.Tracer("GenerativeAI").Start(ctx, "StartChatSession", trace.WithAttributes(
+		attribute.String("model", ai.model),
+	))
+	defer span.End()
+
 	//config = &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.5)}
 	chat, err := ai.client.Chats.Create(ctx, ai.model, config, nil)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to create chat session")
 		return nil, err
 	}
+
+	span.SetStatus(codes.Ok, "Chat session created successfully")
 	return &ChatSession{chat: chat}, nil
 }
 
 func (cs *ChatSession) SendMessage(ctx context.Context, message string) (string, error) {
+	ctx, span := otel.Tracer("GenerativeAI").Start(ctx, "SendMessage", trace.WithAttributes(
+		attribute.String("message.length", fmt.Sprintf("%d", len(message))),
+	))
+	defer span.End()
+
 	result, err := cs.chat.SendMessage(ctx, genai.Part{Text: message})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to send message")
 		return "", err
 	}
-	return result.Text(), nil
+
+	responseText := result.Text()
+	span.SetAttributes(attribute.Int("response.length", len(responseText)))
+	span.SetStatus(codes.Ok, "Message sent successfully")
+	return responseText, nil
 }
 
 //func GenerateEmbedding(ctx context.Context, client *genai.Client, text string) ([]float32, error) {

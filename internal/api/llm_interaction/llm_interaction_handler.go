@@ -153,7 +153,7 @@ func (handler *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r 
 	// 	Categories: []string{"restaurants"},
 	// }
 
-	itineraryResponse, err := handler.llmInteractionService.GetPromptResponse(ctx, cityName, userID, profileID, userLocation)
+	itineraryResponse, err := handler.llmInteractionService.GetIteneraryResponse(ctx, cityName, userID, profileID, userLocation)
 	responsePayload := struct {
 		Data *types.AiCityResponse `json:"data"`
 		//SessionID string                `json:"session_id"` // IMPORTANT: Send this back
@@ -293,4 +293,92 @@ func (handler *LlmInteractionHandler) RemoveItenerary(w http.ResponseWriter, r *
 
 	l.InfoContext(ctx, "Itinerary removed successfully")
 	api.WriteJSONResponse(w, r, http.StatusNoContent, nil)
+}
+
+func (handler *LlmInteractionHandler) GetPOIDetails(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetPOIDetails", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm_interaction/get_poi_details"),
+	))
+	defer span.End()
+
+	l := handler.logger.With(slog.String("handler", "GetPOIDetails"))
+	l.DebugContext(ctx, "Get POI details")
+
+	// Authenticate user
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		span.SetStatus(codes.Error, "Unauthorized")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		span.SetStatus(codes.Error, "Invalid user ID")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+	span.SetAttributes(semconv.EnduserIDKey.String(userID.String()))
+	l = l.With(slog.String("userID", userID.String()))
+
+	// Decode request body
+	var req types.POIDetailrequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		l.ErrorContext(ctx, "Failed to decode request body", slog.Any("error", err))
+		span.SetStatus(codes.Error, "Invalid request body")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate request
+	if req.CityName == "" {
+		l.ErrorContext(ctx, "City name is required")
+		span.SetStatus(codes.Error, "Missing city name")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "City name is required")
+		return
+	}
+	if req.Latitude < -90 || req.Latitude > 90 || req.Longitude < -180 || req.Longitude > 180 {
+		l.ErrorContext(ctx, "Invalid coordinates", slog.Float64("latitude", req.Latitude), slog.Float64("longitude", req.Longitude))
+		span.SetStatus(codes.Error, "Invalid coordinates")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid latitude or longitude")
+		return
+	}
+
+	// Convert to service request type (if different)
+	serviceReq := types.POIDetailrequest{
+		CityName:  req.CityName,
+		Latitude:  req.Latitude,
+		Longitude: req.Longitude,
+	}
+
+	// Call service to get POI details
+	pois, err := handler.llmInteractionService.GetPOIDetailsResponse(ctx, userID, serviceReq.CityName, serviceReq.Latitude, serviceReq.Longitude)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to fetch POI details", slog.Any("error", err))
+		span.SetStatus(codes.Error, "Service error")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to fetch POI details")
+		return
+	}
+
+	// Prepare response
+	response := struct {
+		POIs *types.POIDetailedInfo `json:"pois"`
+	}{
+		POIs: pois,
+	}
+
+	// Encode response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		l.ErrorContext(ctx, "Failed to encode response", slog.Any("error", err))
+		span.SetStatus(codes.Error, "Response encoding failed")
+		return
+	}
+
+	l.InfoContext(ctx, "Successfully fetched POI details")
+	span.SetStatus(codes.Ok, "Success")
 }

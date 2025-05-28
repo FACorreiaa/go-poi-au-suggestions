@@ -8,8 +8,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
@@ -38,8 +42,20 @@ func NewPostgresLlmInteractionRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *
 }
 
 func (r *PostgresLlmInteractionRepo) SaveInteraction(ctx context.Context, interaction types.LlmInteraction) (uuid.UUID, error) {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SaveInteraction", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "INSERT"),
+		attribute.String("db.sql.table", "llm_interactions"),
+		attribute.String("user.id", interaction.UserID.String()),
+		attribute.String("model.used", interaction.ModelUsed),
+		attribute.Int("latency.ms", interaction.LatencyMs),
+	))
+	defer span.End()
+
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to start transaction")
 		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
@@ -66,13 +82,36 @@ func (r *PostgresLlmInteractionRepo) SaveInteraction(ctx context.Context, intera
 		//interaction.ResponsePayload,  // Handle nil
 	).Scan(&interactionID)
 
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to insert interaction")
+		return uuid.Nil, fmt.Errorf("failed to insert interaction: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to commit transaction")
 		return uuid.Nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	return interactionID, err
+
+	span.SetAttributes(attribute.String("interaction.id", interactionID.String()))
+	span.SetStatus(codes.Ok, "Interaction saved successfully")
+	return interactionID, nil
 }
 
 func (r *PostgresLlmInteractionRepo) SaveLlmSuggestedPOIsBatch(ctx context.Context, pois []types.POIDetail, userID, searchProfileID, llmInteractionID, cityID uuid.UUID) error {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SaveLlmSuggestedPOIsBatch", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "INSERT"),
+		attribute.String("db.sql.table", "llm_suggested_pois"),
+		attribute.String("user.id", userID.String()),
+		attribute.String("search_profile.id", searchProfileID.String()),
+		attribute.String("llm_interaction.id", llmInteractionID.String()),
+		attribute.String("city.id", cityID.String()),
+		attribute.Int("pois.count", len(pois)),
+	))
+	defer span.End()
+
 	batch := &pgx.Batch{}
 	query := `
         INSERT INTO llm_suggested_pois 
@@ -96,15 +135,30 @@ func (r *PostgresLlmInteractionRepo) SaveLlmSuggestedPOIsBatch(ctx context.Conte
 		_, err := br.Exec()
 		if err != nil {
 			// Consider how to handle partial failures. Log and continue, or return error?
+			span.RecordError(err)
+			span.SetStatus(codes.Error, fmt.Sprintf("Failed to execute batch insert for POI %d", i))
 			return fmt.Errorf("failed to execute batch insert for llm_suggested_poi %d: %w", i, err)
 		}
 	}
+
+	span.SetStatus(codes.Ok, "POIs batch saved successfully")
 	return nil
 }
 
 func (r *PostgresLlmInteractionRepo) GetLlmSuggestedPOIsByInteractionSortedByDistance(
 	ctx context.Context, llmInteractionID uuid.UUID, cityID uuid.UUID, userLocation types.UserLocation,
 ) ([]types.POIDetail, error) {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "GetLlmSuggestedPOIsByInteractionSortedByDistance", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "llm_suggested_pois"),
+		attribute.String("llm_interaction.id", llmInteractionID.String()),
+		attribute.String("city.id", cityID.String()),
+		attribute.Float64("user.latitude", userLocation.UserLat),
+		attribute.Float64("user.longitude", userLocation.UserLon),
+	))
+	defer span.End()
+
 	userPoint := fmt.Sprintf("SRID=4326;POINT(%f %f)", userLocation.UserLon, userLocation.UserLat)
 
 	// Ensure cityID filter is applied if cityID is not Nil
@@ -134,6 +188,8 @@ func (r *PostgresLlmInteractionRepo) GetLlmSuggestedPOIsByInteractionSortedByDis
 
 	rows, err := r.pgpool.Query(ctx, query, args...)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to query sorted POIs")
 		return nil, fmt.Errorf("failed to query sorted llm_suggested_pois: %w", err)
 	}
 	defer rows.Close()
@@ -153,6 +209,8 @@ func (r *PostgresLlmInteractionRepo) GetLlmSuggestedPOIsByInteractionSortedByDis
 			&p.Distance, // Ensure your types.POIDetail has Distance field
 		)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to scan POI row")
 			return nil, fmt.Errorf("failed to scan llm_suggested_poi row: %w", err)
 		}
 		p.DescriptionPOI = descr.String
@@ -162,14 +220,30 @@ func (r *PostgresLlmInteractionRepo) GetLlmSuggestedPOIsByInteractionSortedByDis
 	}
 
 	if err = rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Error iterating POI rows")
 		return nil, fmt.Errorf("error iterating llm_suggested_poi rows: %w", err)
 	}
+
+	span.SetAttributes(attribute.Int("pois.count", len(resultPois)))
+	span.SetStatus(codes.Ok, "POIs retrieved successfully")
 	return resultPois, nil
 }
 
 func (r *PostgresLlmInteractionRepo) AddChatToBookmark(ctx context.Context, itinerary *types.UserSavedItinerary) (uuid.UUID, error) {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "AddChatToBookmark", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "INSERT"),
+		attribute.String("db.sql.table", "user_saved_itineraries"),
+		attribute.String("user.id", itinerary.UserID.String()),
+		attribute.String("title", itinerary.Title),
+	))
+	defer span.End()
+
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to start transaction")
 		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
@@ -194,15 +268,31 @@ func (r *PostgresLlmInteractionRepo) AddChatToBookmark(ctx context.Context, itin
 		&itinerary.EstimatedCostLevel,
 		&itinerary.IsPublic,
 	).Scan(&savedItineraryID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to insert itinerary")
 		return uuid.Nil, fmt.Errorf("failed to insert user_saved_itineraries: %w", err)
 	}
+
 	if err := tx.Commit(ctx); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to commit transaction")
 		return uuid.Nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
+
+	span.SetAttributes(attribute.String("saved_itinerary.id", savedItineraryID.String()))
+	span.SetStatus(codes.Ok, "Itinerary saved successfully")
 	return savedItineraryID, nil
 }
 
 func (r *PostgresLlmInteractionRepo) GetInteractionByID(ctx context.Context, interactionID uuid.UUID) (*types.LlmInteraction, error) {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "GetInteractionByID", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "llm_interactions"),
+		attribute.String("interaction.id", interactionID.String()),
+	))
+	defer span.End()
+
 	query := `
 		SELECT 
 			id, user_id, prompt, response_text, model_used, latency_ms,
@@ -235,16 +325,37 @@ func (r *PostgresLlmInteractionRepo) GetInteractionByID(ctx context.Context, int
 		&nullResponsePayload,
 	); err != nil {
 		if err == pgx.ErrNoRows {
+			span.SetStatus(codes.Error, "Interaction not found")
 			return nil, fmt.Errorf("no interaction found with ID %s", interactionID)
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to scan interaction row")
 		return nil, fmt.Errorf("failed to scan llm_interaction row: %w", err)
 	}
+
+	span.SetAttributes(
+		attribute.String("user.id", interaction.UserID.String()),
+		attribute.String("model.used", interaction.ModelUsed),
+		attribute.Int("latency.ms", interaction.LatencyMs),
+	)
+	span.SetStatus(codes.Ok, "Interaction retrieved successfully")
 	return &interaction, nil
 }
 
 func (r *PostgresLlmInteractionRepo) RemoveChatFromBookmark(ctx context.Context, userID, itineraryID uuid.UUID) error {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "RemoveChatFromBookmark", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "DELETE"),
+		attribute.String("db.sql.table", "user_saved_itineraries"),
+		attribute.String("user.id", userID.String()),
+		attribute.String("itinerary.id", itineraryID.String()),
+	))
+	defer span.End()
+
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to start transaction")
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
@@ -253,12 +364,26 @@ func (r *PostgresLlmInteractionRepo) RemoveChatFromBookmark(ctx context.Context,
 		DELETE FROM user_saved_itineraries
 		WHERE id = $1 AND user_id = $2
 	`
-	if _, err := tx.Exec(ctx, query, itineraryID, userID); err != nil {
+	tag, err := tx.Exec(ctx, query, itineraryID, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to delete itinerary")
 		return fmt.Errorf("failed to delete user_saved_itinerary with ID %s: %w", itineraryID, err)
 	}
 
+	if tag.RowsAffected() == 0 {
+		err := fmt.Errorf("no itinerary found with ID %s for user %s", itineraryID, userID)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Itinerary not found")
+		return err
+	}
+
 	if err := tx.Commit(ctx); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to commit transaction")
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
+
+	span.SetStatus(codes.Ok, "Itinerary removed successfully")
 	return nil
 }

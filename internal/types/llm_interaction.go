@@ -57,19 +57,20 @@ type AiCityResponse struct {
 }
 
 type GenAIResponse struct {
-	SessionID            string      `json:"session_id"`
-	LlmInteractionID     uuid.UUID   `json:"llm_interaction_id"`
-	City                 string      `json:"city,omitempty"`
-	Country              string      `json:"country,omitempty"`
-	StateProvince        string      `json:"state_province,omitempty"` // New
-	CityDescription      string      `json:"city_description,omitempty"`
-	Latitude             float64     `json:"latitude,omitempty"`  // New: for city center
-	Longitude            float64     `json:"longitude,omitempty"` // New: for city center
-	ItineraryName        string      `json:"itinerary_name,omitempty"`
-	ItineraryDescription string      `json:"itinerary_description,omitempty"`
-	GeneralPOI           []POIDetail `json:"general_poi,omitempty"`
-	PersonalisedPOI      []POIDetail `json:"personalised_poi,omitempty"` // Consider changing to []PersonalizedPOIDetail
-	Err                  error       `json:"-"`
+	SessionID            string            `json:"session_id"`
+	LlmInteractionID     uuid.UUID         `json:"llm_interaction_id"`
+	City                 string            `json:"city,omitempty"`
+	Country              string            `json:"country,omitempty"`
+	StateProvince        string            `json:"state_province,omitempty"` // New
+	CityDescription      string            `json:"city_description,omitempty"`
+	Latitude             float64           `json:"latitude,omitempty"`  // New: for city center
+	Longitude            float64           `json:"longitude,omitempty"` // New: for city center
+	ItineraryName        string            `json:"itinerary_name,omitempty"`
+	ItineraryDescription string            `json:"itinerary_description,omitempty"`
+	GeneralPOI           []POIDetail       `json:"general_poi,omitempty"`
+	PersonalisedPOI      []POIDetail       `json:"personalised_poi,omitempty"` // Consider changing to []PersonalizedPOIDetail
+	POIDetailedInfo      []POIDetailedInfo `json:"poi_detailed_info,omitempty"`
+	Err                  error             `json:"-"`
 }
 
 type AIRequestPayloadForLog struct {
@@ -125,4 +126,10 @@ type ChatMessage struct {
 	Timestamp time.Time
 	Role      string
 	Content   string
+}
+
+type POIDetailrequest struct {
+	CityName  string  `json:"city"`
+	Latitude  float64 `json:"lat"`
+	Longitude float64 `json:"lon"`
 }

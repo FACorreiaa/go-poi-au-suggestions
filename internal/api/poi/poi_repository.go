@@ -2,6 +2,7 @@ package poi
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -603,29 +604,110 @@ func (r *PostgresPOIRepository) FindRestaurantDetails(ctx context.Context, cityI
 }
 
 func (r *PostgresPOIRepository) SaveRestaurantDetails(ctx context.Context, restaurant types.RestaurantDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
-	ctx, span := otel.Tracer("RestaurantRepository").Start(ctx, "SaveRestaurantDetails")
+	ctx, span := otel.Tracer("RestaurantRepository").Start(ctx, "SaveRestaurantDetails", trace.WithAttributes(
+		attribute.String("restaurant.name", restaurant.Name),
+		attribute.String("city.id", cityID.String()),
+	))
 	defer span.End()
+
+	// Normalize opening_hours
+	var openingHoursJSON sql.NullString // Use sql.NullString for JSONB to handle NULL correctly
+	if restaurant.OpeningHours != nil && *restaurant.OpeningHours != "" {
+		if json.Valid([]byte(*restaurant.OpeningHours)) {
+			openingHoursJSON.String = *restaurant.OpeningHours
+			openingHoursJSON.Valid = true
+		} else {
+			r.logger.WarnContext(ctx, "Invalid JSON for opening_hours, setting to NULL",
+				slog.String("value", *restaurant.OpeningHours),
+				slog.String("restaurant_name", restaurant.Name))
+			// openingHoursJSON remains invalid, which inserts NULL
+		}
+	}
+
+	// Normalize price_level and cuisine_type (using sql.NullString is safer for text fields that can be null)
+	var priceLevel sql.NullString
+	if restaurant.PriceLevel != nil && *restaurant.PriceLevel != "" {
+		priceLevel.String = *restaurant.PriceLevel
+		priceLevel.Valid = true
+	}
+
+	var cuisineType sql.NullString
+	if restaurant.CuisineType != nil && *restaurant.CuisineType != "" {
+		cuisineType.String = *restaurant.CuisineType
+		cuisineType.Valid = true
+	}
+
+	// Handle nullable text fields from restaurant struct
+	var address sql.NullString
+	if restaurant.Address != nil {
+		address.String = *restaurant.Address
+		address.Valid = true
+	}
+	var website sql.NullString
+	if restaurant.Website != nil {
+		website.String = *restaurant.Website
+		website.Valid = true
+	}
+	var phoneNumber sql.NullString
+	if restaurant.PhoneNumber != nil {
+		phoneNumber.String = *restaurant.PhoneNumber
+		phoneNumber.Valid = true
+	}
+	var category sql.NullString
+	if restaurant.Category != "" { // Assuming Category is not a pointer in the struct
+		category.String = restaurant.Category
+		category.Valid = true
+	}
 
 	query := `
         INSERT INTO restaurant_details (
             id, city_id, name, description, latitude, longitude, location,
             address, website, phone_number, opening_hours, price_level, category,
-            tags, images, rating, cuisine_type, llm_interaction_id
+            cuisine_type, tags, images, rating, llm_interaction_id
         ) VALUES (
             $1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7, $8), 4326),
-            $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+            $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19 -- Added $19
         ) RETURNING id
     `
 	var id uuid.UUID
-	err := r.pgpool.QueryRow(ctx, query, uuid.New(), cityID, restaurant.Name, restaurant.Description,
-		restaurant.Latitude, restaurant.Longitude, restaurant.Longitude, restaurant.Latitude,
-		restaurant.Address, restaurant.Website, restaurant.PhoneNumber, restaurant.OpeningHours,
-		restaurant.PriceLevel, restaurant.Category, restaurant.Tags, restaurant.Images,
-		restaurant.Rating, restaurant.CuisineType, restaurant.LlmInteractionID).Scan(&id)
+	err := r.pgpool.QueryRow(ctx, query,
+		restaurant.ID,
+		cityID,                      // $2: city_id
+		restaurant.Name,             // $3: name
+		restaurant.Description,      // $4: description
+		restaurant.Latitude,         // $5: latitude
+		restaurant.Longitude,        // $6: longitude
+		restaurant.Longitude,        // $7: location (longitude for ST_MakePoint)
+		restaurant.Latitude,         // $8: location (latitude for ST_MakePoint)
+		address,                     // $9: address (sql.NullString)
+		website,                     // $10: website (sql.NullString)
+		phoneNumber,                 // $11: phone_number (sql.NullString)
+		openingHoursJSON,            // $12: opening_hours (sql.NullString representing JSON)
+		priceLevel,                  // $13: price_level (sql.NullString)
+		category,                    // $14: category (sql.NullString)
+		cuisineType,                 // $15: cuisine_type (sql.NullString)
+		restaurant.Tags,             // $16: tags (TEXT[])
+		restaurant.Images,           // $17: images (TEXT[])
+		restaurant.Rating,           // $18: rating (DOUBLE PRECISION)
+		restaurant.LlmInteractionID, // $19: llm_interaction_id (UUID)
+	).Scan(&id)
+
 	if err != nil {
+		r.logger.ErrorContext(ctx, "Failed to save restaurant details",
+			slog.Any("error", err),
+			slog.String("restaurant_name", restaurant.Name),
+			slog.String("city_id", cityID.String()))
 		span.RecordError(err)
-		return uuid.Nil, fmt.Errorf("failed to save restaurant: %w", err)
+		span.SetStatus(codes.Error, "DB INSERT failed")
+		return uuid.Nil, fmt.Errorf("failed to save restaurant_details: %w", err)
 	}
+
+	// If the `id` scanned back is different from `restaurant.ID` (which it will be if you used uuid.New() in the query's $1)
+	// and you need the database-generated ID, then `id` is what you want.
+	// If you want to ensure the ID from the service layer (which was already in restaurant.ID) is used and is the PK,
+	// then you should pass restaurant.ID as $1. My correction above assumes you pass restaurant.ID as $1.
+
+	span.SetAttributes(attribute.String("db.restaurant.id", id.String())) // Log the ID returned by the DB
 	span.SetStatus(codes.Ok, "Restaurant saved")
 	return id, nil
 }

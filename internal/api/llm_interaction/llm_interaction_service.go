@@ -1376,7 +1376,9 @@ func (l *LlmInteractiontServiceImpl) GetRestaurantsByPreferencesResponse(ctx con
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetRestaurantsByPreferencesResponse")
 	defer span.End()
 
-	cacheKey := fmt.Sprintf("restaurants:prefs:%s:%f:%f:%s", city, lat, lon, userID.String())
+	cacheKey := generateRestaurantCacheKey(city, lat, lon, userID)
+	span.SetAttributes(attribute.String("cache.key", cacheKey))
+
 	if cached, found := l.cache.Get(cacheKey); found {
 		if restaurants, ok := cached.([]types.RestaurantDetailedInfo); ok {
 			span.SetStatus(codes.Ok, "Served from cache")
@@ -1389,6 +1391,7 @@ func (l *LlmInteractiontServiceImpl) GetRestaurantsByPreferencesResponse(ctx con
 		span.RecordError(err)
 		return nil, fmt.Errorf("city %s not found: %w", city, err)
 	}
+	cityID := cityData.ID
 
 	restaurants, err := l.poiRepo.FindRestaurantDetails(ctx, cityData.ID, lat, lon, 5000.0, &preferences) // 5km tolerance
 	if err != nil {
@@ -1415,7 +1418,12 @@ func (l *LlmInteractiontServiceImpl) GetRestaurantsByPreferencesResponse(ctx con
 	}
 
 	for _, r := range restaurants {
-		l.poiRepo.SaveRestaurantDetails(ctx, r, cityData.ID)
+		_, err := l.poiRepo.SaveRestaurantDetails(ctx, r, cityID)
+		if err != nil {
+			l.logger.WarnContext(ctx, "Failed to save restaurant details to database", slog.Any("error", err), slog.String("restaurant_name", r.Name))
+			span.RecordError(err)
+			// Continue despite error
+		}
 	}
 	l.cache.Set(cacheKey, restaurants, cache.DefaultExpiration)
 	span.SetStatus(codes.Ok, "Restaurants generated and cached")

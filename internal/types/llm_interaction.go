@@ -185,22 +185,22 @@ type RestaurantUserPreferences struct {
 }
 
 type RestaurantDetailedInfo struct {
-	ID               uuid.UUID
-	City             string
-	Name             string
-	Latitude         float64
-	Longitude        float64
-	Category         string
-	Description      string
-	Address          string
-	Website          string
-	PhoneNumber      string
-	OpeningHours     string
-	PriceLevel       string
-	CuisineType      string
-	Tags             []string
-	Images           []string
-	Rating           float64
-	LlmInteractionID uuid.UUID
-	Err              error
+	ID               uuid.UUID `json:"id"`
+	City             string    `json:"city"`
+	Name             string    `json:"name"`
+	Latitude         float64   `json:"latitude"`
+	Longitude        float64   `json:"longitude"`
+	Category         string    `json:"category"`
+	Description      string    `json:"description"`
+	Address          *string   `json:"address"`
+	Website          *string   `json:"website"`
+	PhoneNumber      *string   `json:"phone_number"`
+	OpeningHours     *string   `json:"opening_hours"`
+	PriceLevel       *string   `json:"price_level"`  // Changed to *string
+	CuisineType      *string   `json:"cuisine_type"` // Changed to *string
+	Tags             []string  `json:"tags"`
+	Images           []string  `json:"images"`
+	Rating           float64   `json:"rating"`
+	LlmInteractionID uuid.UUID `json:"llm_interaction_id"`
+	Err              error     `json:"-"`
 }

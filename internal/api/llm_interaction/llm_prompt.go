@@ -42,12 +42,6 @@ func getCityDescriptionPrompt(cityName string) string {
     `, cityName)
 }
 
-// Population      string  `json:"population"`
-// 	Area            string  `json:"area"`
-// 	Timezone        string  `json:"timezone"`
-// 	Language        string  `json:"language"`
-// 	Weather         string  `json:"weather"`
-
 func getGeneralPOI(cityName string) string {
 	return fmt.Sprintf(`
             Generate a list of maximum 5 general points of interest that people usually see no matter the taste or preference for this city %s.
@@ -63,6 +57,24 @@ func getGeneralPOI(cityName string) string {
                 }
             ]
             }`, cityName)
+}
+
+func getGeneralPOIByDistance(cityName string, lat, lon, distance float64) string {
+	return fmt.Sprintf(`
+            Generate a list of maximum 5 general points of interest that people usually see no matter the taste or preference for this city %s.
+            The user location is at latitude %0.2f and longitude %0.2f, and the distance to search is %0.2f km.
+            Return the response STRICTLY as a JSON object with:
+            {
+            "points_of_interest": [
+                {
+                "name": "Name of the Point of Interest",
+                "latitude": <float>,
+                "longitude": <float>,
+                "category": "Primary category (e.g., Museum, Historical Site, Park, Restaurant, Bar)",
+                "description_poi": "A 2-3 sentence description of this specific POI and why it's relevant."
+                }
+            ]
+            }`, cityName, lat, lon, distance)
 }
 
 func getPersonalizedPOI(interestNames []string, cityName, tagsPromptPart, userPrefs string) string {

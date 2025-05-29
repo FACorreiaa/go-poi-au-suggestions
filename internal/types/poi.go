@@ -38,6 +38,8 @@ type POIDetailedInfo struct {
 	ID               uuid.UUID         `json:"id,omitempty"`
 	City             string            `json:"city"`
 	Name             string            `json:"name"`
+	DescriptionPOI   string            `json:"description_poi,omitempty"`
+	Distance         float64           `json:"distance"`
 	Latitude         float64           `json:"latitude,omitempty"`
 	Longitude        float64           `json:"longitude,omitempty"`
 	Category         string            `json:"category"`

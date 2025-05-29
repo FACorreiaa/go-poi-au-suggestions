@@ -815,3 +815,84 @@ func (handler *LlmInteractionHandler) GetRestaurantDetails(w http.ResponseWriter
 	l.InfoContext(ctx, "Successfully fetched restaurant details", slog.String("restaurantID", restaurantID.String()))
 	span.SetStatus(codes.Ok, "Success")
 }
+
+// GetPOIsByDistance test this
+func (handler *LlmInteractionHandler) GetPOIsByDistance(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetPOIsByDistance", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm_interaction/pois_by_distance"),
+	))
+	defer span.End()
+
+	l := handler.logger.With(slog.String("handler", "GetPOIsByDistance"))
+	l.DebugContext(ctx, "Fetching POIs by distance")
+
+	// Get query parameters
+	city := r.URL.Query().Get("city")
+	latStr := r.URL.Query().Get("lat")
+	lonStr := r.URL.Query().Get("lon")
+	distanceStr := r.URL.Query().Get("distance")
+
+	// Parse latitude
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid latitude", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid latitude")
+		return
+	}
+
+	// Parse longitude
+	lon, err := strconv.ParseFloat(lonStr, 64)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid longitude", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid longitude")
+		return
+	}
+
+	// Parse distance
+	distance, err := strconv.ParseFloat(distanceStr, 64)
+	if err != nil || distance <= 0 {
+		l.ErrorContext(ctx, "Invalid distance", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid distance")
+		return
+	}
+
+	// Get user ID from context
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+
+	// Call service method
+	pois, err := handler.llmInteractionService.GetGeneralPOIByDistanceResponse(ctx, userID, city, lat, lon, distance)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to fetch POIs", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch POIs: %s", err.Error()))
+		return
+	}
+
+	// Prepare response
+	response := struct {
+		PointsOfInterest []types.POIDetailedInfo `json:"points_of_interest"`
+	}{PointsOfInterest: pois}
+
+	// Encode response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		l.ErrorContext(ctx, "Failed to encode response", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to encode response")
+		return
+	}
+
+	l.InfoContext(ctx, "Successfully fetched POIs")
+	span.SetStatus(codes.Ok, "Success")
+}

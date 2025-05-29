@@ -64,3 +64,85 @@ CREATE INDEX idx_llm_suggested_pois_location ON llm_suggested_pois USING GIST (l
 CREATE TRIGGER trigger_set_llm_suggested_pois_updated_at
 BEFORE UPDATE ON llm_suggested_pois
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+--
+
+CREATE TABLE poi_details (
+    id UUID PRIMARY KEY,
+    city_id UUID REFERENCES cities (id),
+    name TEXT NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    location GEOMETRY (POINT, 4326) NOT NULL,
+    description TEXT,
+    address TEXT,
+    website TEXT,
+    phone_number TEXT,
+    opening_hours TEXT,
+    price_range TEXT,
+    category TEXT,
+    tags TEXT [],
+    images TEXT [],
+    rating DOUBLE PRECISION,
+    llm_interaction_id UUID REFERENCES llm_interactions (id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index for spatial queries
+CREATE INDEX poi_details_location_idx ON poi_details USING GIST (location);
+-- Index for city and name lookups
+CREATE INDEX poi_details_city_name_idx ON poi_details (city_id, name);
+
+CREATE TABLE hotel_details (
+    id UUID PRIMARY KEY,
+    city_id UUID REFERENCES cities (id),
+    name TEXT NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    location GEOMETRY (POINT, 4326) NOT NULL,
+    category TEXT,
+    description TEXT,
+    address TEXT,
+    website TEXT,
+    phone_number TEXT,
+    opening_hours JSONB,
+    price_range TEXT,
+    tags TEXT [],
+    images TEXT [],
+    rating DOUBLE PRECISION,
+    llm_interaction_id UUID REFERENCES llm_interactions (id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX hotel_details_location_idx ON hotel_details USING GIST (location);
+
+CREATE INDEX hotel_details_city_name_idx ON hotel_details (city_id, name);
+
+CREATE TABLE restaurant_details (
+    id UUID PRIMARY KEY,
+    city_id UUID REFERENCES cities (id),
+    name TEXT NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    location GEOMETRY (POINT, 4326) NOT NULL,
+    category TEXT,
+    description TEXT,
+    address TEXT,
+    website TEXT,
+    phone_number TEXT,
+    opening_hours JSONB,
+    price_level TEXT,
+    cuisine_type TEXT,
+    tags TEXT [],
+    images TEXT [],
+    rating DOUBLE PRECISION,
+    llm_interaction_id UUID REFERENCES llm_interactions (id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX restaurant_details_location_idx ON restaurant_details USING GIST (location);
+
+CREATE INDEX restaurant_details_city_name_idx ON restaurant_details (city_id, name);

@@ -480,3 +480,6 @@ ____
 > 📃 _License type to be defined (MIT, Apache 2.0, or Proprietary)._
 
 - https://github.com/open-telemetry/opentelemetry-go
+
+Hotel Booking APIs (e.g., Hotelbeds, Expedia, Booking.com's affiliate programs).
+Restaurant Reservation APIs (e.g., OpenTable).

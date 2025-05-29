@@ -142,12 +142,9 @@ func (r *PostgresCityRepository) FindCityByNameAndCountry(ctx context.Context, c
             ST_X(center_location) as center_longitude   -- Extract X coordinate (longitude)
             -- Add bounding_box retrieval if you store it: ST_AsText(bounding_box) as bounding_box_wkt
         FROM cities
-        WHERE name = $1 AND country = $2 
+        WHERE LOWER(name) = LOWER($1)
+        AND ($2 = '' OR country = $2)
     `
-	// Removed unique constraint name check for now, as it's for the table itself
-	// If you add unique constraint on (name, country) only, remove state_province from WHERE
-	// If unique constraint is (name, state_province, country), you need to pass state_province to find.
-	// Let's assume for now the primary lookup is name & country.
 
 	var cityDetail types.CityDetail
 	var lat, lon sql.NullFloat64 // To handle potentially NULL location

@@ -181,10 +181,17 @@ func UserSearchProfileRoutes(handler *userProfiles.UserSearchProfileHandler) htt
 func LLMInteractionRoutes(handler *llmInteraction.LlmInteractionHandler) http.Handler {
 	r := chi.NewRouter()
 	// LLM interaction routes
-	r.Post("/prompt-response/profile/{profileID}", handler.GetPrompResponse)     // GET http://localhost:8000/api/v1/user/interests
-	r.Get("/prompt-response/poi/details", handler.GetPOIDetails)                 // GET http://localhost:8000/api/v1/llm/prompt-response/{interactionID}
-	r.Post("/prompt-response/bookmark", handler.SaveItenerary)                   // POST http://localhost:8000/api/v1/llm/prompt-response
-	r.Delete("/prompt-response/bookmark/{itineraryID}", handler.RemoveItenerary) // DELETE http://localhost:8000/api/v1/llm/bookmark/{bookmarkID}
+	r.Post("/prompt-response/profile/{profileID}", handler.GetPrompResponse)        // GET http://localhost:8000/api/v1/user/interests
+	r.Get("/prompt-response/poi/details", handler.GetPOIDetails)                    // GET http://localhost:8000/api/v1/llm/prompt-response/{interactionID}
+	r.Post("/prompt-response/bookmark", handler.SaveItenerary)                      // POST http://localhost:8000/api/v1/llm/prompt-response
+	r.Delete("/prompt-response/bookmark/{itineraryID}", handler.RemoveItenerary)    // DELETE http://localhost:8000/api/v1/llm/bookmark/{bookmarkID}
+	r.Get("/prompt-response/city/hotel/preferences", handler.GetHotelsByPreference) // GET http://localhost:8000/api/v1/pois/city/hotel/preferences
+	r.Get("/prompt-response/city/hotel/nearby", handler.GetHotelsNearby)            // GET http://localhost:8000/api/v1/pois/city/restaurant/preferences
+	r.Get("/prompt-response/city/hotel/{hotelID}", handler.GetHotelByID)
+	r.Get("/prompt-response/city/restaurants/preferences", handler.GetRestaurantsByPreferences)
+	r.Get("/prompt-response/city/restaurants/nearby", handler.GetRestaurantsNearby)
+	// TODO save on the db
+	r.Get("/prompt-response/city/restaurants/{restaurantID}", handler.GetRestaurantDetails) // GET http://localhost:8000/api/v1/pois/city/poi/nearby
 	return r
 }
 

@@ -92,8 +92,9 @@ type ChatSession struct {
 }
 
 type UserLocation struct {
-	UserLat float64
-	UserLon float64
+	UserLat        float64
+	UserLon        float64
+	SearchRadiusKm float64 // Radius in kilometers for searching nearby POIs
 }
 
 type UserSavedItinerary struct {
@@ -132,4 +133,74 @@ type POIDetailrequest struct {
 	CityName  string  `json:"city"`
 	Latitude  float64 `json:"lat"`
 	Longitude float64 `json:"lon"`
+}
+
+type HotelUserPreferences struct {
+	NumberOfGuests      int32     `json:"number_of_guests"`
+	PreferredCategories string    `json:"preferred_category"`    // e.g., "budget", "luxury"
+	PreferredTags       []string  `json:"preferredTags"`         // e.g., ["pet-friendly", "free wifi"]
+	MaxPriceRange       string    `json:"preferred_price_range"` // e.g., "$", "$$"
+	MinRating           float64   `json:"preferred_rating"`      // e.g., 4.0
+	NumberOfNights      int64     `json:"number_of_nights"`
+	NumberOfRooms       int32     `json:"number_of_rooms"`
+	PreferredCheckIn    time.Time `json:"preferred_check_in"`
+	PreferredCheckOut   time.Time `json:"preferred_check_out"`
+	SearchRadiusKm      float64   `json:"search_radius_km"` // Optional, for filtering hotels within a certain radius
+}
+
+type HotelDetailedInfo struct {
+	ID               uuid.UUID `json:"id"`
+	City             string    `json:"city"`
+	Name             string    `json:"name"`
+	Latitude         float64   `json:"latitude"`
+	Longitude        float64   `json:"longitude"`
+	Category         string    `json:"category"` // e.g., "Hotel", "Hostel"
+	Description      string    `json:"description"`
+	Address          string    `json:"address"`
+	PhoneNumber      *string   `json:"phone_number"`
+	Website          *string   `json:"website"`
+	OpeningHours     *string   `json:"opening_hours"`
+	PriceRange       *string   `json:"price_range"`
+	Rating           float64   `json:"rating"`
+	Tags             []string  `json:"tags"`
+	Images           []string  `json:"images"`
+	LlmInteractionID uuid.UUID `json:"llm_interaction_id"`
+	Err              error     `json:"-"` // Not serialized
+}
+
+type HotelPreferenceRequest struct {
+	City        string               `json:"city"`
+	Lat         float64              `json:"lat"`
+	Lon         float64              `json:"lon"`
+	Preferences HotelUserPreferences `json:"preferences"`
+	Distance    float64              `json:"distance"` // Optional, for filtering hotels within a certain radius
+}
+
+type RestaurantUserPreferences struct {
+	PreferredCuisine    string
+	PreferredPriceRange string
+	DietaryRestrictions string
+	Ambiance            string
+	SpecialFeatures     string
+}
+
+type RestaurantDetailedInfo struct {
+	ID               uuid.UUID
+	City             string
+	Name             string
+	Latitude         float64
+	Longitude        float64
+	Category         string
+	Description      string
+	Address          string
+	Website          string
+	PhoneNumber      string
+	OpeningHours     string
+	PriceLevel       string
+	CuisineType      string
+	Tags             []string
+	Images           []string
+	Rating           float64
+	LlmInteractionID uuid.UUID
+	Err              error
 }

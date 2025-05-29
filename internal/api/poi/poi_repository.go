@@ -2,10 +2,15 @@ package poi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"github.com/google/uuid"
@@ -25,6 +30,19 @@ type POIRepository interface {
 	GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error)
 	GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error)
 
+	// POI details
+	FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error)
+	SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
+
+	// Hotels
+	FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error)
+	SaveHotelDetails(ctx context.Context, hotel types.HotelDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
+	GetHotelByID(ctx context.Context, hotelID uuid.UUID) (*types.HotelDetailedInfo, error)
+
+	// Restaurants
+	FindRestaurantDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64, preferences *types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error)
+	SaveRestaurantDetails(ctx context.Context, restaurant types.RestaurantDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
+	GetRestaurantByID(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error)
 	// GetPOIsByCityIDAndCategory(ctx context.Context, cityID uuid.UUID, category string) ([]types.POIDetail, error)
 	// GetPOIsByCityIDAndCategories(ctx context.Context, cityID uuid.UUID, categories []string) ([]types.POIDetail, error)
 	// GetPOIsByCityIDAndName(ctx context.Context, cityID uuid.UUID, name string) ([]types.POIDetail, error)
@@ -290,4 +308,360 @@ func (r *PostgresPOIRepository) GetPOIsByCityID(ctx context.Context, cityID uuid
 
 	r.logger.Info("POIs retrieved successfully by city ID", slog.String("cityID", cityID.String()), slog.Int("count", len(pois)))
 	return pois, nil
+}
+
+func (r *PostgresPOIRepository) FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error) {
+	ctx, span := otel.Tracer("POIRepository").Start(ctx, "FindPOIDetails", trace.WithAttributes(
+		attribute.String("city.id", cityID.String()),
+		attribute.Float64("latitude", lat),
+		attribute.Float64("longitude", lon),
+	))
+	defer span.End()
+
+	query := `
+        SELECT 
+            id, name, description, latitude, longitude, address, website, phone_number,
+            opening_hours, price_range, category, tags, images, rating, llm_interaction_id
+        FROM poi_details
+        WHERE city_id = $1
+        AND ST_DWithin(
+            location::geography,
+            ST_SetSRID(ST_MakePoint($2, $3)::geography, 4326),
+            $4
+        )
+        LIMIT 1
+    `
+	row := r.pgpool.QueryRow(ctx, query, cityID, lon, lat, tolerance)
+
+	var poi types.POIDetailedInfo
+	var llmInteractionID uuid.NullUUID
+	err := row.Scan(
+		&poi.ID, &poi.Name, &poi.Description, &poi.Latitude, &poi.Longitude,
+		&poi.Address, &poi.Website, &poi.PhoneNumber, &poi.OpeningHours,
+		&poi.PriceRange, &poi.Category, &poi.Tags, &poi.Images, &poi.Rating,
+		&llmInteractionID,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			span.SetStatus(codes.Ok, "No POI found")
+			return nil, nil
+		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to query POI details")
+		return nil, fmt.Errorf("failed to query poi_details: %w", err)
+	}
+
+	if llmInteractionID.Valid {
+		poi.LlmInteractionID = llmInteractionID.UUID
+	}
+	span.SetStatus(codes.Ok, "POI details found")
+	return &poi, nil
+}
+
+func (r *PostgresPOIRepository) SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+	ctx, span := otel.Tracer("POIRepository").Start(ctx, "SavePOIDetails", trace.WithAttributes(
+		attribute.String("city.id", cityID.String()),
+		attribute.String("poi.name", poi.Name),
+	))
+	defer span.End()
+
+	query := `
+        INSERT INTO poi_details (
+            id, city_id, name, description, latitude, longitude, location,
+            address, website, phone_number, opening_hours, price_range, category,
+            tags, images, rating, llm_interaction_id
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7, $8), 4326),
+            $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+        )
+        RETURNING id
+    `
+	var id uuid.UUID
+	err := r.pgpool.QueryRow(ctx, query,
+		uuid.New(), cityID, poi.Name, poi.Description, poi.Latitude, poi.Longitude,
+		poi.Longitude, poi.Latitude, // lon, lat for ST_MakePoint
+		poi.Address, poi.Website, poi.PhoneNumber, poi.OpeningHours,
+		poi.PriceRange, poi.Category, poi.Tags, poi.Images, poi.Rating,
+		uuid.NullUUID{UUID: poi.LlmInteractionID, Valid: poi.LlmInteractionID != uuid.Nil},
+	).Scan(&id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to save POI details")
+		return uuid.Nil, fmt.Errorf("failed to save poi_details: %w", err)
+	}
+
+	span.SetAttributes(attribute.String("poi.id", id.String()))
+	span.SetStatus(codes.Ok, "POI details saved successfully")
+	return id, nil
+}
+
+func (r *PostgresPOIRepository) FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error) {
+	ctx, span := otel.Tracer("HotelRepository").Start(ctx, "FindHotelDetails", trace.WithAttributes(
+		attribute.String("city.id", cityID.String()),
+		attribute.Float64("latitude", lat),
+		attribute.Float64("longitude", lon),
+	))
+	defer span.End()
+
+	query := `
+        SELECT 
+            id, name, description, latitude, longitude, address, website, phone_number,
+            opening_hours, price_range, category, tags, images, rating, llm_interaction_id
+        FROM hotel_details
+        WHERE city_id = $1
+        AND ST_DWithin(
+            location::geography,
+            ST_SetSRID(ST_MakePoint($2, $3)::geography, 4326),
+            $4
+        )
+    `
+	rows, err := r.pgpool.Query(ctx, query, cityID, lon, lat, tolerance)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to query hotel details")
+		return nil, fmt.Errorf("failed to query hotel_details: %w", err)
+	}
+	defer rows.Close()
+
+	var hotels []types.HotelDetailedInfo
+	for rows.Next() {
+		var hotel types.HotelDetailedInfo
+		var llmInteractionID uuid.NullUUID
+		var website, phoneNumber, openingHours, priceRange *string
+		err := rows.Scan(
+			&hotel.ID, &hotel.Name, &hotel.Description, &hotel.Latitude, &hotel.Longitude,
+			&hotel.Address, &website, &phoneNumber, &openingHours, &priceRange,
+			&hotel.Category, &hotel.Tags, &hotel.Images, &hotel.Rating, &llmInteractionID,
+		)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to scan hotel details")
+			return nil, fmt.Errorf("failed to scan hotel_details: %w", err)
+		}
+		hotel.Website = website
+		hotel.PhoneNumber = phoneNumber
+		hotel.OpeningHours = openingHours
+		hotel.PriceRange = priceRange
+		if llmInteractionID.Valid {
+			hotel.LlmInteractionID = llmInteractionID.UUID
+		}
+		hotels = append(hotels, hotel)
+	}
+	if rows.Err() != nil {
+		span.RecordError(rows.Err())
+		span.SetStatus(codes.Error, "Failed to iterate hotel details")
+		return nil, fmt.Errorf("failed to iterate hotel_details: %w", rows.Err())
+	}
+
+	span.SetStatus(codes.Ok, "Hotel details found")
+	return hotels, nil
+}
+
+func (r *PostgresPOIRepository) SaveHotelDetails(ctx context.Context, hotel types.HotelDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+	ctx, span := otel.Tracer("HotelRepository").Start(ctx, "SaveHotelDetails", trace.WithAttributes(
+		attribute.String("city.id", cityID.String()),
+		attribute.String("hotel.name", hotel.Name),
+	))
+	defer span.End()
+
+	var openingHours *string
+	if hotel.OpeningHours != nil && *hotel.OpeningHours != "" {
+		// Verify it's valid JSON
+		if json.Valid([]byte(*hotel.OpeningHours)) {
+			openingHours = hotel.OpeningHours
+		} else {
+			// Log warning and set to nil if invalid
+			r.logger.WarnContext(ctx, "Invalid JSON for opening_hours, setting to NULL", slog.String("value", *hotel.OpeningHours))
+			openingHours = nil
+		}
+	}
+
+	query := `
+        INSERT INTO hotel_details (
+            id, city_id, name, description, latitude, longitude, location,
+            address, website, phone_number, opening_hours, price_range, category,
+            tags, images, rating, llm_interaction_id
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7, $8), 4326),
+            $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+        )
+        RETURNING id
+    `
+	var id uuid.UUID
+	err := r.pgpool.QueryRow(ctx, query,
+		uuid.New(), cityID, hotel.Name, hotel.Description, hotel.Latitude, hotel.Longitude,
+		hotel.Longitude, hotel.Latitude, // lon, lat for ST_MakePoint
+		hotel.Address, hotel.Website, hotel.PhoneNumber, openingHours,
+		hotel.PriceRange, hotel.Category, hotel.Tags, hotel.Images, hotel.Rating,
+		uuid.NullUUID{UUID: hotel.LlmInteractionID, Valid: hotel.LlmInteractionID != uuid.Nil},
+	).Scan(&id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to save hotel details")
+		return uuid.Nil, fmt.Errorf("failed to save hotel_details: %w", err)
+	}
+
+	span.SetAttributes(attribute.String("hotel.id", id.String()))
+	span.SetStatus(codes.Ok, "Hotel details saved successfully")
+	return id, nil
+}
+
+func (r *PostgresPOIRepository) GetHotelByID(ctx context.Context, hotelID uuid.UUID) (*types.HotelDetailedInfo, error) {
+	ctx, span := otel.Tracer("HotelRepository").Start(ctx, "GetHotelByID", trace.WithAttributes(
+		attribute.String("hotel.id", hotelID.String()),
+	))
+	defer span.End()
+
+	query := `
+		SELECT 
+			id, name, description, latitude, longitude, address, website, phone_number,
+			opening_hours, price_range, category, tags, images, rating, llm_interaction_id
+		FROM hotel_details
+		WHERE id = $1
+	`
+	row := r.pgpool.QueryRow(ctx, query, hotelID)
+
+	var hotel types.HotelDetailedInfo
+	var llmInteractionID uuid.NullUUID
+	err := row.Scan(
+		&hotel.ID, &hotel.Name, &hotel.Description, &hotel.Latitude, &hotel.Longitude,
+		&hotel.Address, &hotel.Website, &hotel.PhoneNumber, &hotel.OpeningHours,
+		&hotel.PriceRange, &hotel.Category, &hotel.Tags, &hotel.Images, &hotel.Rating,
+		&llmInteractionID,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			span.SetStatus(codes.Ok, "No hotel found")
+			return nil, nil
+		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to query hotel details by ID")
+		return nil, fmt.Errorf("failed to query hotel_details by ID: %w", err)
+	}
+
+	if llmInteractionID.Valid {
+		hotel.LlmInteractionID = llmInteractionID.UUID
+	}
+	span.SetStatus(codes.Ok, "Hotel details found by ID")
+	return &hotel, nil
+}
+
+func (r *PostgresPOIRepository) FindRestaurantDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64, preferences *types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error) {
+	ctx, span := otel.Tracer("RestaurantRepository").Start(ctx, "FindRestaurantDetails")
+	defer span.End()
+
+	query := `
+        SELECT 
+            id, name, description, latitude, longitude, address, website, phone_number,
+            opening_hours, price_level, category, tags, images, rating, cuisine_type, llm_interaction_id
+        FROM restaurant_details
+        WHERE city_id = $1
+        AND ST_DWithin(
+            location::geography,
+            ST_SetSRID(ST_MakePoint($2, $3)::geography, 4326),
+            $4
+        )
+    `
+	args := []interface{}{cityID, lon, lat, tolerance}
+	if preferences != nil {
+		if preferences.PreferredCuisine != "" {
+			query += ` AND cuisine_type = $5`
+			args = append(args, preferences.PreferredCuisine)
+		}
+		if preferences.PreferredPriceRange != "" {
+			query += fmt.Sprintf(` AND price_level = $%d`, len(args)+1)
+			args = append(args, preferences.PreferredPriceRange)
+		}
+	}
+
+	rows, err := r.pgpool.Query(ctx, query, args...)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to query restaurants")
+		return nil, fmt.Errorf("failed to query restaurant_details: %w", err)
+	}
+	defer rows.Close()
+
+	var restaurants []types.RestaurantDetailedInfo
+	for rows.Next() {
+		var r types.RestaurantDetailedInfo
+		var llmID uuid.NullUUID
+		err := rows.Scan(&r.ID, &r.Name, &r.Description, &r.Latitude, &r.Longitude, &r.Address,
+			&r.Website, &r.PhoneNumber, &r.OpeningHours, &r.PriceLevel, &r.Category,
+			&r.Tags, &r.Images, &r.Rating, &r.CuisineType, &llmID)
+		if err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("failed to scan restaurant: %w", err)
+		}
+		if llmID.Valid {
+			r.LlmInteractionID = llmID.UUID
+		}
+		restaurants = append(restaurants, r)
+	}
+	span.SetStatus(codes.Ok, "Restaurants found")
+	return restaurants, nil
+}
+
+func (r *PostgresPOIRepository) SaveRestaurantDetails(ctx context.Context, restaurant types.RestaurantDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+	ctx, span := otel.Tracer("RestaurantRepository").Start(ctx, "SaveRestaurantDetails")
+	defer span.End()
+
+	query := `
+        INSERT INTO restaurant_details (
+            id, city_id, name, description, latitude, longitude, location,
+            address, website, phone_number, opening_hours, price_level, category,
+            tags, images, rating, cuisine_type, llm_interaction_id
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7, $8), 4326),
+            $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+        ) RETURNING id
+    `
+	var id uuid.UUID
+	err := r.pgpool.QueryRow(ctx, query, uuid.New(), cityID, restaurant.Name, restaurant.Description,
+		restaurant.Latitude, restaurant.Longitude, restaurant.Longitude, restaurant.Latitude,
+		restaurant.Address, restaurant.Website, restaurant.PhoneNumber, restaurant.OpeningHours,
+		restaurant.PriceLevel, restaurant.Category, restaurant.Tags, restaurant.Images,
+		restaurant.Rating, restaurant.CuisineType, restaurant.LlmInteractionID).Scan(&id)
+	if err != nil {
+		span.RecordError(err)
+		return uuid.Nil, fmt.Errorf("failed to save restaurant: %w", err)
+	}
+	span.SetStatus(codes.Ok, "Restaurant saved")
+	return id, nil
+}
+
+func (r *PostgresPOIRepository) GetRestaurantByID(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error) {
+	ctx, span := otel.Tracer("RestaurantRepository").Start(ctx, "GetRestaurantByID")
+	defer span.End()
+
+	query := `
+        SELECT 
+            id, name, description, latitude, longitude, address, website, phone_number,
+            opening_hours, price_level, category, tags, images, rating, cuisine_type, llm_interaction_id
+        FROM restaurant_details
+        WHERE id = $1
+    `
+	var restaurant types.RestaurantDetailedInfo
+	var llmID uuid.NullUUID
+	err := r.pgpool.QueryRow(ctx, query, restaurantID).Scan(&restaurant.ID, &restaurant.Name,
+		&restaurant.Description, &restaurant.Latitude,
+		&restaurant.Longitude, &restaurant.Address,
+		&restaurant.Website, &restaurant.PhoneNumber,
+		&restaurant.OpeningHours, &restaurant.PriceLevel,
+		&restaurant.Category, &restaurant.Tags,
+		&restaurant.Images, &restaurant.Rating,
+		&restaurant.CuisineType, &llmID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			span.SetStatus(codes.Ok, "Restaurant not found")
+			return nil, nil
+		}
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to get restaurant: %w", err)
+	}
+	if llmID.Valid {
+		restaurant.LlmInteractionID = llmID.UUID
+	}
+	span.SetStatus(codes.Ok, "Restaurant found")
+	return &restaurant, nil
 }

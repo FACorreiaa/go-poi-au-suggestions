@@ -7,7 +7,9 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 
@@ -380,5 +382,436 @@ func (handler *LlmInteractionHandler) GetPOIDetails(w http.ResponseWriter, r *ht
 	}
 
 	l.InfoContext(ctx, "Successfully fetched POI details")
+	span.SetStatus(codes.Ok, "Success")
+}
+
+// TODO FIX ALL ANE BELOW DB ACCESS
+func (handler *LlmInteractionHandler) GetHotelsByPreference(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "HotelsByPreference", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm_interaction/hotels_by_preference"),
+	))
+	defer span.End()
+
+	l := handler.logger.With(slog.String("handler", "HotelsByPreference"))
+	l.DebugContext(ctx, "Fetching hotels by preference")
+
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+	span.SetAttributes(semconv.EnduserIDKey.String(userID.String()))
+	l = l.With(slog.String("userID", userID.String()))
+
+	var req types.HotelPreferenceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		l.ErrorContext(ctx, "Failed to decode request body", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.City == "" {
+		l.ErrorContext(ctx, "City name is required")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "City name is required")
+		return
+	}
+
+	if req.Lat < -90 || req.Lat > 90 || req.Lon < -180 || req.Lon > 180 {
+		l.ErrorContext(ctx, "Invalid coordinates", slog.Float64("latitude", req.Lat), slog.Float64("longitude", req.Lon))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid latitude or longitude")
+		return
+	}
+
+	// Validate preferences
+	if req.Preferences.NumberOfGuests <= 0 {
+		req.Preferences.NumberOfGuests = 1 // Default
+	}
+	if req.Preferences.PreferredCategories == "" {
+		req.Preferences.PreferredCategories = "budget" // Default
+	}
+	if req.Preferences.PreferredCheckIn.IsZero() {
+		req.Preferences.PreferredCheckIn = time.Now()
+	}
+	if req.Preferences.PreferredCheckOut.IsZero() {
+		req.Preferences.PreferredCheckOut = time.Now().Add(24 * time.Hour)
+	}
+	if req.Preferences.NumberOfNights <= 0 {
+		req.Preferences.NumberOfNights = 1
+	}
+	if req.Preferences.NumberOfRooms <= 0 {
+		req.Preferences.NumberOfRooms = 1
+	}
+
+	hotels, err := handler.llmInteractionService.GetHotelsByPreferenceResponse(ctx, userID, req.City, req.Lat, req.Lon, req.Preferences)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to fetch hotels by preference", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch hotels: %s", err.Error()))
+		return
+	}
+
+	response := struct {
+		Hotels []types.HotelDetailedInfo `json:"hotels"`
+	}{Hotels: hotels}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		l.ErrorContext(ctx, "Failed to encode response", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to encode response")
+		return
+	}
+
+	l.InfoContext(ctx, "Successfully fetched hotels by preference")
+	span.SetStatus(codes.Ok, "Success")
+}
+
+func (handler *LlmInteractionHandler) GetHotelsNearby(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "HotelsNearby", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm_interaction/hotels_nearby"),
+	))
+	defer span.End()
+
+	l := handler.logger.With(slog.String("handler", "HotelsNearby"))
+	l.DebugContext(ctx, "Fetching nearby hotels")
+
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+	span.SetAttributes(semconv.EnduserIDKey.String(userID.String()))
+	l = l.With(slog.String("userID", userID.String()))
+
+	var req types.HotelPreferenceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		l.ErrorContext(ctx, "Failed to decode request body", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.City == "" {
+		l.ErrorContext(ctx, "City name is required")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "City name is required")
+		return
+	}
+
+	if req.Lat < -90 || req.Lat > 90 || req.Lon < -180 || req.Lon > 180 {
+		l.ErrorContext(ctx, "Invalid coordinates", slog.Float64("latitude", req.Lat), slog.Float64("longitude", req.Lon))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid latitude or longitude")
+		return
+	}
+
+	if req.Distance <= 0 {
+		req.Distance = 5.0 // Default search radius in km
+	}
+
+	userLocation := &types.UserLocation{
+		UserLat:        req.Lat,
+		UserLon:        req.Lon,
+		SearchRadiusKm: req.Distance,
+	}
+	hotels, err := handler.llmInteractionService.GetHotelsNearbyResponse(ctx, userID, req.City, userLocation)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to fetch nearby hotels", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch hotels: %s", err.Error()))
+		return
+	}
+	response := struct {
+		Hotels []types.HotelDetailedInfo `json:"hotels"`
+	}{Hotels: hotels}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		l.ErrorContext(ctx, "Failed to encode response", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to encode response")
+		return
+	}
+	l.InfoContext(ctx, "Successfully fetched nearby hotels")
+	span.SetStatus(codes.Ok, "Success")
+	api.WriteJSONResponse(w, r, http.StatusOK, response)
+	span.SetAttributes(attribute.String("app.city.name", req.City),
+		attribute.Float64("app.location.latitude", req.Lat),
+		attribute.Float64("app.location.longitude", req.Lon),
+		attribute.String("app.preferences.preferred_category", req.Preferences.PreferredCategories),
+		attribute.String("app.preferences.preferred_price_range", req.Preferences.MaxPriceRange),
+		attribute.Float64("app.preferences.preferred_rating", req.Preferences.MinRating),
+		attribute.Int64("app.preferences.number_of_nights", req.Preferences.NumberOfNights),
+		attribute.String("app.preferences.preferred_check_in", req.Preferences.PreferredCheckIn.Format(time.RFC3339)),
+		attribute.String("app.preferences.preferred_check_out", req.Preferences.PreferredCheckOut.Format(time.RFC3339)),
+	)
+}
+
+func (handler *LlmInteractionHandler) GetHotelByID(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "HotelByID", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm_interaction/hotel_by_id"),
+	))
+	defer span.End()
+
+	l := handler.logger.With(slog.String("handler", "HotelByID"))
+	l.DebugContext(ctx, "Fetching hotel by ID")
+
+	hotelIDStr := chi.URLParam(r, "hotelID")
+	hotelID, err := uuid.Parse(hotelIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid hotel ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid hotel ID format")
+		return
+	}
+	span.SetAttributes(attribute.String("app.hotel.id", hotelID.String()))
+	l = l.With(slog.String("hotelID", hotelID.String()))
+	hotel, err := handler.llmInteractionService.GetHotelByIDResponse(ctx, hotelID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to fetch hotel by ID", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch hotel: %s", err.Error()))
+		return
+	}
+	if hotel == nil {
+		l.ErrorContext(ctx, "Hotel not found", slog.String("hotelID", hotelID.String()))
+		api.ErrorResponse(w, r, http.StatusNotFound, "Hotel not found")
+		return
+	}
+	response := struct {
+		Hotel *types.HotelDetailedInfo `json:"hotel"`
+	}{Hotel: hotel}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		l.ErrorContext(ctx, "Failed to encode response", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to encode response")
+		return
+	}
+	l.InfoContext(ctx, "Successfully fetched hotel by ID", slog.String("hotelID", hotelID.String()))
+	span.SetStatus(codes.Ok, "Success")
+	api.WriteJSONResponse(w, r, http.StatusOK, response)
+	span.SetAttributes(attribute.String("app.hotel.name", hotel.Name),
+		attribute.Float64("app.hotel.latitude", hotel.Latitude),
+		attribute.Float64("app.hotel.longitude", hotel.Longitude),
+		attribute.Float64("app.hotel.rating", hotel.Rating),
+		attribute.String("app.hotel.category", hotel.Category),
+	)
+}
+
+func (handler *LlmInteractionHandler) GetRestaurantsByPreferences(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetRestaurantsByPreferences", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm_interaction/restaurants_by_preferences"),
+	))
+	defer span.End()
+
+	l := handler.logger.With(slog.String("handler", "GetRestaurantsByPreferences"))
+	l.DebugContext(ctx, "Fetching restaurants by preferences")
+
+	// Parse request body
+	var req struct {
+		City        string                          `json:"city"`
+		Lat         float64                         `json:"lat"`
+		Lon         float64                         `json:"lon"`
+		Preferences types.RestaurantUserPreferences `json:"preferences"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		l.ErrorContext(ctx, "Failed to decode request body", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Get user ID from context
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+
+	// set default values for preferences if not provided
+	if req.Preferences.PreferredCuisine == "" {
+		req.Preferences.PreferredCuisine = "any"
+	}
+	if req.Preferences.PreferredPriceRange == "" {
+		req.Preferences.PreferredPriceRange = "any"
+	}
+	if req.Preferences.DietaryRestrictions == "" {
+		req.Preferences.DietaryRestrictions = "none"
+	}
+	if req.Preferences.Ambiance == "" {
+		req.Preferences.Ambiance = "any"
+	}
+	if req.Preferences.SpecialFeatures == "" {
+		req.Preferences.SpecialFeatures = "none"
+	}
+
+	// Call service method
+	restaurants, err := handler.llmInteractionService.GetRestaurantsByPreferencesResponse(ctx, userID, req.City, req.Lat, req.Lon, req.Preferences)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to fetch restaurants by preferences", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch restaurants: %s", err.Error()))
+		return
+	}
+
+	// Prepare response
+	response := struct {
+		Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
+	}{Restaurants: restaurants}
+
+	// Encode response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		l.ErrorContext(ctx, "Failed to encode response", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to encode response")
+		return
+	}
+
+	l.InfoContext(ctx, "Successfully fetched restaurants by preferences")
+	span.SetStatus(codes.Ok, "Success")
+}
+
+func (handler *LlmInteractionHandler) GetRestaurantsNearby(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetRestaurantsNearby", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm_interaction/restaurants_nearby"),
+	))
+	defer span.End()
+
+	l := handler.logger.With(slog.String("handler", "GetRestaurantsNearby"))
+	l.DebugContext(ctx, "Fetching nearby restaurants")
+
+	// Get query parameters
+	city := r.URL.Query().Get("city")
+	latStr := r.URL.Query().Get("lat")
+	lonStr := r.URL.Query().Get("lon")
+
+	// Parse latitude and longitude
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid latitude", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid latitude")
+		return
+	}
+	lon, err := strconv.ParseFloat(lonStr, 64)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid longitude", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid longitude")
+		return
+	}
+
+	// Get user ID from context
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+
+	// Create UserLocation
+	userLocation := types.UserLocation{
+		UserLat: lat,
+		UserLon: lon,
+	}
+
+	// Call service method
+	restaurants, err := handler.llmInteractionService.GetRestaurantsNearbyResponse(ctx, userID, city, userLocation)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to fetch nearby restaurants", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch restaurants: %s", err.Error()))
+		return
+	}
+
+	// Prepare response
+	response := struct {
+		Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
+	}{Restaurants: restaurants}
+
+	// Encode response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		l.ErrorContext(ctx, "Failed to encode response", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to encode response")
+		return
+	}
+
+	l.InfoContext(ctx, "Successfully fetched nearby restaurants")
+	span.SetStatus(codes.Ok, "Success")
+}
+
+func (handler *LlmInteractionHandler) GetRestaurantDetails(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetRestaurantDetails", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm_interaction/restaurant/{restaurantID}"),
+	))
+	defer span.End()
+
+	l := handler.logger.With(slog.String("handler", "GetRestaurantDetails"))
+	l.DebugContext(ctx, "Fetching restaurant details")
+
+	// Get restaurant ID from route parameter
+	restaurantIDStr := chi.URLParam(r, "restaurantID")
+	restaurantID, err := uuid.Parse(restaurantIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid restaurant ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid restaurant ID format")
+		return
+	}
+	span.SetAttributes(attribute.String("app.restaurant.id", restaurantID.String()))
+
+	// Call service method
+	restaurant, err := handler.llmInteractionService.GetRestaurantDetailsResponse(ctx, restaurantID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to fetch restaurant details", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch restaurant: %s", err.Error()))
+		return
+	}
+	if restaurant == nil {
+		l.WarnContext(ctx, "Restaurant not found", slog.String("restaurantID", restaurantID.String()))
+		api.ErrorResponse(w, r, http.StatusNotFound, "Restaurant not found")
+		return
+	}
+
+	// Prepare response
+	response := struct {
+		Restaurant *types.RestaurantDetailedInfo `json:"restaurant"`
+	}{Restaurant: restaurant}
+
+	// Encode response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		l.ErrorContext(ctx, "Failed to encode response", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to encode response")
+		return
+	}
+
+	l.InfoContext(ctx, "Successfully fetched restaurant details", slog.String("restaurantID", restaurantID.String()))
 	span.SetStatus(codes.Ok, "Success")
 }

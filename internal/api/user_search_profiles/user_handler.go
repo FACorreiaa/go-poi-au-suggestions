@@ -20,21 +20,31 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-// UserHandler handles HTTP requests related to user operations.
-type UserSearchProfileHandler struct {
+var _ Handler = (*HandlerImpl)(nil)
+
+type Handler interface {
+	GetSearchProfile(w http.ResponseWriter, r *http.Request)
+	GetSearchProfiles(w http.ResponseWriter, r *http.Request)
+	CreateSearchProfile(w http.ResponseWriter, r *http.Request)
+	GetDefaultSearchProfile(w http.ResponseWriter, r *http.Request)
+	UpdateSearchProfile(w http.ResponseWriter, r *http.Request)
+	DeleteSearchProfile(w http.ResponseWriter, r *http.Request)
+	SetDefaultSearchProfile(w http.ResponseWriter, r *http.Request)
+}
+type HandlerImpl struct {
 	userService UserSearchProfilesService
 	logger      *slog.Logger
 }
 
-// NewUserHandler creates a new user handler instance.
-func NewUserHandler(userService UserSearchProfilesService, logger *slog.Logger) *UserSearchProfileHandler {
+// NewUserHandlerImpl creates a new user HandlerImpl instance.
+func NewUserHandlerImpl(userService UserSearchProfilesService, logger *slog.Logger) *HandlerImpl {
 	instanceAddress := fmt.Sprintf("%p", logger)
-	slog.Info("Creating NewUserHandler", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
+	slog.Info("Creating NewUserHandlerImpl", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
 	if logger == nil {
-		panic("PANIC: Attempting to create UserHandler with nil logger!")
+		panic("PANIC: Attempting to create UserHandlerImpl with nil logger!")
 	}
 
-	return &UserSearchProfileHandler{
+	return &HandlerImpl{
 		userService: userService,
 		logger:      logger,
 	}
@@ -54,14 +64,14 @@ func NewUserHandler(userService UserSearchProfilesService, logger *slog.Logger) 
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles/{profileID} [get]
-func (u *UserSearchProfileHandler) GetSearchProfile(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "GetAllInterests", trace.WithAttributes(
+func (u *HandlerImpl) GetSearchProfile(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetAllInterests", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/interests"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "GetUserProfile"))
+	l := u.logger.With(slog.String("HandlerImpl", "GetUserProfile"))
 	l.DebugContext(ctx, "Fetching user profile")
 
 	// Get UserID from context (set by Authenticate middleware)
@@ -111,15 +121,15 @@ func (u *UserSearchProfileHandler) GetSearchProfile(w http.ResponseWriter, r *ht
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles [get]
-// Assuming this is in a handler file
-func (u *UserSearchProfileHandler) GetSearchProfiles(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "GetSearchProfiles", trace.WithAttributes(
+// Assuming this is in a HandlerImpl file
+func (u *HandlerImpl) GetSearchProfiles(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetSearchProfiles", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/interests"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "GetUserProfile"))
+	l := u.logger.With(slog.String("HandlerImpl", "GetUserProfile"))
 	l.DebugContext(ctx, "Fetching user profile")
 
 	// Get UserID from context (set by Authenticate middleware)
@@ -161,15 +171,15 @@ func (u *UserSearchProfileHandler) GetSearchProfiles(w http.ResponseWriter, r *h
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles [post]
-// Assuming this is in a handler file
-func (u *UserSearchProfileHandler) CreateSearchProfile(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserProfilesHandler").Start(r.Context(), "CreateProfile", trace.WithAttributes(
+// Assuming this is in a HandlerImpl file
+func (u *HandlerImpl) CreateSearchProfile(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("UserProfilesHandlerImpl").Start(r.Context(), "CreateProfile", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/search-profile"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "CreateProfile"))
+	l := u.logger.With(slog.String("HandlerImpl", "CreateProfile"))
 	l.DebugContext(ctx, "Creating user preference profile")
 
 	// Get UserID from context (set by Authenticate middleware)
@@ -240,15 +250,15 @@ func (u *UserSearchProfileHandler) CreateSearchProfile(w http.ResponseWriter, r 
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles/default [get]
-// Assuming this is in a handler file
-func (u *UserSearchProfileHandler) GetDefaultSearchProfile(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserProfilesHandler").Start(r.Context(), "CreateProfile", trace.WithAttributes(
+// Assuming this is in a HandlerImpl file
+func (u *HandlerImpl) GetDefaultSearchProfile(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("UserProfilesHandlerImpl").Start(r.Context(), "CreateProfile", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/search-profile"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "CreateProfile"))
+	l := u.logger.With(slog.String("HandlerImpl", "CreateProfile"))
 	l.DebugContext(ctx, "Creating user preference profile")
 
 	// Get UserID from context (set by Authenticate middleware)
@@ -307,15 +317,15 @@ func (u *UserSearchProfileHandler) GetDefaultSearchProfile(w http.ResponseWriter
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles/{profileID} [put]
-// Assuming this is in a handler file
-func (u *UserSearchProfileHandler) UpdateSearchProfile(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserProfilesHandler").Start(r.Context(), "CreateProfile", trace.WithAttributes(
+// Assuming this is in a HandlerImpl file
+func (u *HandlerImpl) UpdateSearchProfile(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("UserProfilesHandlerImpl").Start(r.Context(), "CreateProfile", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/search-profile"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "CreateProfile"))
+	l := u.logger.With(slog.String("HandlerImpl", "CreateProfile"))
 	l.DebugContext(ctx, "Creating user preference profile")
 
 	// Get UserID from context (set by Authenticate middleware)
@@ -398,15 +408,15 @@ func (u *UserSearchProfileHandler) UpdateSearchProfile(w http.ResponseWriter, r 
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles/{profileID} [delete]
-// Assuming this is in a handler file
-func (u *UserSearchProfileHandler) DeleteSearchProfile(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserProfilesHandler").Start(r.Context(), "CreateProfile", trace.WithAttributes(
+// Assuming this is in a HandlerImpl file
+func (u *HandlerImpl) DeleteSearchProfile(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("UserProfilesHandlerImpl").Start(r.Context(), "CreateProfile", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/search-profile"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "CreateProfile"))
+	l := u.logger.With(slog.String("HandlerImpl", "CreateProfile"))
 	l.DebugContext(ctx, "Creating user preference profile")
 
 	// Get UserID from context (set by Authenticate middleware)
@@ -472,15 +482,15 @@ func (u *UserSearchProfileHandler) DeleteSearchProfile(w http.ResponseWriter, r 
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profiles/default/{profileID} [put]
-// Assuming this is in a handler file
-func (u *UserSearchProfileHandler) SetDefaultSearchProfile(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserProfilesHandler").Start(r.Context(), "SetDefaultSearchProfile", trace.WithAttributes(
+// Assuming this is in a HandlerImpl file
+func (u *HandlerImpl) SetDefaultSearchProfile(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("UserProfilesHandlerImpl").Start(r.Context(), "SetDefaultSearchProfile", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/search-profile"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "CreateProfile"))
+	l := u.logger.With(slog.String("HandlerImpl", "CreateProfile"))
 	l.DebugContext(ctx, "Creating user preference profile")
 
 	// Get UserID from context (set by Authenticate middleware)

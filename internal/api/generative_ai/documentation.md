@@ -17,7 +17,7 @@ This flow describes generating a new itinerary based on a user's request (e.g., 
 **Steps:**
 
 1.  **Receive User Request:**
-    *   The API handler receives the city, user's current location (optional), selected `user_preference_profile_id`, available time, and any ad-hoc preference overrides.
+    *   The API HandlerImpl receives the city, user's current location (optional), selected `user_preference_profile_id`, available time, and any ad-hoc preference overrides.
 
 2.  **Prepare Context for AI:**
     *   **Fetch User Preference Profile:** Load the specified `user_preference_profile` from the database (includes interests, search radius, preferred pace, time, etc.).

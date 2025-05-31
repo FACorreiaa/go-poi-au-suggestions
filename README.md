@@ -430,6 +430,44 @@ If you plan to work with **vector embeddings** (numerical representations of tex
 **Summary:** Rely on PostgreSQL's robust standard features (`TEXT`, `JSONB`, etc.) for most data storage related to `go-genai`. Integrate the `pgvector` extension specifically when you need to store and perform efficient similarity searches on vector embeddings.
 GCP, GKE, Terraform, Vault, GO, Ansible
 ---
+
+## Other Premium Features to Consider:
+
+- Offline Maps and Itineraries: Download maps and plans for offline use (critical for international travel).
+- Advanced AI Recommendations: Use vector embeddings (from your Go backend with pgvector) for hyper-personalized suggestions (e.g., “vegan-friendly cafes near Louvre”).
+- Collaboration Tools: Share itineraries with friends or co-travelers, with real-time updates.
+- Priority Real-Time Updates: Faster WebSocket updates for events, traffic, or deals.
+- Ad-Free Experience: Remove ads (if you include them in the free tier).
+- Exclusive Content: Curated guides or local expert tips (e.g., “Hidden Gems in Tokyo”).
+- Analytics Dashboard: Track travel stats (e.g., cities visited, miles traveled).
+
+## Pricing Strategy:
+
+- Freemium Model: Free tier with basic recommendations and 1-2 itinerary lists; premium tier ($3-$5/month or $30-$50/year) for unlimited lists, offline access, and advanced features.
+- One-Time Purchases: Offer offline maps or guides as in-app purchases ($2-$10).
+- Market Comparison: Align with competitors like Wanderlog ($39.99/year) or Citymapper Pass ($4.99/month).
+
+## Recommended Premium Features
+To maximize paying users, implement these features (prioritized for WanderWiseAI):
+- Unlimited Itinerary Lists ($): Save itineraries to multiple lists (e.g., “Food,” “Culture”). 
+    Tech: Store lists in Cloudflare D1 or a backend database (via Go API).
+- Offline Maps and Plans ($): Download maps and itineraries for offline use.
+    Tech: Use Mapbox GL JS (already in your stack) with service workers.
+
+- Collaborative Planning ($): Share and edit itineraries with co-travelers.
+Tech: WebSocket updates via Go backend.
+
+- Advanced AI Filters ($): Filter recommendations by niche preferences (e.g., vegan, budget, TCM wellness).
+Tech: Enhance pgvector queries in Go.
+
+- Ad-Free and Exclusive Guides ($): Remove ads and offer curated content.
+Tech: Static content in SolidStart, toggled by user subscription status.
+
+
+
+___
+
+
 # Business Logic
 
 You are thinking along the right lines! The approach involves both saving global preferences and handling per-search adjustments, primarily managed by the backend based on frontend input.
@@ -440,8 +478,8 @@ Here's the recommended breakdown:
     *   **Yes, exactly.** Your `UserRepo.SetUserPreferences(ctx, userID, interestIDs)` method is the correct place to persist the user's *default* interests.
     *   The **frontend** would provide a settings UI where the user selects their preferred interests (e.g., checking boxes for 'History', 'Foodie', 'Art').
     *   When the user saves these settings, the frontend sends a request (e.g., `PUT /api/v1/users/me/preferences`) to your backend with the list of selected `interestIDs`.
-    *   Your backend **handler** receives this list.
-    *   The handler calls a **service** method (e.g., `UserService.UpdatePreferences`).
+    *   Your backend **HandlerImpl** receives this list.
+    *   The HandlerImpl calls a **service** method (e.g., `UserService.UpdatePreferences`).
     *   The service method calls `UserRepo.SetUserPreferences` to atomically update the `user_interests` table for that user in the database (usually involving deleting old entries and inserting new ones within a transaction).
 
 2.  **Handling Preferences During Search (Backend Logic Driven by Frontend Input):**

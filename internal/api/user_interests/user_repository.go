@@ -134,7 +134,7 @@ func (r *PostgresUserInterestRepo) RemoveUserInterest(ctx context.Context, userI
 
 	if tag.RowsAffected() == 0 {
 		l.WarnContext(ctx, "Attempted to remove non-existent user interest association")
-		// Return an error so the service/handler knows the operation didn't change anything
+		// Return an error so the service/HandlerImpl knows the operation didn't change anything
 		span.SetStatus(codes.Error, "Association not found")
 		return fmt.Errorf("interest association not found: %w", types.ErrNotFound)
 	}

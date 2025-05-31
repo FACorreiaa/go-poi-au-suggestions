@@ -1,10 +1,8 @@
 package llmInteraction
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -23,77 +21,93 @@ import (
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
-	generativeAI "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
-
-	"google.golang.org/genai"
 )
 
-type LlmInteractionHandler struct {
+var _ Handler = (*HandlerImpl)(nil)
+
+type Handler interface {
+	// GetPrompResponse poi
+	GetPrompResponse(w http.ResponseWriter, r *http.Request)
+	SaveItenerary(w http.ResponseWriter, r *http.Request)
+	RemoveItenerary(w http.ResponseWriter, r *http.Request)
+	GetPOIDetails(w http.ResponseWriter, r *http.Request)
+
+	// GetHotelsByPreference hotels
+	GetHotelsByPreference(w http.ResponseWriter, r *http.Request)
+	GetHotelsNearby(w http.ResponseWriter, r *http.Request)
+	GetHotelByID(w http.ResponseWriter, r *http.Request)
+
+	// GetRestaurantsByPreferences restaurants
+	GetRestaurantsByPreferences(w http.ResponseWriter, r *http.Request)
+	GetRestaurantsNearby(w http.ResponseWriter, r *http.Request)
+	GetRestaurantDetails(w http.ResponseWriter, r *http.Request)
+}
+type HandlerImpl struct {
 	llmInteractionService LlmInteractiontService
 	logger                *slog.Logger
 }
 
-func NewLLMHandler(llmInteractionService LlmInteractiontService, logger *slog.Logger) *LlmInteractionHandler {
-	return &LlmInteractionHandler{
+func NewLLMHandlerImpl(llmInteractionService LlmInteractiontService, logger *slog.Logger) *HandlerImpl {
+	return &HandlerImpl{
 		llmInteractionService: llmInteractionService,
 		logger:                logger,
 	}
 }
 
-func RunLLM(ctx context.Context) {
-	aiClient, err := generativeAI.NewAIClient(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
+//func RunLLM(ctx context.Context) {
+//	aiClient, err := generativeAI.NewAIClient(ctx)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+//	prompt := `Generate a list of points of interest in Berlin.
+//				Return the response in JSON format with each POI containing 'name', 'latitude', 'longitude', and 'category'.
+//				Do not wrap the response in json markers.`
+//
+//	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.5)}
+//	response, err := aiClient.GenerateResponse(ctx, prompt, config)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	for _, candidate := range response.Candidates {
+//		if candidate.Content == nil || len(candidate.Content.Parts) == 0 {
+//			log.Println("Candidate has no content or parts.")
+//			continue
+//		}
+//
+//		part := candidate.Content.Parts[0]
+//		txt := part.Text
+//		fmt.Printf("Part text: [%s]\n", txt)
+//		if txt != "" {
+//			log.Printf("Extracted text: [%s]\n", txt)
+//			type POI struct {
+//				Name      string  `json:"name"`
+//				Latitude  float64 `json:"latitude"`
+//				Longitude float64 `json:"longitude"`
+//				Category  string  `json:"category"`
+//			}
+//			var pois []POI
+//
+//			if err := json.Unmarshal([]byte(txt), &pois); err != nil {
+//				log.Printf("Failed to unmarshal AI response text into POIs: %v. Text was: %s\n", err, txt)
+//			} else {
+//				fmt.Println("POIs (successfully unmarshalled):", pois)
+//			}
+//		} else {
+//			log.Println("Part's text was empty.")
+//		}
+//	}
+//}
 
-	prompt := `Generate a list of points of interest in Berlin. 
-				Return the response in JSON format with each POI containing 'name', 'latitude', 'longitude', and 'category'.
-				Do not wrap the response in json markers.`
-
-	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.5)}
-	response, err := aiClient.GenerateResponse(ctx, prompt, config)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, candidate := range response.Candidates {
-		if candidate.Content == nil || len(candidate.Content.Parts) == 0 {
-			log.Println("Candidate has no content or parts.")
-			continue
-		}
-
-		part := candidate.Content.Parts[0]
-		txt := part.Text
-		fmt.Printf("Part text: [%s]\n", txt)
-		if txt != "" {
-			log.Printf("Extracted text: [%s]\n", txt)
-			type POI struct {
-				Name      string  `json:"name"`
-				Latitude  float64 `json:"latitude"`
-				Longitude float64 `json:"longitude"`
-				Category  string  `json:"category"`
-			}
-			var pois []POI
-
-			if err := json.Unmarshal([]byte(txt), &pois); err != nil {
-				log.Printf("Failed to unmarshal AI response text into POIs: %v. Text was: %s\n", err, txt)
-			} else {
-				fmt.Println("POIs (successfully unmarshalled):", pois)
-			}
-		} else {
-			log.Println("Part's text was empty.")
-		}
-	}
-}
-
-func (handler *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "GetPrompResponse", trace.WithAttributes(
+func (HandlerImpl *HandlerImpl) GetPrompResponse(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetPrompResponse", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/interests"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "GetUserProfile"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "GetUserProfile"))
 	l.DebugContext(ctx, "Fetching user profile")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -155,7 +169,7 @@ func (handler *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r 
 	// 	Categories: []string{"restaurants"},
 	// }
 
-	itineraryResponse, err := handler.llmInteractionService.GetIteneraryResponse(ctx, cityName, userID, profileID, userLocation)
+	itineraryResponse, err := HandlerImpl.llmInteractionService.GetIteneraryResponse(ctx, cityName, userID, profileID, userLocation)
 	responsePayload := struct {
 		Data *types.AiCityResponse `json:"data"`
 		//SessionID string                `json:"session_id"` // IMPORTANT: Send this back
@@ -195,14 +209,14 @@ func (handler *LlmInteractionHandler) GetPrompResponse(w http.ResponseWriter, r 
 	api.WriteJSONResponse(w, r, http.StatusCreated, responsePayload)
 }
 
-func (handler *LlmInteractionHandler) SaveItenerary(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "SaveItenerary", trace.WithAttributes(
+func (HandlerImpl *HandlerImpl) SaveItenerary(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "SaveItenerary", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/save_itinerary"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "SaveItenerary"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "SaveItenerary"))
 	l.DebugContext(ctx, "Saving itinerary")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -240,7 +254,7 @@ func (handler *LlmInteractionHandler) SaveItenerary(w http.ResponseWriter, r *ht
 		return
 	}
 
-	savedItinerary, err := handler.llmInteractionService.SaveItenerary(ctx, userID, req)
+	savedItinerary, err := HandlerImpl.llmInteractionService.SaveItenerary(ctx, userID, req)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to save itinerary", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to save itinerary: %s", err.Error()))
@@ -251,14 +265,14 @@ func (handler *LlmInteractionHandler) SaveItenerary(w http.ResponseWriter, r *ht
 	api.WriteJSONResponse(w, r, http.StatusCreated, savedItinerary)
 }
 
-func (handler *LlmInteractionHandler) RemoveItenerary(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "RemoveItenerary", trace.WithAttributes(
+func (HandlerImpl *HandlerImpl) RemoveItenerary(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "RemoveItenerary", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/remove_itinerary"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "RemoveItenerary"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "RemoveItenerary"))
 	l.DebugContext(ctx, "Removing itinerary")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -287,7 +301,7 @@ func (handler *LlmInteractionHandler) RemoveItenerary(w http.ResponseWriter, r *
 	span.SetAttributes(attribute.String("app.itinerary.id", itineraryID.String()))
 	l = l.With(slog.String("itineraryID", itineraryID.String()))
 
-	if err := handler.llmInteractionService.RemoveItenerary(ctx, userID, itineraryID); err != nil {
+	if err := HandlerImpl.llmInteractionService.RemoveItenerary(ctx, userID, itineraryID); err != nil {
 		l.ErrorContext(ctx, "Failed to remove itinerary", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to remove itinerary: %s", err.Error()))
 		return
@@ -297,14 +311,14 @@ func (handler *LlmInteractionHandler) RemoveItenerary(w http.ResponseWriter, r *
 	api.WriteJSONResponse(w, r, http.StatusNoContent, nil)
 }
 
-func (handler *LlmInteractionHandler) GetPOIDetails(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetPOIDetails", trace.WithAttributes(
+func (HandlerImpl *HandlerImpl) GetPOIDetails(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetPOIDetails", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/get_poi_details"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "GetPOIDetails"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "GetPOIDetails"))
 	l.DebugContext(ctx, "Get POI details")
 
 	// Authenticate user
@@ -357,7 +371,7 @@ func (handler *LlmInteractionHandler) GetPOIDetails(w http.ResponseWriter, r *ht
 	}
 
 	// Call service to get POI details
-	pois, err := handler.llmInteractionService.GetPOIDetailsResponse(ctx, userID, serviceReq.CityName, serviceReq.Latitude, serviceReq.Longitude)
+	pois, err := HandlerImpl.llmInteractionService.GetPOIDetailsResponse(ctx, userID, serviceReq.CityName, serviceReq.Latitude, serviceReq.Longitude)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch POI details", slog.Any("error", err))
 		span.SetStatus(codes.Error, "Service error")
@@ -385,15 +399,15 @@ func (handler *LlmInteractionHandler) GetPOIDetails(w http.ResponseWriter, r *ht
 	span.SetStatus(codes.Ok, "Success")
 }
 
-// TODO FIX ALL ANE BELOW DB ACCESS
-func (handler *LlmInteractionHandler) GetHotelsByPreference(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "HotelsByPreference", trace.WithAttributes(
+// GetHotelsByPreference TODO FIX ALL ANE BELOW DB ACCESS
+func (HandlerImpl *HandlerImpl) GetHotelsByPreference(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "HotelsByPreference", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/hotels_by_preference"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "HotelsByPreference"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "HotelsByPreference"))
 	l.DebugContext(ctx, "Fetching hotels by preference")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -451,7 +465,7 @@ func (handler *LlmInteractionHandler) GetHotelsByPreference(w http.ResponseWrite
 		req.Preferences.NumberOfRooms = 1
 	}
 
-	hotels, err := handler.llmInteractionService.GetHotelsByPreferenceResponse(ctx, userID, req.City, req.Lat, req.Lon, req.Preferences)
+	hotels, err := HandlerImpl.llmInteractionService.GetHotelsByPreferenceResponse(ctx, userID, req.City, req.Lat, req.Lon, req.Preferences)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch hotels by preference", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch hotels: %s", err.Error()))
@@ -474,14 +488,14 @@ func (handler *LlmInteractionHandler) GetHotelsByPreference(w http.ResponseWrite
 	span.SetStatus(codes.Ok, "Success")
 }
 
-func (handler *LlmInteractionHandler) GetHotelsNearby(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "HotelsNearby", trace.WithAttributes(
+func (HandlerImpl *HandlerImpl) GetHotelsNearby(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "HotelsNearby", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/hotels_nearby"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "HotelsNearby"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "HotelsNearby"))
 	l.DebugContext(ctx, "Fetching nearby hotels")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -528,7 +542,7 @@ func (handler *LlmInteractionHandler) GetHotelsNearby(w http.ResponseWriter, r *
 		UserLon:        req.Lon,
 		SearchRadiusKm: req.Distance,
 	}
-	hotels, err := handler.llmInteractionService.GetHotelsNearbyResponse(ctx, userID, req.City, userLocation)
+	hotels, err := HandlerImpl.llmInteractionService.GetHotelsNearbyResponse(ctx, userID, req.City, userLocation)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch nearby hotels", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch hotels: %s", err.Error()))
@@ -559,14 +573,14 @@ func (handler *LlmInteractionHandler) GetHotelsNearby(w http.ResponseWriter, r *
 	)
 }
 
-func (handler *LlmInteractionHandler) GetHotelByID(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "HotelByID", trace.WithAttributes(
+func (HandlerImpl *HandlerImpl) GetHotelByID(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "HotelByID", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/hotel_by_id"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "HotelByID"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "HotelByID"))
 	l.DebugContext(ctx, "Fetching hotel by ID")
 
 	hotelIDStr := chi.URLParam(r, "hotelID")
@@ -578,7 +592,7 @@ func (handler *LlmInteractionHandler) GetHotelByID(w http.ResponseWriter, r *htt
 	}
 	span.SetAttributes(attribute.String("app.hotel.id", hotelID.String()))
 	l = l.With(slog.String("hotelID", hotelID.String()))
-	hotel, err := handler.llmInteractionService.GetHotelByIDResponse(ctx, hotelID)
+	hotel, err := HandlerImpl.llmInteractionService.GetHotelByIDResponse(ctx, hotelID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch hotel by ID", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch hotel: %s", err.Error()))
@@ -610,14 +624,14 @@ func (handler *LlmInteractionHandler) GetHotelByID(w http.ResponseWriter, r *htt
 	)
 }
 
-func (handler *LlmInteractionHandler) GetRestaurantsByPreferences(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetRestaurantsByPreferences", trace.WithAttributes(
+func (HandlerImpl *HandlerImpl) GetRestaurantsByPreferences(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetRestaurantsByPreferences", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/restaurants_by_preferences"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "GetRestaurantsByPreferences"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "GetRestaurantsByPreferences"))
 	l.DebugContext(ctx, "Fetching restaurants by preferences")
 
 	// Parse request body
@@ -665,7 +679,7 @@ func (handler *LlmInteractionHandler) GetRestaurantsByPreferences(w http.Respons
 	}
 
 	// Call service method
-	restaurants, err := handler.llmInteractionService.GetRestaurantsByPreferencesResponse(ctx, userID, req.City, req.Lat, req.Lon, req.Preferences)
+	restaurants, err := HandlerImpl.llmInteractionService.GetRestaurantsByPreferencesResponse(ctx, userID, req.City, req.Lat, req.Lon, req.Preferences)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch restaurants by preferences", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch restaurants: %s", err.Error()))
@@ -690,14 +704,14 @@ func (handler *LlmInteractionHandler) GetRestaurantsByPreferences(w http.Respons
 	span.SetStatus(codes.Ok, "Success")
 }
 
-func (handler *LlmInteractionHandler) GetRestaurantsNearby(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetRestaurantsNearby", trace.WithAttributes(
+func (HandlerImpl *HandlerImpl) GetRestaurantsNearby(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetRestaurantsNearby", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/restaurants_nearby"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "GetRestaurantsNearby"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "GetRestaurantsNearby"))
 	l.DebugContext(ctx, "Fetching nearby restaurants")
 
 	// Get query parameters
@@ -740,7 +754,7 @@ func (handler *LlmInteractionHandler) GetRestaurantsNearby(w http.ResponseWriter
 	}
 
 	// Call service method
-	restaurants, err := handler.llmInteractionService.GetRestaurantsNearbyResponse(ctx, userID, city, userLocation)
+	restaurants, err := HandlerImpl.llmInteractionService.GetRestaurantsNearbyResponse(ctx, userID, city, userLocation)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch nearby restaurants", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch restaurants: %s", err.Error()))
@@ -765,14 +779,14 @@ func (handler *LlmInteractionHandler) GetRestaurantsNearby(w http.ResponseWriter
 	span.SetStatus(codes.Ok, "Success")
 }
 
-func (handler *LlmInteractionHandler) GetRestaurantDetails(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetRestaurantDetails", trace.WithAttributes(
+func (HandlerImpl *HandlerImpl) GetRestaurantDetails(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetRestaurantDetails", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/restaurant/{restaurantID}"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "GetRestaurantDetails"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "GetRestaurantDetails"))
 	l.DebugContext(ctx, "Fetching restaurant details")
 
 	// Get restaurant ID from route parameter
@@ -786,7 +800,7 @@ func (handler *LlmInteractionHandler) GetRestaurantDetails(w http.ResponseWriter
 	span.SetAttributes(attribute.String("app.restaurant.id", restaurantID.String()))
 
 	// Call service method
-	restaurant, err := handler.llmInteractionService.GetRestaurantDetailsResponse(ctx, restaurantID)
+	restaurant, err := HandlerImpl.llmInteractionService.GetRestaurantDetailsResponse(ctx, restaurantID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch restaurant details", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch restaurant: %s", err.Error()))
@@ -816,15 +830,15 @@ func (handler *LlmInteractionHandler) GetRestaurantDetails(w http.ResponseWriter
 	span.SetStatus(codes.Ok, "Success")
 }
 
-// GetPOIsByDistance test this
-func (handler *LlmInteractionHandler) GetPOIsByDistance(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetPOIsByDistance", trace.WithAttributes(
+// // GetPOIsByDistance test this
+func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetPOIsByDistance", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/pois_by_distance"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "GetPOIsByDistance"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "GetPOIsByDistance"))
 	l.DebugContext(ctx, "Fetching POIs by distance")
 
 	// Get query parameters
@@ -872,7 +886,7 @@ func (handler *LlmInteractionHandler) GetPOIsByDistance(w http.ResponseWriter, r
 	}
 
 	// Call service method
-	pois, err := handler.llmInteractionService.GetGeneralPOIByDistanceResponse(ctx, userID, city, lat, lon, distance)
+	pois, err := HandlerImpl.llmInteractionService.GetGeneralPOIByDistanceResponse(ctx, userID, city, lat, lon, distance)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch POIs", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch POIs: %s", err.Error()))

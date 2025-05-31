@@ -21,18 +21,18 @@ import (
 
 // Container holds all application dependencies
 type Container struct {
-	Config                *config.Config
-	Logger                *slog.Logger
-	Pool                  *pgxpool.Pool
-	AuthHandler           *auth.AuthHandler
-	UserHandler           *user.HandlerUser
-	UserInterestHandler   *userInterest.UserInterestHandler
-	UserSettingsHandler   *userSettings.SettingsHandler
-	UserTagsHandler       *userTags.UserTagsHandler
-	UserProfileHandler    *userSearchProfile.UserSearchProfileHandler
-	LLMInteractionHandler *llmInteraction.LlmInteractionHandler
-	POIHandler            *poi.POIHandler
-	// Add other handlers, services, and repositories as needed
+	Config                    *config.Config
+	Logger                    *slog.Logger
+	Pool                      *pgxpool.Pool
+	AuthHandler               *auth.HandlerImpl
+	UserHandler               *user.HandlerImpl
+	InterestHandler           *userInterest.HandlerImpl
+	SettingsHandler           *userSettings.HandlerImpl
+	TagsHandler               *userTags.HandlerImpl
+	SearchProfileHandler      *userSearchProfile.HandlerImpl
+	LLMInteractionHandlerImpl *llmInteraction.HandlerImpl
+	POIHandler                *poi.HandlerImpl
+	// Add other HandlerImpls, services, and repositories as needed
 }
 
 // NewContainer initializes and returns a new dependency container
@@ -56,29 +56,29 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	// Initialize services
 	authService := auth.NewAuthService(authRepo, cfg, logger)
 
-	// Initialize handlers
-	authHandler := auth.NewAuthHandler(authService, logger)
+	// Initialize HandlerImpls
+	authHandlerImpl := auth.NewAuthHandlerImpl(authService, logger)
 
 	//
 	userRepo := user.NewPostgresUserRepo(pool, logger)
 	userService := user.NewUserService(userRepo, logger)
-	userHandler := user.NewHandlerUser(userService, logger)
+	userHandlerImpl := user.NewHandlerImpl(userService, logger)
 
 	userInterestRepo := userInterest.NewPostgresUserInterestRepo(pool, logger)
 	userInterestService := userInterest.NewUserInterestService(userInterestRepo, logger)
-	userInterestHandler := userInterest.NewUserInterestHandler(userInterestService, logger)
+	HandlerImpl := userInterest.NewHandlerImpl(userInterestService, logger)
 
 	userSettingsRepo := userSettings.NewPostgresUserSettingsRepo(pool, logger)
 	userSettingsService := userSettings.NewUserSettingsService(userSettingsRepo, logger)
-	userSettingsHandler := userSettings.NewSettingsHandler(userSettingsService, logger)
+	userSettingsHandler := userSettings.NewHandlerImpl(userSettingsService, logger)
 
 	userTagsRepo := userTags.NewPostgresUserTagsRepo(pool, logger)
 	userTagsService := userTags.NewUserTagsService(userTagsRepo, logger)
-	userTagsHandler := userTags.NewUserTagsHandler(userTagsService, logger)
+	userTagsHandler := userTags.NewHandlerImpl(userTagsService, logger)
 
 	userSearchProfilesRepo := userSearchProfile.NewPostgresUserRepo(pool, logger)
 	userSearchProfilesService := userSearchProfile.NewUserProfilesService(userSearchProfilesRepo, userInterestRepo, userTagsRepo, logger)
-	userSearchProfilesHandler := userSearchProfile.NewUserHandler(userSearchProfilesService, logger)
+	userSearchProfilesHandlerImpl := userSearchProfile.NewUserHandlerImpl(userSearchProfilesService, logger)
 	// Create and return the container
 
 	// city repository
@@ -94,24 +94,24 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 		cityRepo,
 		poiRepo,
 		logger)
-	llmInteractionHandler := llmInteraction.NewLLMHandler(llmInteractionService, logger)
+	llmInteractionHandlerImpl := llmInteraction.NewLLMHandlerImpl(llmInteractionService, logger)
 
 	poiRepository := poi.NewPOIRepository(pool, logger)
 	poiService := poi.NewPOIServiceImpl(poiRepository, logger)
-	poiHandler := poi.NewPOIHandler(poiService, logger)
+	poiHandler := poi.NewHandlerImpl(poiService, logger)
 	return &Container{
-		Config:                cfg,
-		Logger:                logger,
-		Pool:                  pool,
-		AuthHandler:           authHandler,
-		UserHandler:           userHandler,
-		UserInterestHandler:   userInterestHandler,
-		UserSettingsHandler:   userSettingsHandler,
-		UserTagsHandler:       userTagsHandler,
-		UserProfileHandler:    userSearchProfilesHandler,
-		LLMInteractionHandler: llmInteractionHandler,
-		POIHandler:            poiHandler,
-		// Add other handlers, services, and repositories as needed
+		Config:                    cfg,
+		Logger:                    logger,
+		Pool:                      pool,
+		AuthHandler:               authHandlerImpl,
+		UserHandler:               userHandlerImpl,
+		InterestHandler:           HandlerImpl,
+		SettingsHandler:           userSettingsHandler,
+		TagsHandler:               userTagsHandler,
+		SearchProfileHandler:      userSearchProfilesHandlerImpl,
+		LLMInteractionHandlerImpl: llmInteractionHandlerImpl,
+		POIHandler:                poiHandler,
+		// Add other HandlerImpls, services, and repositories as needed
 	}, nil
 }
 

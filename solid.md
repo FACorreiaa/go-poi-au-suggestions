@@ -86,7 +86,7 @@ Your Go backend uses a REST API (built with Chi or Gin), so SolidStart can inter
         import "github.com/go-chi/cors"
 
         r := chi.NewRouter()
-        r.Use(cors.Handler(cors.Options{
+        r.Use(cors.HandlerImpl(cors.Options{
           AllowedOrigins:   []string{"http://localhost:3000", "https://your-solidstart-app.com"},
           AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
           AllowedHeaders:   []string{"Authorization", "Content-Type"},
@@ -352,7 +352,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true }, // Be more specific in production
 }
 
-func handleRecommendations(w http.ResponseWriter, r *http.Request) {
+func HandlerImplecommendations(w http.ResponseWriter, r *http.Request) {
 	recommendations := []map[string]string{
 		{"name": "Cafe Central", "description": "Great coffee"},
 		{"name": "Art Museum", "description": "Modern art pieces"},
@@ -387,7 +387,7 @@ func main() {
 	r := chi.NewRouter()
 
 	// CORS middleware
-	r.Use(cors.Handler(cors.Options{
+	r.Use(cors.HandlerImpl(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:3000"}, // Adjust for your SolidStart dev port
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
@@ -396,7 +396,7 @@ func main() {
 		MaxAge:           300, // Maximum value not ignored by any major browsers
 	}))
 
-	r.Get("/api/v1/recommendations", handleRecommendations)
+	r.Get("/api/v1/recommendations", HandlerImplecommendations)
 	r.Get("/ws/suggestions", handleSuggestionsWS)
 
 	log.Println("Go backend listening on :8080")

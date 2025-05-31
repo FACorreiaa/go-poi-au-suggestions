@@ -33,7 +33,7 @@ func StructuredLogger(logger *slog.Logger) func(next http.Handler) http.Handler 
 			// Log the incoming request (optional, could log only at the end)
 			requestLogger.InfoContext(r.Context(), "Request started")
 
-			// Process request using the next handler
+			// Process request using the next HandlerImpl
 			next.ServeHTTP(ww, r)
 
 			// Log completed request

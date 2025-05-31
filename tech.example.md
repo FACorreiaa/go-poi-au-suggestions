@@ -266,12 +266,12 @@ func (s *RecommendationService) GenerateRecommendationText(ctx context.Context, 
 func min(a, b int) int { if a < b { return a }; return b }
 ```
 
-**3. Handler Layer (Example Usage)**
+**3. HandlerImpl Layer (Example Usage)**
 
-Your HTTP handler would call the service methods.
+Your HTTP HandlerImpl would call the service methods.
 
 ```
-// internal/api/recommendation/handler.go (Example)
+// internal/api/recommendation/HandlerImpl.go (Example)
 package recommendation
 
 import (
@@ -283,19 +283,19 @@ import (
     "github.com/FACorreiaa/WanderWiseAI/internal/api/utils"
 )
 
-type RecommendationHandler struct {
+type RecommendationHandlerImpl struct {
     recService *recommendation.RecommendationService // Use concrete type or interface
     logger     *slog.Logger
 }
 
-func NewRecommendationHandler(recService *recommendation.RecommendationService, logger *slog.Logger) *RecommendationHandler {
-    return &RecommendationHandler{recService: recService, logger: logger}
+func NewRecommendationHandlerImpl(recService *recommendation.RecommendationService, logger *slog.Logger) *RecommendationHandlerImpl {
+    return &RecommendationHandlerImpl{recService: recService, logger: logger}
 }
 
-// Example handler for similarity search + generation
-func (h *RecommendationHandler) GetSimilarRecommendations(w http.ResponseWriter, r *http.Request) {
+// Example HandlerImpl for similarity search + generation
+func (h *RecommendationHandlerImpl) GetSimilarRecommendations(w http.ResponseWriter, r *http.Request) {
     ctx := r.Context()
-    l := h.logger.With(slog.String("handler", "GetSimilarRecommendations"))
+    l := h.logger.With(slog.String("HandlerImpl", "GetSimilarRecommendations"))
 
     queryText := r.URL.Query().Get("q")
     if queryText == "" {
@@ -346,7 +346,7 @@ func (h *RecommendationHandler) GetSimilarRecommendations(w http.ResponseWriter,
 2.  **Service (`GetEmbedding`):** A helper to encapsulate calling the Google Embedding API via the `genai.Client`.
 3.  **Service (`FindSimilarPlaces`):** Orchestrates the process: gets the embedding for the query text, then calls the repository to find similar POIs based on that embedding.
 4.  **Service (`GenerateRecommendationText`):** Takes the original query and the list of similar POIs found by the vector search. It constructs a detailed prompt for a generative model (like Gemini Pro/Flash) asking it to synthesize a recommendation based on the provided context. It then calls the LLM via `genai.Client`.
-5.  **Handler (`GetSimilarRecommendations`):** Parses the user's query from the HTTP request, calls the service to find similar places, calls the service again to generate the text response, and then sends the results back as JSON.
+5.  **HandlerImpl (`GetSimilarRecommendations`):** Parses the user's query from the HTTP request, calls the service to find similar places, calls the service again to generate the text response, and then sends the results back as JSON.
 
 This flow demonstrates how to use embeddings for semantic search with `pgvector` and then leverage an LLM like Gemini to interpret those search results and present them naturally to the user. Remember to handle errors robustly at each step.
 
@@ -756,7 +756,7 @@ func main() {
     defer pgpool.Close()
 
     // Repository
-    logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+    logger := slog.New(slog.NewTextHandlerImpl(os.Stdout, nil))
     poiRepo := repo.NewPostgresPOIRepo(pgpool, logger)
 
     // Replace with a real POI ID from your database

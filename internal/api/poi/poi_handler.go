@@ -18,13 +18,22 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-type POIHandler struct {
+var _ Handler = (*HandlerImpl)(nil)
+
+type Handler interface {
+	AddPoiToFavourites(w http.ResponseWriter, r *http.Request)
+	RemovePoiFromFavourites(w http.ResponseWriter, r *http.Request)
+	GetFavouritePOIsByUserID(w http.ResponseWriter, r *http.Request)
+	GetPOIsByCityID(w http.ResponseWriter, r *http.Request)
+}
+
+type HandlerImpl struct {
 	poiService POIService
 	logger     *slog.Logger
 }
 
-func NewPOIHandler(poiService POIService, logger *slog.Logger) *POIHandler {
-	return &POIHandler{
+func NewHandlerImpl(poiService POIService, logger *slog.Logger) *HandlerImpl {
+	return &HandlerImpl{
 		poiService: poiService,
 		logger:     logger,
 	}
@@ -43,15 +52,15 @@ func NewPOIHandler(poiService POIService, logger *slog.Logger) *POIHandler {
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /poi/favourites [post]
-func (h *POIHandler) AddPoiToFavourites(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) AddPoiToFavourites(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("AddPoiToFavourites").Start(r.Context(), "AddPoiToFavourites", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/save_itinerary"),
 	))
 	defer span.End()
 
-	l := h.logger.With(slog.String("handler", "AddPoiToFavourites"))
-	l.DebugContext(ctx, "Add Poi to Favourites handler invoked")
+	l := h.logger.With(slog.String("HandlerImpl", "AddPoiToFavourites"))
+	l.DebugContext(ctx, "Add Poi to Favourites HandlerImpl invoked")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userIDStr == "" {
@@ -113,14 +122,14 @@ func (h *POIHandler) AddPoiToFavourites(w http.ResponseWriter, r *http.Request) 
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /poi/favourites [delete]
-func (h *POIHandler) RemovePoiFromFavourites(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) RemovePoiFromFavourites(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("RemovePoiFromFavourites").Start(r.Context(), "RemovePoiFromFavourites", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/save_itinerary"),
 	))
 	defer span.End()
-	l := h.logger.With(slog.String("handler", "RemovePoiFromFavourites"))
-	l.DebugContext(ctx, "Remove Poi from Favourites handler invoked")
+	l := h.logger.With(slog.String("HandlerImpl", "RemovePoiFromFavourites"))
+	l.DebugContext(ctx, "Remove Poi from Favourites HandlerImpl invoked")
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userIDStr == "" {
 		l.ErrorContext(ctx, "User ID not found in context")
@@ -173,14 +182,14 @@ func (h *POIHandler) RemovePoiFromFavourites(w http.ResponseWriter, r *http.Requ
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /poi/favourites [get]
-func (handler *POIHandler) GetFavouritePOIsByUserID(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("LlmInteractionHandler").Start(r.Context(), "GetFavouritePOIsByUserID", trace.WithAttributes(
+func (HandlerImpl *HandlerImpl) GetFavouritePOIsByUserID(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("LlmInteractionHandlerImpl").Start(r.Context(), "GetFavouritePOIsByUserID", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/llm_interaction/favourite_pois"),
 	))
 	defer span.End()
 
-	l := handler.logger.With(slog.String("handler", "GetFavouritePOIsByUserID"))
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "GetFavouritePOIsByUserID"))
 	l.DebugContext(ctx, "Fetching favourite POIs by user ID")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -199,7 +208,7 @@ func (handler *POIHandler) GetFavouritePOIsByUserID(w http.ResponseWriter, r *ht
 	span.SetAttributes(semconv.EnduserIDKey.String(userID.String()))
 	l = l.With(slog.String("userID", userID.String()))
 
-	favouritePOIs, err := handler.poiService.GetFavouritePOIsByUserID(ctx, userID)
+	favouritePOIs, err := HandlerImpl.poiService.GetFavouritePOIsByUserID(ctx, userID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch favourite POIs by user ID", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch favourite POIs: %s", err.Error()))
@@ -221,15 +230,15 @@ func (handler *POIHandler) GetFavouritePOIsByUserID(w http.ResponseWriter, r *ht
 // @Failure      400 {object} types.Response "Invalid Input"
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Router       /poi/city/{cityID} [get]
-func (h *POIHandler) GetPOIsByCityID(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) GetPOIsByCityID(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("GetPOIsByCityID").Start(r.Context(), "GetPOIsByCityID", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/poi/city"),
 	))
 	defer span.End()
 
-	l := h.logger.With(slog.String("handler", "GetPOIsByCityID"))
-	l.DebugContext(ctx, "Get POIs by City ID handler invoked")
+	l := h.logger.With(slog.String("HandlerImpl", "GetPOIsByCityID"))
+	l.DebugContext(ctx, "Get POIs by City ID HandlerImpl invoked")
 
 	cityIDStr := chi.URLParam(r, "cityID")
 	if cityIDStr == "" {

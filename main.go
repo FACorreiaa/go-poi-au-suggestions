@@ -123,11 +123,11 @@ func main() {
 	routerConfig := &router.Config{
 		AuthHandler:              c.AuthHandler,
 		UserHandler:              c.UserHandler,
-		UserInterestHandler:      c.UserInterestHandler,
-		UserSettingsHandler:      c.UserSettingsHandler,
-		UserTagsHandler:          c.UserTagsHandler,
-		UserSearchProfileHandler: c.UserProfileHandler,
-		LLMInteractionHandler:    c.LLMInteractionHandler,
+		UserInterestHandler:      c.InterestHandler,
+		UserSettingsHandler:      c.SettingsHandler,
+		UserSearchProfileHandler: c.SearchProfileHandler,
+		UserTagsHandler:          c.TagsHandler,
+		LLMInteractionHandler:    c.LLMInteractionHandlerImpl,
 		PointsOfInterestHandler:  c.POIHandler,
 		AuthenticateMiddleware:   authenticateMiddleware,
 		Logger:                   logger,
@@ -146,7 +146,10 @@ func main() {
 	rootRouter.Use(chiMiddleware.Compress(5, "application/json"))
 	rootRouter.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("pong"))
+		_, err = w.Write([]byte("pong"))
+		if err != nil {
+			return
+		}
 	})
 	rootRouter.Get("/swagger/*", httpSwagger.WrapHandler)
 	rootRouter.Mount("/", apiRouter)

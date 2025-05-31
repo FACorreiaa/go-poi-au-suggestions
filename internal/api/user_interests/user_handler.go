@@ -19,21 +19,30 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-// UserInterestHandler handles HTTP requests related to user operations.
-type UserInterestHandler struct {
+var _ Handler = (*HandlerImpl)(nil)
+
+type Handler interface {
+	GetAllInterests(w http.ResponseWriter, r *http.Request)
+	RemoveUserInterest(w http.ResponseWriter, r *http.Request)
+	CreateInterest(w http.ResponseWriter, r *http.Request)
+	UpdateUserInterest(w http.ResponseWriter, r *http.Request)
+}
+
+// HandlerImpl handles HTTP requests related to user operations.
+type HandlerImpl struct {
 	userInterestService UserInterestService
 	logger              *slog.Logger
 }
 
-// NewUserInterestHandler creates a new user handler instance.
-func NewUserInterestHandler(userInterestService UserInterestService, logger *slog.Logger) *UserInterestHandler {
+// NewHandlerImpl creates a new user HandlerImpl instance.
+func NewHandlerImpl(userInterestService UserInterestService, logger *slog.Logger) *HandlerImpl {
 	instanceAddress := fmt.Sprintf("%p", logger)
-	slog.Info("Creating NewUserInterestHandler", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
+	slog.Info("Creating NewHandlerImpl", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
 	if logger == nil {
-		panic("PANIC: Attempting to create UserInterestHandler with nil logger!")
+		panic("PANIC: Attempting to create HandlerImpl with nil logger!")
 	}
 
-	return &UserInterestHandler{
+	return &HandlerImpl{
 		userInterestService: userInterestService,
 		logger:              logger,
 	}
@@ -48,14 +57,14 @@ func NewUserInterestHandler(userInterestService UserInterestService, logger *slo
 // @Success      200 {array} types.Interest "All Interests"
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Router       /user/interests [get]
-func (h *UserInterestHandler) GetAllInterests(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "GetAllInterests", trace.WithAttributes(
+func (h *HandlerImpl) GetAllInterests(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetAllInterests", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/interests"),
 	))
 	defer span.End()
 
-	l := h.logger.With(slog.String("handler", "GetAllInterests"))
+	l := h.logger.With(slog.String("HandlerImpl", "GetAllInterests"))
 
 	interests, err := h.userInterestService.GetAllInterests(ctx)
 	if err != nil {
@@ -84,14 +93,14 @@ func (h *UserInterestHandler) GetAllInterests(w http.ResponseWriter, r *http.Req
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/preferences/interests/{interestId} [delete]
-func (h *UserInterestHandler) RemoveUserInterest(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "RemoveUserInterest", trace.WithAttributes(
+func (h *HandlerImpl) RemoveUserInterest(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "RemoveUserInterest", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/preferences/interests/{interestId}"),
 	))
 	defer span.End()
 
-	l := h.logger.With(slog.String("handler", "RemoveUserInterest"))
+	l := h.logger.With(slog.String("HandlerImpl", "RemoveUserInterest"))
 
 	// Get UserID from context (set by Authenticate middleware)
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -155,14 +164,14 @@ func (h *UserInterestHandler) RemoveUserInterest(w http.ResponseWriter, r *http.
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/interests/create [post]
-func (h *UserInterestHandler) CreateInterest(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "CreateInterest", trace.WithAttributes(
+func (h *HandlerImpl) CreateInterest(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "CreateInterest", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/interests/create"),
 	))
 	defer span.End()
 
-	l := h.logger.With(slog.String("handler", "CreateInterest"))
+	l := h.logger.With(slog.String("HandlerImpl", "CreateInterest"))
 
 	// Get UserID from context (set by Authenticate middleware)
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -221,14 +230,14 @@ func (h *UserInterestHandler) CreateInterest(w http.ResponseWriter, r *http.Requ
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/preferences/enhanced [get]
-//func (h *UserInterestHandler) GetUserEnhancedInterests(w http.ResponseWriter, r *http.Request) {
-//	ctx, span := otel.Tracer("UserInterestHandler").Start(r.Context(), "GetUserEnhancedInterests", trace.WithAttributes(
+//func (h *HandlerImpl) GetUserEnhancedInterests(w http.ResponseWriter, r *http.Request) {
+//	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetUserEnhancedInterests", trace.WithAttributes(
 //		semconv.HTTPRequestMethodKey.String(r.Method),
 //		semconv.HTTPRouteKey.String("/user/preferences/enhanced"),
 //	))
 //	defer span.End()
 //
-//	l := h.logger.With(slog.String("handler", "GetUserEnhancedInterests"))
+//	l := h.logger.With(slog.String("HandlerImpl", "GetUserEnhancedInterests"))
 //
 //	// Get UserID from context (set by Authenticate middleware)
 //	userIDStr, ok := api.GetUserIDFromContext(ctx)
@@ -278,15 +287,15 @@ func (h *UserInterestHandler) CreateInterest(w http.ResponseWriter, r *http.Requ
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/custom-interests/{interestID} [put] // Changed route for clarity
-func (h *UserInterestHandler) UpdateUserInterest(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserHandler").Start(r.Context(), "UpdateCustomInterest", trace.WithAttributes(
+func (h *HandlerImpl) UpdateUserInterest(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("UserHandlerImpl").Start(r.Context(), "UpdateCustomInterest", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		// Note: Getting the exact route template might require specific Chi helpers if available
 		// semconv.HTTPRouteKey.String("/user/custom-interests/{interestID}"),
 	))
 	defer span.End()
 
-	l := h.logger.With(slog.String("handler", "UpdateCustomInterest"))
+	l := h.logger.With(slog.String("HandlerImpl", "UpdateCustomInterest"))
 
 	// 1. Get UserID from context
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)

@@ -1,7 +1,7 @@
 mode: ${APP_ENV}
 dotenv: ".env/dev"
 
-handlers:
+HandlerImpls:
   externalAPI:
     port: "8081"
     certFile: "./.data/server.crt"

@@ -13,21 +13,27 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-// HandlerUser handles HTTP requests related to user operations.
-type HandlerUser struct {
+var _ Handler = (*HandlerImpl)(nil)
+
+type Handler interface {
+	GetUserProfile(w http.ResponseWriter, r *http.Request)
+	UpdateUserProfile(w http.ResponseWriter, r *http.Request)
+}
+
+type HandlerImpl struct {
 	userService UserService
 	logger      *slog.Logger
 }
 
-// NewHandlerUser creates a new user handler instance.
-func NewHandlerUser(userService UserService, logger *slog.Logger) *HandlerUser {
+// NewHandlerImpl creates a new user HandlerImpl instance.
+func NewHandlerImpl(userService UserService, logger *slog.Logger) *HandlerImpl {
 	instanceAddress := fmt.Sprintf("%p", logger)
-	slog.Info("Creating NewHandlerUser", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
+	slog.Info("Creating NewHandlerImpl", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
 	if logger == nil {
-		panic("PANIC: Attempting to create HandlerUser with nil logger!")
+		panic("PANIC: Attempting to create HandlerImpl with nil logger!")
 	}
 
-	return &HandlerUser{
+	return &HandlerImpl{
 		userService: userService,
 		logger:      logger,
 	}
@@ -45,9 +51,9 @@ func NewHandlerUser(userService UserService, logger *slog.Logger) *HandlerUser {
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profile [get]
-func (h *HandlerUser) GetUserProfile(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	l := h.logger.With(slog.String("handler", "GetUserProfile"))
+	l := h.logger.With(slog.String("HandlerImpl", "GetUserProfile"))
 
 	// Get UserID from context (set by Authenticate middleware)
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -91,9 +97,9 @@ func (h *HandlerUser) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/profile [put]
-func (h *HandlerUser) UpdateUserProfile(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) UpdateUserProfile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	l := h.logger.With(slog.String("handler", "UpdateUserProfile"))
+	l := h.logger.With(slog.String("HandlerImpl", "UpdateUserProfile"))
 
 	// Get UserID from context (set by Authenticate middleware)
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)

@@ -104,12 +104,12 @@ By focusing on a strong map visualization, basic but useful filtering that influ
 
 You're asking excellent questions that get to the heart of designing a good user experience and a maintainable backend! Let's break this down.
 
-**1. Sorting Personalized POIs: User Location in Handler vs. Separate Service?**
+**1. Sorting Personalized POIs: User Location in HandlerImpl vs. Separate Service?**
 
-*   **Passing User Location via Handler (Recommended for this use case):**
+*   **Passing User Location via HandlerImpl (Recommended for this use case):**
     *   **How it works:** The frontend client (web browser, mobile app) determines the user's current latitude and longitude (e.g., using the browser's Geolocation API). It then includes these coordinates as parameters in the API request to your backend endpoint that triggers `GetPromptResponse`.
     *   Example API call: `GET /api/v1/city-discovery?city=Barcelona&user_lat=41.3851&user_lon=2.1734`
-    *   Your HTTP handler in Go would parse `user_lat` and `user_lon` from the query parameters and pass them down to your `LlmInteractiontServiceImpl.GetPromptResponse` method.
+    *   Your HTTP HandlerImpl in Go would parse `user_lat` and `user_lon` from the query parameters and pass them down to your `LlmInteractiontServiceImpl.GetPromptResponse` method.
     *   **Pros:**
         *   **Direct and Contextual:** The user's current location is most relevant *at the moment they are requesting* the itinerary.
         *   **Stateless (for this specific parameter):** The backend doesn't need to store or guess the user's "current" location for this specific request; it's provided.
@@ -127,7 +127,7 @@ You're asking excellent questions that get to the heart of designing a good user
         *   **Complexity:** Adds another service call and state management.
         *   **User Intent:** For sorting an itinerary *right now*, their *current* location is usually what's intended.
 
-    **Recommendation:** For sorting the *personalized itinerary POIs immediately after AI generation and for the current user request*, **pass the user's current latitude and longitude from the frontend through the API handler to your `GetPromptResponse` service method.** This is the most direct and contextually relevant approach.
+    **Recommendation:** For sorting the *personalized itinerary POIs immediately after AI generation and for the current user request*, **pass the user's current latitude and longitude from the frontend through the API HandlerImpl to your `GetPromptResponse` service method.** This is the most direct and contextually relevant approach.
 
     Your `LlmInteractiontServiceImpl.GetPromptResponse` method signature would then be:
     ```go
@@ -135,8 +135,8 @@ You're asking excellent questions that get to the heart of designing a good user
         ctx context.Context,
         cityName string,
         userID, profileID uuid.UUID,
-        userLat float64, // from handler
-        userLon float64, // from handler
+        userLat float64, // from HandlerImpl
+        userLon float64, // from HandlerImpl
     ) (*types.AiCityResponse, error)
     ```
 

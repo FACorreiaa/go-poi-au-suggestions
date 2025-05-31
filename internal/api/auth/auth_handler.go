@@ -16,13 +16,23 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-type AuthHandler struct {
+var _ Handler = (*HandlerImpl)(nil)
+
+type Handler interface {
+	Login(w http.ResponseWriter, r *http.Request)
+	Logout(w http.ResponseWriter, r *http.Request)
+	RefreshToken(w http.ResponseWriter, r *http.Request)
+	Register(w http.ResponseWriter, r *http.Request)
+	ValidateSession(w http.ResponseWriter, r *http.Request)
+	ChangePassword(w http.ResponseWriter, r *http.Request)
+}
+type HandlerImpl struct {
 	authService AuthService
 	logger      *slog.Logger
 }
 
-func NewAuthHandler(authService AuthService, logger *slog.Logger) *AuthHandler {
-	return &AuthHandler{
+func NewAuthHandlerImpl(authService AuthService, logger *slog.Logger) *HandlerImpl {
+	return &HandlerImpl{
 		logger:      logger,
 		authService: authService,
 	}
@@ -40,9 +50,9 @@ func NewAuthHandler(authService AuthService, logger *slog.Logger) *AuthHandler {
 // @Failure      401 {object} types.Response "Authentication Failed"
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Router       /auth/login [post]
-func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) Login(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	l := h.logger.With(slog.String("handler", "Login"))
+	l := h.logger.With(slog.String("HandlerImpl", "Login"))
 
 	var req types.LoginRequest
 	if err := api.DecodeJSONBody(w, r, &req); err != nil {
@@ -98,9 +108,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /auth/logout [post]
-func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) Logout(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	l := h.logger.With(slog.String("handler", "Logout"))
+	l := h.logger.With(slog.String("HandlerImpl", "Logout"))
 
 	// Extract refresh token from cookie
 	refreshCookie, err := r.Cookie("refreshToken")
@@ -154,9 +164,9 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 // @Failure      401 {object} types.Response "Invalid or Expired Refresh Token"
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Router       /auth/refresh [post]
-func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	l := h.logger.With(slog.String("handler", "RefreshToken"))
+	l := h.logger.With(slog.String("HandlerImpl", "RefreshToken"))
 
 	// Extract refresh token from cookie
 	refreshCookie, err := r.Cookie("refreshToken")
@@ -213,14 +223,14 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 // @Failure      409 {object} types.Response "Email or Username already exists"
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Router       /auth/register [post]
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("RegisterHandler").Start(r.Context(), "RegisterHandler", trace.WithAttributes(
+func (h *HandlerImpl) Register(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("RegisterHandlerImpl").Start(r.Context(), "RegisterHandlerImpl", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/register"),
 	))
 	defer span.End()
 
-	l := h.logger.With(slog.String("handler", "Register"))
+	l := h.logger.With(slog.String("HandlerImpl", "Register"))
 
 	// Record start time for duration metric
 	//startTime := time.Now()
@@ -275,7 +285,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 // @Failure      400 {object} types.Response "Invalid Input"
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Router       /auth/validate [post]
-func (h *AuthHandler) ValidateSession(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) ValidateSession(w http.ResponseWriter, r *http.Request) {
 	var req types.ValidateSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondWithError(w, http.StatusBadRequest, "Invalid request payload")
@@ -329,9 +339,9 @@ func (h *AuthHandler) ValidateSession(w http.ResponseWriter, r *http.Request) {
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /auth/password [put]
-func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	l := h.logger.With(slog.String("handler", "ChangePassword"))
+	l := h.logger.With(slog.String("HandlerImpl", "ChangePassword"))
 
 	// Get UserID from context (set by Authenticate middleware)
 	userID, ok := GetUserIDFromContext(ctx) // Use actual helper
@@ -387,7 +397,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /auth/email [put]
-func (h *AuthHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) ChangeEmail(w http.ResponseWriter, r *http.Request) {
 	var req types.ChangeEmailRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.respondWithError(w, http.StatusBadRequest, "Invalid request payload")
@@ -424,14 +434,14 @@ func (h *AuthHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) {
 
 // Helper functions for response handling
 
-func (h *AuthHandler) respondWithError(w http.ResponseWriter, code int, message string) {
+func (h *HandlerImpl) respondWithError(w http.ResponseWriter, code int, message string) {
 	h.respondWithJSON(w, code, types.Response{
 		Success: false,
 		Error:   message,
 	})
 }
 
-func (h *AuthHandler) respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+func (h *HandlerImpl) respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	response, err := json.Marshal(payload)
 	if err != nil {
 		h.logger.Error("Failed to marshal JSON response", "error", err)
@@ -452,7 +462,7 @@ func (h *AuthHandler) respondWithJSON(w http.ResponseWriter, code int, payload i
 // @Description  Middleware that authenticates requests using JWT tokens and adds user information to the request context.
 // @Tags         Auth
 // @Security     BearerAuth
-func (h *AuthHandler) AuthenticateMiddleware(next http.Handler) http.Handler {
+func (h *HandlerImpl) AuthenticateMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Implement your authentication logic here
 		next.ServeHTTP(w, r)
@@ -471,9 +481,9 @@ func (h *AuthHandler) AuthenticateMiddleware(next http.Handler) http.Handler {
 // @Failure      401 {object} types.Response "Invalid or Expired Refresh Token"
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Router       /auth/refresh-session [post]
-func (h *AuthHandler) RefreshSession(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) RefreshSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	l := h.logger.With(slog.String("handler", "RefreshSession"))
+	l := h.logger.With(slog.String("HandlerImpl", "RefreshSession"))
 
 	var req types.RefreshTokenRequest
 	if err := api.DecodeJSONBody(w, r, &req); err != nil || req.RefreshToken == "" {

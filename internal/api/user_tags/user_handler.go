@@ -17,21 +17,29 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-// UserTagsHandler handles HTTP requests related to user operations.
-type UserTagsHandler struct {
+var _ Handler = (*HandlerImpl)(nil)
+
+type Handler interface {
+	GetTags(w http.ResponseWriter, r *http.Request)
+	GetTag(w http.ResponseWriter, r *http.Request)
+	CreateTag(w http.ResponseWriter, r *http.Request)
+	DeleteTag(w http.ResponseWriter, r *http.Request)
+	UpdateTag(w http.ResponseWriter, r *http.Request)
+}
+type HandlerImpl struct {
 	userTagsService UserTagsService
 	logger          *slog.Logger
 }
 
-// NewUserTagsHandler creates a new user handler instance.
-func NewUserTagsHandler(userService UserTagsService, logger *slog.Logger) *UserTagsHandler {
+// NewHandlerImpl creates a new user HandlerImpl instance.
+func NewHandlerImpl(userService UserTagsService, logger *slog.Logger) *HandlerImpl {
 	instanceAddress := fmt.Sprintf("%p", logger)
-	slog.Info("Creating NewUserHandler", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
+	slog.Info("Creating NewUserHandlerImpl", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
 	if logger == nil {
-		panic("PANIC: Attempting to create UserHandler with nil logger!")
+		panic("PANIC: Attempting to create UserHandlerImpl with nil logger!")
 	}
 
-	return &UserTagsHandler{
+	return &HandlerImpl{
 		userTagsService: userService,
 		logger:          logger,
 	}
@@ -48,14 +56,14 @@ func NewUserTagsHandler(userService UserTagsService, logger *slog.Logger) *UserT
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/tags [get]
-func (u *UserTagsHandler) GetTags(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("GetTagsHandler").Start(r.Context(), "GetTags", trace.WithAttributes(
+func (u *HandlerImpl) GetTags(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("GetTagsHandlerImpl").Start(r.Context(), "GetTags", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/tags"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "GetTags"))
+	l := u.logger.With(slog.String("HandlerImpl", "GetTags"))
 	l.DebugContext(ctx, "Fetching user tags")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -86,14 +94,14 @@ func (u *UserTagsHandler) GetTags(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSONResponse(w, r, http.StatusOK, tags)
 }
 
-func (u *UserTagsHandler) GetTag(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("GetTagHandler").Start(r.Context(), "GetTag", trace.WithAttributes(
+func (u *HandlerImpl) GetTag(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("GetTagHandlerImpl").Start(r.Context(), "GetTag", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/tags"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "GetTag"))
+	l := u.logger.With(slog.String("HandlerImpl", "GetTag"))
 	l.DebugContext(ctx, "Fetching user tag")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -134,14 +142,14 @@ func (u *UserTagsHandler) GetTag(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSONResponse(w, r, http.StatusOK, tag)
 }
 
-func (u *UserTagsHandler) CreateTag(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("CreateTagHandler").Start(r.Context(), "CreateTag", trace.WithAttributes(
+func (u *HandlerImpl) CreateTag(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("CreateTagHandlerImpl").Start(r.Context(), "CreateTag", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/tags"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "CreateTag"))
+	l := u.logger.With(slog.String("HandlerImpl", "CreateTag"))
 	l.DebugContext(ctx, "Creating user tag")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -180,14 +188,14 @@ func (u *UserTagsHandler) CreateTag(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSONResponse(w, r, http.StatusOK, tag)
 }
 
-func (u *UserTagsHandler) DeleteTag(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("DeleteTagHandler").Start(r.Context(), "DeleteTag", trace.WithAttributes(
+func (u *HandlerImpl) DeleteTag(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("DeleteTagHandlerImpl").Start(r.Context(), "DeleteTag", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/tags"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "DeleteTag"))
+	l := u.logger.With(slog.String("HandlerImpl", "DeleteTag"))
 	l.DebugContext(ctx, "Deleting user tag")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -226,14 +234,14 @@ func (u *UserTagsHandler) DeleteTag(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSONResponse(w, r, http.StatusOK, nil)
 }
 
-func (u *UserTagsHandler) UpdateTag(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UpdateTagHandler").Start(r.Context(), "UpdateTag", trace.WithAttributes(
+func (u *HandlerImpl) UpdateTag(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("UpdateTagHandlerImpl").Start(r.Context(), "UpdateTag", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/tags"),
 	))
 	defer span.End()
 
-	l := u.logger.With(slog.String("handler", "UpdateTag"))
+	l := u.logger.With(slog.String("HandlerImpl", "UpdateTag"))
 	l.DebugContext(ctx, "Updating user tag")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)

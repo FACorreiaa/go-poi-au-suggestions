@@ -18,20 +18,26 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-type SettingsHandler struct {
+var _ Handler = (*HandlerImpl)(nil)
+
+type Handler interface {
+	GetUserSettings(w http.ResponseWriter, r *http.Request)
+	UpdateUserSettings(w http.ResponseWriter, r *http.Request)
+}
+type HandlerImpl struct {
 	SettingsService SettingsService
 	logger          *slog.Logger
 }
 
-// NewSettingsHandler creates a new user handler instance.
-func NewSettingsHandler(userprofileService SettingsService, logger *slog.Logger) *SettingsHandler {
+// NewHandlerImpl creates a new user HandlerImpl instance.
+func NewHandlerImpl(userprofileService SettingsService, logger *slog.Logger) *HandlerImpl {
 	instanceAddress := fmt.Sprintf("%p", logger)
-	slog.Info("Creating NewUserprofileHandler", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
+	slog.Info("Creating NewUserprofileHandlerImpl", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
 	if logger == nil {
-		panic("PANIC: Attempting to create UserprofileHandler with nil logger!")
+		panic("PANIC: Attempting to create UserprofileHandlerImpl with nil logger!")
 	}
 
-	return &SettingsHandler{
+	return &HandlerImpl{
 		SettingsService: userprofileService,
 		logger:          logger,
 	}
@@ -48,14 +54,14 @@ func NewSettingsHandler(userprofileService SettingsService, logger *slog.Logger)
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/preferences [get]
-func (h *SettingsHandler) GetUserSettings(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserprofileHandler").Start(r.Context(), "GetUserPreferences", trace.WithAttributes(
+func (h *HandlerImpl) GetUserSettings(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("UserprofileHandlerImpl").Start(r.Context(), "GetUserPreferences", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/preferences"),
 	))
 	defer span.End()
 
-	l := h.logger.With(slog.String("handler", "GetUserPreferences"))
+	l := h.logger.With(slog.String("HandlerImpl", "GetUserPreferences"))
 
 	// Get UserID from context (set by Authenticate middleware)
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -102,14 +108,14 @@ func (h *SettingsHandler) GetUserSettings(w http.ResponseWriter, r *http.Request
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/preferences/{profileID} [put]
-func (h *SettingsHandler) UpdateUserSettings(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("UserprofileHandler").Start(r.Context(), "UpdateUserPreferences", trace.WithAttributes(
+func (h *HandlerImpl) UpdateUserSettings(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("UserprofileHandlerImpl").Start(r.Context(), "UpdateUserPreferences", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/preferences"),
 	))
 	defer span.End()
 
-	l := h.logger.With(slog.String("handler", "UpdateUserPreferences"))
+	l := h.logger.With(slog.String("HandlerImpl", "UpdateUserPreferences"))
 	l.Info("Updating user preferences")
 
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)

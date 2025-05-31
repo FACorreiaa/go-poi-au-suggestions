@@ -161,10 +161,10 @@ func Init(connectionURL string, logger *slog.Logger) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("failed parsing db config: %w", err)
 	}
 
-	// Register UUID type handler after connecting
+	// Register UUID type HandlerImpl after connecting
 	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		uuid.Register(conn.TypeMap())
-		logger.DebugContext(ctx, "Registered UUID type handler")
+		logger.DebugContext(ctx, "Registered UUID type HandlerImpl")
 		return nil
 	}
 

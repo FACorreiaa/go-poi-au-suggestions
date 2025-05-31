@@ -32,10 +32,10 @@ type JWTConfig struct {
 }
 
 type Config struct {
-	Mode     string    `mapstructure:"mode"`
-	Dotenv   string    `mapstructure:"dotenv"`
-	JWT      JWTConfig `mapstructure:"jwt"`
-	Handlers struct {
+	Mode         string    `mapstructure:"mode"`
+	Dotenv       string    `mapstructure:"dotenv"`
+	JWT          JWTConfig `mapstructure:"jwt"`
+	HandlerImpls struct {
 		ExternalAPI struct {
 			Port      string `mapstrucutre:"port"`
 			CertFile  string `mapstructure:"certFile"`
@@ -54,7 +54,7 @@ type Config struct {
 			KeyFile   string `mapstructure:"keyFile"`
 			EnableTLS bool   `mapstructure:"enableTLS"`
 		}
-	} `mapstructure:"handlers"`
+	} `mapstructure:"HandlerImpls"`
 	Repositories struct {
 		Postgres struct {
 			Host              string `mapstructure:"host"`

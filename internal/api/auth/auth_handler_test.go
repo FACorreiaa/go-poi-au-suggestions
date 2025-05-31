@@ -70,12 +70,12 @@ func (m *MockAuthService) ValidateRefreshToken(ctx context.Context, refreshToken
 	return args.String(0), args.Error(1)
 }
 
-// Test cases for AuthHandler
-func TestLoginHandler(t *testing.T) {
+// Test cases for AuthHandlerImpl
+func TestLoginHandlerImpl(t *testing.T) {
 	// Create a mock service
 	mockService := new(MockAuthService)
 	logger := slog.Default()
-	handler := NewAuthHandler(mockService, logger)
+	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
 
 	// Test case: successful login
 	t.Run("Success", func(t *testing.T) {
@@ -95,8 +95,8 @@ func TestLoginHandler(t *testing.T) {
 		mockService.On("Login", mock.Anything, loginRequest["email"], loginRequest["password"]).
 			Return("access-token", "refresh-token", nil).Once()
 
-		// Call the handler
-		handler.Login(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Login(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -121,8 +121,8 @@ func TestLoginHandler(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
-		// Call the handler
-		handler.Login(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Login(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -143,8 +143,8 @@ func TestLoginHandler(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
-		// Call the handler
-		handler.Login(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Login(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -169,8 +169,8 @@ func TestLoginHandler(t *testing.T) {
 		mockService.On("Login", mock.Anything, loginRequest["email"], loginRequest["password"]).
 			Return("", "", types.ErrUnauthenticated).Once()
 
-		// Call the handler
-		handler.Login(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Login(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -195,8 +195,8 @@ func TestLoginHandler(t *testing.T) {
 		mockService.On("Login", mock.Anything, loginRequest["email"], loginRequest["password"]).
 			Return("", "", errors.New("internal error")).Once()
 
-		// Call the handler
-		handler.Login(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Login(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -204,11 +204,11 @@ func TestLoginHandler(t *testing.T) {
 	})
 }
 
-func TestRegisterHandler(t *testing.T) {
+func TestRegisterHandlerImpl(t *testing.T) {
 	// Create a mock service
 	mockService := new(MockAuthService)
 	logger := slog.Default()
-	handler := NewAuthHandler(mockService, logger)
+	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
 
 	// Test case: successful registration
 	t.Run("Success", func(t *testing.T) {
@@ -229,8 +229,8 @@ func TestRegisterHandler(t *testing.T) {
 		mockService.On("Register", mock.Anything, registerRequest["username"], registerRequest["email"], registerRequest["password"], "user").
 			Return(nil).Once()
 
-		// Call the handler
-		handler.Register(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Register(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusCreated, w.Code)
@@ -247,8 +247,8 @@ func TestRegisterHandler(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
-		// Call the handler
-		handler.Register(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Register(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -270,8 +270,8 @@ func TestRegisterHandler(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
-		// Call the handler
-		handler.Register(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Register(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -297,8 +297,8 @@ func TestRegisterHandler(t *testing.T) {
 		mockService.On("Register", mock.Anything, registerRequest["username"], registerRequest["email"], registerRequest["password"], "user").
 			Return(types.ErrConflict).Once()
 
-		// Call the handler
-		handler.Register(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Register(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusConflict, w.Code)
@@ -324,8 +324,8 @@ func TestRegisterHandler(t *testing.T) {
 		mockService.On("Register", mock.Anything, registerRequest["username"], registerRequest["email"], registerRequest["password"], "user").
 			Return(errors.New("internal error")).Once()
 
-		// Call the handler
-		handler.Register(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Register(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -333,11 +333,11 @@ func TestRegisterHandler(t *testing.T) {
 	})
 }
 
-func TestLogoutHandler(t *testing.T) {
+func TestLogoutHandlerImpl(t *testing.T) {
 	// Create a mock service
 	mockService := new(MockAuthService)
 	logger := slog.Default()
-	handler := NewAuthHandler(mockService, logger)
+	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
 
 	// Test case: successful logout
 	t.Run("Success", func(t *testing.T) {
@@ -356,8 +356,8 @@ func TestLogoutHandler(t *testing.T) {
 		mockService.On("Logout", mock.Anything, logoutRequest["refreshToken"]).
 			Return(nil).Once()
 
-		// Call the handler
-		handler.Logout(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Logout(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -374,8 +374,8 @@ func TestLogoutHandler(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
-		// Call the handler
-		handler.Logout(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Logout(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -395,8 +395,8 @@ func TestLogoutHandler(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
-		// Call the handler
-		handler.Logout(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Logout(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -420,8 +420,8 @@ func TestLogoutHandler(t *testing.T) {
 		mockService.On("Logout", mock.Anything, logoutRequest["refreshToken"]).
 			Return(types.ErrUnauthenticated).Once()
 
-		// Call the handler
-		handler.Logout(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Logout(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -445,8 +445,8 @@ func TestLogoutHandler(t *testing.T) {
 		mockService.On("Logout", mock.Anything, logoutRequest["refreshToken"]).
 			Return(errors.New("internal error")).Once()
 
-		// Call the handler
-		handler.Logout(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.Logout(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -454,11 +454,11 @@ func TestLogoutHandler(t *testing.T) {
 	})
 }
 
-func TestRefreshTokenHandler(t *testing.T) {
+func TestRefreshTokenHandlerImpl(t *testing.T) {
 	// Create a mock service
 	mockService := new(MockAuthService)
 	logger := slog.Default()
-	handler := NewAuthHandler(mockService, logger)
+	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
 
 	// Test case: successful token refresh
 	t.Run("Success", func(t *testing.T) {
@@ -477,8 +477,8 @@ func TestRefreshTokenHandler(t *testing.T) {
 		mockService.On("RefreshSession", mock.Anything, refreshRequest["refreshToken"]).
 			Return("new-access-token", "new-refresh-token", nil).Once()
 
-		// Call the handler
-		handler.RefreshToken(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.RefreshToken(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -503,8 +503,8 @@ func TestRefreshTokenHandler(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
-		// Call the handler
-		handler.RefreshToken(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.RefreshToken(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -524,8 +524,8 @@ func TestRefreshTokenHandler(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
-		// Call the handler
-		handler.RefreshToken(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.RefreshToken(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -549,8 +549,8 @@ func TestRefreshTokenHandler(t *testing.T) {
 		mockService.On("RefreshSession", mock.Anything, refreshRequest["refreshToken"]).
 			Return("", "", types.ErrUnauthenticated).Once()
 
-		// Call the handler
-		handler.RefreshToken(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.RefreshToken(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -574,8 +574,8 @@ func TestRefreshTokenHandler(t *testing.T) {
 		mockService.On("RefreshSession", mock.Anything, refreshRequest["refreshToken"]).
 			Return("", "", errors.New("internal error")).Once()
 
-		// Call the handler
-		handler.RefreshToken(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.RefreshToken(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -583,11 +583,11 @@ func TestRefreshTokenHandler(t *testing.T) {
 	})
 }
 
-func TestValidateSessionHandler(t *testing.T) {
+func TestValidateSessionHandlerImpl(t *testing.T) {
 	// Create a mock service
 	mockService := new(MockAuthService)
 	logger := slog.Default()
-	handler := NewAuthHandler(mockService, logger)
+	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
 
 	// Test case: successful validation
 	t.Run("Success", func(t *testing.T) {
@@ -609,8 +609,8 @@ func TestValidateSessionHandler(t *testing.T) {
 		}
 		mockService.On("GetUserByID", mock.Anything, "user123").Return(user, nil).Once()
 
-		// Call the handler
-		handler.ValidateSession(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.ValidateSession(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -634,8 +634,8 @@ func TestValidateSessionHandler(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer valid-access-token")
 		w := httptest.NewRecorder()
 
-		// Call the handler
-		handler.ValidateSession(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.ValidateSession(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -656,8 +656,8 @@ func TestValidateSessionHandler(t *testing.T) {
 		// Set up expectations
 		mockService.On("GetUserByID", mock.Anything, "nonexistent-user").Return(nil, types.ErrNotFound).Once()
 
-		// Call the handler
-		handler.ValidateSession(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.ValidateSession(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -678,8 +678,8 @@ func TestValidateSessionHandler(t *testing.T) {
 		// Set up expectations
 		mockService.On("GetUserByID", mock.Anything, "user123").Return(nil, errors.New("database error")).Once()
 
-		// Call the handler
-		handler.ValidateSession(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.ValidateSession(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -687,11 +687,11 @@ func TestValidateSessionHandler(t *testing.T) {
 	})
 }
 
-func TestChangePasswordHandler(t *testing.T) {
+func TestChangePasswordHandlerImpl(t *testing.T) {
 	// Create a mock service
 	mockService := new(MockAuthService)
 	logger := slog.Default()
-	handler := NewAuthHandler(mockService, logger)
+	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
 
 	// Test case: successful password change
 	t.Run("Success", func(t *testing.T) {
@@ -715,8 +715,8 @@ func TestChangePasswordHandler(t *testing.T) {
 		mockService.On("UpdatePassword", mock.Anything, "user123", changePasswordRequest["oldPassword"], changePasswordRequest["newPassword"]).
 			Return(nil).Once()
 
-		// Call the handler
-		handler.ChangePassword(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.ChangePassword(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -737,8 +737,8 @@ func TestChangePasswordHandler(t *testing.T) {
 		ctx := context.WithValue(req.Context(), UserIDKey, "user123")
 		req = req.WithContext(ctx)
 
-		// Call the handler
-		handler.ChangePassword(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.ChangePassword(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -763,8 +763,8 @@ func TestChangePasswordHandler(t *testing.T) {
 		ctx := context.WithValue(req.Context(), UserIDKey, "user123")
 		req = req.WithContext(ctx)
 
-		// Call the handler
-		handler.ChangePassword(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.ChangePassword(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -785,8 +785,8 @@ func TestChangePasswordHandler(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
-		// Call the handler
-		handler.ChangePassword(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.ChangePassword(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -815,8 +815,8 @@ func TestChangePasswordHandler(t *testing.T) {
 		mockService.On("UpdatePassword", mock.Anything, "user123", changePasswordRequest["oldPassword"], changePasswordRequest["newPassword"]).
 			Return(types.ErrUnauthenticated).Once()
 
-		// Call the handler
-		handler.ChangePassword(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.ChangePassword(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -845,8 +845,8 @@ func TestChangePasswordHandler(t *testing.T) {
 		mockService.On("UpdatePassword", mock.Anything, "user123", changePasswordRequest["oldPassword"], changePasswordRequest["newPassword"]).
 			Return(errors.New("database error")).Once()
 
-		// Call the handler
-		handler.ChangePassword(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.ChangePassword(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -854,13 +854,13 @@ func TestChangePasswordHandler(t *testing.T) {
 	})
 }
 
-func TestChangeEmailHandler(t *testing.T) {
+func TestChangeEmailHandlerImpl(t *testing.T) {
 	// Create a mock service
 	mockService := new(MockAuthService)
 	logger := slog.Default()
-	handler := NewAuthHandler(mockService, logger)
+	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
 
-	// Note: Since the ChangeEmail handler is not fully implemented in the auth_handler.go file,
+	// Note: Since the ChangeEmail HandlerImpl is not fully implemented in the auth_HandlerImpl.go file,
 	// we're testing the current implementation which just returns a 501 Not Implemented status.
 
 	// Test case: not implemented
@@ -881,8 +881,8 @@ func TestChangeEmailHandler(t *testing.T) {
 		ctx := context.WithValue(req.Context(), UserIDKey, "user123")
 		req = req.WithContext(ctx)
 
-		// Call the handler
-		handler.ChangeEmail(w, req)
+		// Call the HandlerImpl
+		HandlerImpl.ChangeEmail(w, req)
 
 		// Assert response
 		assert.Equal(t, http.StatusNotImplemented, w.Code)
@@ -894,10 +894,10 @@ func TestAuthenticateMiddleware(t *testing.T) {
 	// Create a mock service
 	mockService := new(MockAuthService)
 	logger := slog.Default()
-	handler := NewAuthHandler(mockService, logger)
+	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
 
-	// Create a simple test handler that will be wrapped by the middleware
-	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Create a simple test HandlerImpl that will be wrapped by the middleware
+	testHandlerImpl := http.HandlerImplFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if user ID is in context
 		userID, ok := r.Context().Value(UserIDKey).(string)
 		if !ok {
@@ -920,8 +920,8 @@ func TestAuthenticateMiddleware(t *testing.T) {
 		// Note: This is a simplified test. In a real implementation, you would need to mock the JWT validation.
 		// For this test, we're just simulating the middleware adding the user ID to the context.
 
-		// Create a middleware that wraps the test handler
-		middleware := handler.AuthenticateMiddleware(testHandler)
+		// Create a middleware that wraps the test HandlerImpl
+		middleware := HandlerImpl.AuthenticateMiddleware(testHandlerImpl)
 
 		// Call the middleware
 		middleware.ServeHTTP(w, req)
@@ -929,7 +929,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 		// Assert response
 		assert.Equal(t, http.StatusOK, w.Code)
 		// In a real test, we would check that the user ID was correctly extracted from the token
-		// and added to the context. For now, we're just checking that the middleware called the next handler.
+		// and added to the context. For now, we're just checking that the middleware called the next HandlerImpl.
 		mockService.AssertExpectations(t)
 	})
 
@@ -939,8 +939,8 @@ func TestAuthenticateMiddleware(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 		w := httptest.NewRecorder()
 
-		// Create a middleware that wraps the test handler
-		middleware := handler.AuthenticateMiddleware(testHandler)
+		// Create a middleware that wraps the test HandlerImpl
+		middleware := HandlerImpl.AuthenticateMiddleware(testHandlerImpl)
 
 		// Call the middleware
 		middleware.ServeHTTP(w, req)
@@ -957,8 +957,8 @@ func TestAuthenticateMiddleware(t *testing.T) {
 		req.Header.Set("Authorization", "InvalidFormat")
 		w := httptest.NewRecorder()
 
-		// Create a middleware that wraps the test handler
-		middleware := handler.AuthenticateMiddleware(testHandler)
+		// Create a middleware that wraps the test HandlerImpl
+		middleware := HandlerImpl.AuthenticateMiddleware(testHandlerImpl)
 
 		// Call the middleware
 		middleware.ServeHTTP(w, req)
@@ -975,8 +975,8 @@ func TestAuthenticateMiddleware(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer invalid-token")
 		w := httptest.NewRecorder()
 
-		// Create a middleware that wraps the test handler
-		middleware := handler.AuthenticateMiddleware(testHandler)
+		// Create a middleware that wraps the test HandlerImpl
+		middleware := HandlerImpl.AuthenticateMiddleware(testHandlerImpl)
 
 		// Call the middleware
 		middleware.ServeHTTP(w, req)

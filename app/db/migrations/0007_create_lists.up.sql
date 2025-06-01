@@ -1,14 +1,14 @@
 -- +migrate Up
 -- Table for user-created collections of POIs
 CREATE TABLE lists (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
     image_url TEXT,
     is_public BOOLEAN NOT NULL DEFAULT FALSE,
     is_itinerary BOOLEAN NOT NULL DEFAULT FALSE,
-    city_id UUID REFERENCES cities(id) ON DELETE SET NULL,
+    city_id UUID REFERENCES cities (id) ON DELETE SET NULL,
     item_count INTEGER NOT NULL DEFAULT 0,
     view_count INTEGER NOT NULL DEFAULT 0,
     save_count INTEGER NOT NULL DEFAULT 0,
@@ -18,8 +18,8 @@ CREATE TABLE lists (
 
 -- Table for POIs in a list, with optional ordering for itineraries
 CREATE TABLE list_items (
-    list_id UUID NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
-    poi_id UUID NOT NULL REFERENCES points_of_interest(id) ON DELETE CASCADE,
+    list_id UUID NOT NULL REFERENCES lists (id) ON DELETE CASCADE,
+    poi_id UUID NOT NULL REFERENCES points_of_interest (id) ON DELETE CASCADE,
     position INTEGER NOT NULL,
     notes TEXT,
     day_number INTEGER, -- For itineraries (optional)
@@ -32,17 +32,21 @@ CREATE TABLE list_items (
 
 -- Table for users saving other users' public lists
 CREATE TABLE saved_lists (
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    list_id UUID NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    list_id UUID NOT NULL REFERENCES lists (id) ON DELETE CASCADE,
     saved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, list_id)
 );
 
 -- Indexes for efficient querying
 CREATE INDEX idx_lists_user_id ON lists (user_id);
+
 CREATE INDEX idx_lists_city_id ON lists (city_id);
+
 CREATE INDEX idx_lists_is_public ON lists (is_public);
+
 CREATE INDEX idx_list_items_poi_id ON list_items (poi_id);
+
 CREATE INDEX idx_saved_lists_list_id ON saved_lists (list_id);
 
 -- Trigger to update 'updated_at' timestamp for lists

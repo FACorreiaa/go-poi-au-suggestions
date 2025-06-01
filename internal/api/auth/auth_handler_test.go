@@ -9,9 +9,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"log/slog"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"log/slog"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
@@ -897,7 +898,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
 
 	// Create a simple test HandlerImpl that will be wrapped by the middleware
-	testHandlerImpl := http.HandlerImplFunc(func(w http.ResponseWriter, r *http.Request) {
+	testHandlerImpl := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if user ID is in context
 		userID, ok := r.Context().Value(UserIDKey).(string)
 		if !ok {

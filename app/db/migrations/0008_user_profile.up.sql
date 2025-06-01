@@ -22,32 +22,35 @@ CREATE TYPE day_preference_enum AS ENUM (
 -- Table for user-defined preference profiles
 -- rename to user_search_profile because its the search parameters for the AI
 CREATE TABLE user_preference_profiles (
-                                          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                                          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                                          profile_name TEXT NOT NULL,
-                                          is_default BOOLEAN NOT NULL DEFAULT FALSE,
-                                          search_radius_km NUMERIC(5, 1) DEFAULT 5.0 CHECK (search_radius_km > 0),
-                                          preferred_time day_preference_enum DEFAULT 'any',
-                                          budget_level INTEGER DEFAULT 0 CHECK (budget_level >= 0 AND budget_level <= 4),
-                                          preferred_pace search_pace_enum DEFAULT 'any',
-                                          prefer_accessible_pois BOOLEAN DEFAULT FALSE,
-                                          prefer_outdoor_seating BOOLEAN DEFAULT FALSE,
-                                          prefer_dog_friendly    BOOLEAN DEFAULT FALSE,
-                                          preferred_vibes TEXT[] DEFAULT '{}',
-                                          preferred_transport transport_preference_enum DEFAULT 'any',
-                                          dietary_needs TEXT[] DEFAULT '{}',
-                                          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                                          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    profile_name TEXT NOT NULL,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    search_radius_km NUMERIC(5, 1) DEFAULT 5.0 CHECK (search_radius_km > 0),
+    preferred_time day_preference_enum DEFAULT 'any',
+    budget_level INTEGER DEFAULT 0 CHECK (
+        budget_level >= 0
+        AND budget_level <= 4
+    ),
+    preferred_pace search_pace_enum DEFAULT 'any',
+    prefer_accessible_pois BOOLEAN DEFAULT FALSE,
+    prefer_outdoor_seating BOOLEAN DEFAULT FALSE,
+    prefer_dog_friendly BOOLEAN DEFAULT FALSE,
+    preferred_vibes TEXT [] DEFAULT '{}',
+    preferred_transport transport_preference_enum DEFAULT 'any',
+    dietary_needs TEXT [] DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- Constraint for unique profile name per user
-                                          CONSTRAINT unique_user_profile_name UNIQUE (user_id, profile_name)
+    CONSTRAINT unique_user_profile_name UNIQUE (user_id, profile_name)
     -- NO unique constraint with WHERE clause here
 );
 
 -- *** SEPARATE PARTIAL UNIQUE INDEX for is_default ***
 -- This enforces the rule: only one row per user_id can have is_default = TRUE
-CREATE UNIQUE INDEX idx_user_preference_profiles_user_id_default
-    ON user_preference_profiles (user_id)
-    WHERE is_default = TRUE;
+CREATE UNIQUE INDEX idx_user_preference_profiles_user_id_default ON user_preference_profiles (user_id)
+WHERE
+    is_default = TRUE;
 
 -- Index for finding profiles by user, and the default profile quickly
 -- Index for finding profiles by user
@@ -86,7 +89,6 @@ CREATE TRIGGER trigger_enforce_single_default_update
     WHEN (NEW.is_default = TRUE AND OLD.is_default = FALSE) -- Only when changing TO default
 EXECUTE FUNCTION ensure_single_default_profile();
 
-
 -- Function to create a default profile when a user is created
 CREATE OR REPLACE FUNCTION create_initial_user_profile()
     RETURNS TRIGGER AS $$
@@ -109,16 +111,18 @@ CREATE TRIGGER trigger_create_user_profile_after_insert
 
 -- Recreate user_interests to link PROFILE to INTEREST with a PREFERENCE LEVEL
 CREATE TABLE user_profile_interests (
-                                        profile_id UUID NOT NULL REFERENCES user_preference_profiles(id) ON DELETE CASCADE,
-                                        interest_id UUID NOT NULL REFERENCES interests(id) ON DELETE CASCADE,
+    profile_id UUID NOT NULL REFERENCES user_preference_profiles (id) ON DELETE CASCADE,
+    interest_id UUID NOT NULL REFERENCES interests (id) ON DELETE CASCADE,
     -- Preference level for this interest WITHIN this specific profile
-                                        preference_level INTEGER DEFAULT 1 NOT NULL CHECK (preference_level >= 0 AND preference_level <= 2), -- Example: 0=Nice, 1=Like, 2=Must-Have
-                                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    preference_level INTEGER DEFAULT 1 NOT NULL CHECK (
+        preference_level >= 0
+        AND preference_level <= 2
+    ), -- Example: 0=Nice, 1=Like, 2=Must-Have
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- Each profile can only have a specific interest listed once
-                                        PRIMARY KEY (profile_id, interest_id)
+    PRIMARY KEY (profile_id, interest_id)
 );
 
 CREATE INDEX idx_user_profile_interests_profile_id ON user_profile_interests (profile_id);
+
 CREATE INDEX idx_user_profile_interests_interest_id ON user_profile_interests (interest_id);
-
-

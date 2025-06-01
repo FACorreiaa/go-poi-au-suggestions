@@ -9,9 +9,9 @@ import (
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/config"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
-
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/markbates/goth"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -33,6 +33,8 @@ type AuthService interface {
 	ValidateRefreshToken(ctx context.Context, refreshToken string) (string, error)
 	GetUserByID(ctx context.Context, userID string) (*types.UserAuth, error)
 	VerifyPassword(ctx context.Context, userID, password string) error
+	GenerateTokens(ctx context.Context, user *types.UserAuth, sub *types.Subscription) (accessToken string, refreshToken string, err error)
+	GetOrCreateUserFromProvider(ctx context.Context, provider string, providerUser goth.User) (*types.UserAuth, error)
 }
 
 // AuthServiceImpl provides the implementation for AuthService.
@@ -74,7 +76,7 @@ func (s *AuthServiceImpl) Login(ctx context.Context, email, password string) (st
 	sub := &types.Subscription{Plan: "free", Status: "active"} // Placeholder
 
 	// 3. Generate Tokens
-	accessToken, refreshToken, err := s.generateTokens(ctx, user, sub) // Pass user and sub
+	accessToken, refreshToken, err := s.GenerateTokens(ctx, user, sub) // Pass user and sub
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to generate tokens", slog.String("userID", user.ID), slog.Any("error", err))
 		return "", "", fmt.Errorf("internal error generating tokens: %w", err)
@@ -156,7 +158,7 @@ func (s *AuthServiceImpl) RefreshSession(ctx context.Context, refreshToken strin
 	sub := &types.Subscription{Plan: "free", Status: "active"} // Placeholder
 
 	// 3. Generate NEW tokens
-	newAccessToken, newRefreshToken, err := s.generateTokens(ctx, user, sub)
+	newAccessToken, newRefreshToken, err := s.GenerateTokens(ctx, user, sub)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to generate new tokens", slog.String("userID", user.ID), slog.Any("error", err))
 		return "", "", fmt.Errorf("internal error generating tokens: %w", err)
@@ -260,7 +262,7 @@ func (s *AuthServiceImpl) GetUserByID(ctx context.Context, userID string) (*type
 }
 
 // --- Internal Helper: generateTokens ---
-func (s *AuthServiceImpl) generateTokens(ctx context.Context, user *types.UserAuth, sub *types.Subscription) (accessToken string, refreshToken string, err error) {
+func (s *AuthServiceImpl) GenerateTokens(ctx context.Context, user *types.UserAuth, sub *types.Subscription) (accessToken string, refreshToken string, err error) {
 	l := s.logger.With(slog.String("method", "generateTokens"), slog.String("userID", user.ID))
 
 	// --- Access Token ---
@@ -355,3 +357,38 @@ func (d *dummySubsRepo) CreateDefaultSubscription(ctx context.Context, userID st
 	return nil // Do nothing
 }
 func NewDummySubsRepo() types.SubscriptionRepository { return &dummySubsRepo{} }
+
+// provider
+func (s *AuthServiceImpl) GetOrCreateUserFromProvider(ctx context.Context, provider string, providerUser goth.User) (*types.UserAuth, error) {
+	// Check if the user exists based on provider and provider_user_id
+	userID, err := s.repo.GetUserIDByProvider(ctx, provider, providerUser.UserID)
+	if err == nil {
+		// User exists, retrieve them
+		return s.repo.GetUserByID(ctx, userID)
+	}
+
+	// Check if the email is already taken
+	existingUser, err := s.repo.GetUserByEmail(ctx, providerUser.Email)
+	if err == nil && existingUser != nil {
+		return nil, types.ErrConflict
+	}
+
+	// Create a new user
+	newUser := &types.UserAuth{
+		Username: providerUser.Name,
+		Email:    providerUser.Email,
+		Role:     "user", // Default role
+	}
+	err = s.repo.CreateUser(ctx, newUser)
+	if err != nil {
+		return nil, err
+	}
+
+	// Link the provider
+	err = s.repo.CreateUserProvider(ctx, newUser.ID, provider, providerUser.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	return newUser, nil
+}

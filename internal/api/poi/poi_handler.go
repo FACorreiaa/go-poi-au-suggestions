@@ -25,6 +25,15 @@ type Handler interface {
 	RemovePoiFromFavourites(w http.ResponseWriter, r *http.Request)
 	GetFavouritePOIsByUserID(w http.ResponseWriter, r *http.Request)
 	GetPOIsByCityID(w http.ResponseWriter, r *http.Request)
+
+	// Search POIs with filters
+	SearchPOIs(w http.ResponseWriter, r *http.Request)
+
+	// Enhanced hotel search with filters (e.g., price range, amenities)
+	SearchHotels(w http.ResponseWriter, r *http.Request)
+
+	// Enhanced restaurant search with filters (e.g., cuisine, open now)
+	SearchRestaurants(w http.ResponseWriter, r *http.Request)
 }
 
 type HandlerImpl struct {
@@ -266,4 +275,15 @@ func (h *HandlerImpl) GetPOIsByCityID(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(semconv.EnduserIDKey.String(cityID.String()))
 	span.SetAttributes(semconv.HTTPResponseStatusCodeKey.Int(http.StatusOK))
 	span.SetAttributes(semconv.HTTPRouteKey.String("/poi/city"))
+}
+
+func (h *HandlerImpl) SearchPOIs(w http.ResponseWriter, r *http.Request) {
+	return
+}
+
+func (h *HandlerImpl) SearchHotels(w http.ResponseWriter, r *http.Request) {
+	return
+}
+func (h *HandlerImpl) SearchRestaurants(w http.ResponseWriter, r *http.Request) {
+	return
 }

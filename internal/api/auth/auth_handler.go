@@ -1,12 +1,17 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/gothic"
+	"github.com/markbates/goth/providers/google"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -15,6 +20,16 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
+
+func init() {
+	goth.UseProviders(
+		google.New(
+			os.Getenv("GOOGLE_CLIENT_ID"),
+			os.Getenv("GOOGLE_CLIENT_SECRET"),
+			os.Getenv("GOOGLE_CALLBACK_URL"),
+		),
+	)
+}
 
 var _ Handler = (*HandlerImpl)(nil)
 
@@ -25,6 +40,10 @@ type Handler interface {
 	Register(w http.ResponseWriter, r *http.Request)
 	ValidateSession(w http.ResponseWriter, r *http.Request)
 	ChangePassword(w http.ResponseWriter, r *http.Request)
+
+	// provider
+	LoginWithGoogle(w http.ResponseWriter, r *http.Request)
+	GoogleCallback(w http.ResponseWriter, r *http.Request)
 }
 type HandlerImpl struct {
 	authService AuthService
@@ -516,5 +535,99 @@ func (h *HandlerImpl) RefreshSession(w http.ResponseWriter, r *http.Request) {
 		AccessToken: newAccessToken,
 	}
 	l.InfoContext(ctx, "Token refresh successful")
+	api.WriteJSONResponse(w, r, http.StatusOK, resp)
+}
+
+// LoginWithGoogle initiates the Google authentication flow
+func (h *HandlerImpl) LoginWithGoogle(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	l := h.logger.With(slog.String("HandlerImpl", "LoginWithGoogle"))
+
+	// Set the provider in the context (Goth uses this to determine which provider to use)
+	ctx = context.WithValue(ctx, "provider", "google")
+	r = r.WithContext(ctx)
+
+	// Begin the authentication process and redirect the user to Google's login page
+	gothic.BeginAuthHandler(w, r)
+	l.DebugContext(r.Context(), "Google auth")
+}
+
+// GoogleCallback godoc
+// @Summary      Google Authentication Callback
+// @Description  Handles the callback from Google after user authentication, logging in existing users or registering new ones.
+// @Tags         Auth
+// @Produce      json
+// @Success      200 {object} types.LoginResponse "Authentication successful"
+// @Failure      400 {object} types.Response "Invalid request"
+// @Failure      401 {object} types.Response "Authentication failed"
+// @Failure      409 {object} types.Response "Email already exists"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Router       /auth/google/callback [get]
+func (h *HandlerImpl) GoogleCallback(w http.ResponseWriter, r *http.Request) {
+	// Start tracing
+	ctx, span := otel.Tracer("GoogleCallbackHandlerImpl").Start(r.Context(), "GoogleCallbackHandlerImpl", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/auth/google/callback"),
+	))
+	defer span.End()
+
+	l := h.logger.With(slog.String("HandlerImpl", "GoogleCallback"))
+
+	// Set the provider in the context
+	ctx = context.WithValue(ctx, "provider", "google")
+	r = r.WithContext(ctx)
+
+	// Complete the authentication process and retrieve user information
+	gothUser, err := gothic.CompleteUserAuth(w, r)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to complete Google authentication", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Authentication failed")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication failed")
+		return
+	}
+
+	// Get or create the user based on Google provider information
+	user, err := h.authService.GetOrCreateUserFromProvider(ctx, "google", gothUser)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to get or create user", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "User processing failed")
+		if errors.Is(err, types.ErrConflict) {
+			api.ErrorResponse(w, r, http.StatusConflict, "Email already exists. Please log in with your existing account.")
+		} else {
+			api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to process authentication")
+		}
+		return
+	}
+
+	// Generate JWT tokens
+	accessToken, refreshToken, err := h.authService.GenerateTokens(ctx, user, nil)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to generate tokens", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Token generation failed")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to generate tokens")
+		return
+	}
+
+	// Set refresh token in an HttpOnly cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refreshToken",
+		Value:    refreshToken,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true, // Set to true if using HTTPS
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   int((7 * 24 * time.Hour).Seconds()), // 7 days
+	})
+
+	// Prepare    // Respond with the access token and success message
+	resp := types.LoginResponse{
+		AccessToken: accessToken,
+		Message:     "Authentication successful",
+	}
+	l.InfoContext(ctx, "Authentication successful", slog.String("email", gothUser.Email))
+	span.SetStatus(codes.Ok, "Authentication successful")
 	api.WriteJSONResponse(w, r, http.StatusOK, resp)
 }

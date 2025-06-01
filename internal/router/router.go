@@ -20,17 +20,17 @@ import (
 
 // Config contains dependencies needed for the router setup
 type Config struct {
-	AuthHandler              *appMiddleware.HandlerImpl
-	AuthenticateMiddleware   func(http.Handler) http.Handler // Function signature for auth middleware
-	Logger                   *slog.Logger
-	UserHandler              *user.HandlerImpl
-	UserInterestHandler      *userInterest.HandlerImpl
-	UserSettingsHandler      *userSettings.HandlerImpl
-	UserSearchProfileHandler *userProfiles.HandlerImpl
-	UserTagsHandler          *userTags.HandlerImpl
-	UserPreferencesHandler   *userSettings.HandlerImpl
-	LLMInteractionHandler    *llmInteraction.HandlerImpl
-	PointsOfInterestHandler  *poi.HandlerImpl
+	AuthHandler             *appMiddleware.HandlerImpl
+	AuthenticateMiddleware  func(http.Handler) http.Handler // Function signature for auth middleware
+	Logger                  *slog.Logger
+	UserHandler             *user.HandlerImpl
+	InterestHandler         *userInterest.HandlerImpl
+	SettingsHandler         *userSettings.HandlerImpl
+	SearchProfileHandler    *userProfiles.HandlerImpl
+	TagsHandler             *userTags.HandlerImpl
+	PreferencesHandler      *userSettings.HandlerImpl
+	LLMInteractionHandler   *llmInteraction.HandlerImpl
+	PointsOfInterestHandler *poi.HandlerImpl
 }
 
 // SetupRouter initializes and configures the main application router.
@@ -60,6 +60,8 @@ func SetupRouter(cfg *Config) chi.Router {
 			// Example: Mount auth routes that don't need the JWT check
 			r.Post("/auth/register", cfg.AuthHandler.Register) // Assuming Register HandlerImpl exists
 			r.Post("/auth/login", cfg.AuthHandler.Login)
+			r.Get("/auth/google", cfg.AuthHandler.LoginWithGoogle)
+			r.Get("/auth/google/callback", cfg.AuthHandler.GoogleCallback)
 			//r.Post("/auth/refresh", cfg.AuthHandlerImpl.RefreshSession) // Assuming RefreshSession exists
 		})
 
@@ -79,10 +81,10 @@ func SetupRouter(cfg *Config) chi.Router {
 
 			// Mount other protected resource routes
 			//r.Mount("/user", UserRoutes(cfg.UserHandlerImpl)) // User routes
-			r.Mount("/user/interests", UserInterestRoutes(cfg.UserInterestHandler))
-			r.Mount("/user/preferences", UserPreferencesRoutes(cfg.UserSettingsHandler))
-			r.Mount("/user/search-profile", UserSearchProfileRoutes(cfg.UserSearchProfileHandler))
-			r.Mount("/user/tags", UserTagsRoutes(cfg.UserTagsHandler))
+			r.Mount("/user/interests", UserInterestRoutes(cfg.InterestHandler))
+			r.Mount("/user/preferences", UserPreferencesRoutes(cfg.SettingsHandler))
+			r.Mount("/user/search-profile", UserSearchProfileRoutes(cfg.SearchProfileHandler))
+			r.Mount("/user/tags", UserTagsRoutes(cfg.TagsHandler))
 			r.Mount("/llm", LLMInteractionRoutes(cfg.LLMInteractionHandler))
 			r.Mount("/pois", POIRoutes(cfg.PointsOfInterestHandler)) // Points of Interest routes
 			// r.Mount("/pois", POIRoutes(cfg.HandlerImpl))   // Example for POI routes
@@ -103,7 +105,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			r.Use(appMiddleware.RequirePlanStatus(
 				cfg.Logger,
 				[]string{"premium_monthly", "premium_annual"}, // List of allowed plans
-				"active",                                      // Required status
+				"active", // Required status
 			))
 
 			// Add routes specific to premium users

@@ -35,6 +35,11 @@ type AuthRepo interface {
 	// UpdatePassword updates the user's HASHED password.
 	UpdatePassword(ctx context.Context, userID, newHashedPassword string) error
 
+	// provider specific methods for user management
+	CreateUser(ctx context.Context, user *types.UserAuth) error
+	CreateUserProvider(ctx context.Context, userID, provider, providerUserID string) error
+	GetUserIDByProvider(ctx context.Context, provider, providerUserID string) (string, error)
+
 	// --- Refresh Token Handling ---
 	// StoreRefreshToken saves a new refresh token for a user.
 	StoreRefreshToken(ctx context.Context, userID, token string, expiresAt time.Time) error
@@ -231,5 +236,113 @@ func (r *PostgresAuthRepo) InvalidateAllUserRefreshTokens(ctx context.Context, u
 		return fmt.Errorf("database error invalidating tokens: %w", err)
 	}
 	// Log how many were invalidated? (tag.RowsAffected())
+	return nil
+}
+
+// provider specific methods for user management
+// GetUserIDByProvider retrieves the user ID associated with a provider and provider_user_id
+func (r *PostgresAuthRepo) GetUserIDByProvider(ctx context.Context, provider, providerUserID string) (string, error) {
+	ctx, span := otel.Tracer("UserRepository").Start(ctx, "GetUserIDByProvider",
+		trace.WithAttributes(
+			attribute.String("provider", provider),
+			attribute.String("provider_user_id", providerUserID),
+		))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetUserIDByProvider"))
+
+	var userID string
+	query := `SELECT user_id FROM user_providers WHERE provider = $1 AND provider_user_id = $2`
+	err := r.pgpool.QueryRow(ctx, query, provider, providerUserID).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			l.InfoContext(ctx, "No user found for provider", slog.String("provider", provider), slog.String("provider_user_id", providerUserID))
+			span.SetStatus(codes.Ok, "No user found")
+			return "", nil // No user found, not an error
+		}
+		l.ErrorContext(ctx, "Failed to query user by provider", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database query failed")
+		return "", err
+	}
+
+	l.InfoContext(ctx, "User found for provider", slog.String("user_id", userID))
+	span.SetStatus(codes.Ok, "User found")
+	return userID, nil
+}
+
+// CreateUser creates a new user in the database
+func (r *PostgresAuthRepo) CreateUser(ctx context.Context, user *types.UserAuth) error {
+	ctx, span := otel.Tracer("UserRepository").Start(ctx, "CreateUser",
+		trace.WithAttributes(
+			attribute.String("email", user.Email),
+			attribute.String("username", user.Username),
+		))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "CreateUser"))
+
+	query := `
+        INSERT INTO users (id, username, email, role, created_at)
+        VALUES (gen_random_uuid(), $1, $2, $3, $4)
+        RETURNING id, created_at
+    `
+	var id string
+	var createdAt time.Time
+	err := r.pgpool.QueryRow(ctx, query, user.Username, user.Email, user.Role, time.Now()).Scan(&id, &createdAt)
+	if err != nil {
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" { // Unique violation (email)
+			l.WarnContext(ctx, "Email already exists", slog.String("email", user.Email))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Email conflict")
+			return types.ErrConflict
+		}
+		l.ErrorContext(ctx, "Failed to create user", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database insert failed")
+		return err
+	}
+
+	// Update user struct with returned values
+	user.ID = id
+	user.CreatedAt = createdAt
+
+	l.InfoContext(ctx, "User created successfully", slog.String("user_id", user.ID))
+	span.SetStatus(codes.Ok, "User created")
+	return nil
+}
+
+// CreateUserProvider links a user to an OAuth provider
+func (r *PostgresAuthRepo) CreateUserProvider(ctx context.Context, userID, provider, providerUserID string) error {
+	ctx, span := otel.Tracer("UserRepository").Start(ctx, "CreateUserProvider",
+		trace.WithAttributes(
+			attribute.String("user_id", userID),
+			attribute.String("provider", provider),
+			attribute.String("provider_user_id", providerUserID),
+		))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "CreateUserProvider"))
+
+	query := `
+        INSERT INTO user_providers (user_id, provider, provider_user_id, created_at)
+        VALUES ($1, $2, $3, $4)
+    `
+	_, err := r.pgpool.Exec(ctx, query, userID, provider, providerUserID, time.Now())
+	if err != nil {
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" { // Unique violation (provider+provider_user_id)
+			l.WarnContext(ctx, "Provider link already exists", slog.String("provider", provider), slog.String("provider_user_id", providerUserID))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Provider link conflict")
+			return types.ErrConflict
+		}
+		l.ErrorContext(ctx, "Failed to create provider link", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database insert failed")
+		return err
+	}
+
+	l.InfoContext(ctx, "Provider linked successfully", slog.String("user_id", userID), slog.String("provider", provider))
+	span.SetStatus(codes.Ok, "Provider linked")
 	return nil
 }

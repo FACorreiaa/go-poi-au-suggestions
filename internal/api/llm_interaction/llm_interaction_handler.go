@@ -32,16 +32,26 @@ type Handler interface {
 	SaveItenerary(w http.ResponseWriter, r *http.Request)
 	RemoveItenerary(w http.ResponseWriter, r *http.Request)
 	GetPOIDetails(w http.ResponseWriter, r *http.Request)
+	// View a saved itinerary
+	GetItinerary(w http.ResponseWriter, r *http.Request)
+
+	// Edit an existing itinerary (e.g., add/remove POIs, reorder)
+	UpdateItinerary(w http.ResponseWriter, r *http.Request)
 
 	// GetHotelsByPreference hotels
 	GetHotelsByPreference(w http.ResponseWriter, r *http.Request)
 	GetHotelsNearby(w http.ResponseWriter, r *http.Request)
+	// TODO
 	GetHotelByID(w http.ResponseWriter, r *http.Request)
 
 	// GetRestaurantsByPreferences restaurants
 	GetRestaurantsByPreferences(w http.ResponseWriter, r *http.Request)
 	GetRestaurantsNearby(w http.ResponseWriter, r *http.Request)
+	// TODO
 	GetRestaurantDetails(w http.ResponseWriter, r *http.Request)
+
+	// GetNearbyRecommendations(w http.ResponseWriter, r *http.Request)
+	GetNearbyRecommendations(w http.ResponseWriter, r *http.Request)
 }
 type HandlerImpl struct {
 	llmInteractionService LlmInteractiontService
@@ -909,4 +919,16 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 
 	l.InfoContext(ctx, "Successfully fetched POIs")
 	span.SetStatus(codes.Ok, "Success")
+}
+
+func (HandlerImpl *HandlerImpl) GetNearbyRecommendations(w http.ResponseWriter, r *http.Request) {
+	return
+}
+
+func (HandlerImpl *HandlerImpl) GetItinerary(w http.ResponseWriter, r *http.Request) {
+	return
+}
+
+func (HandlerImpl *HandlerImpl) UpdateItinerary(w http.ResponseWriter, r *http.Request) {
+	return
 }

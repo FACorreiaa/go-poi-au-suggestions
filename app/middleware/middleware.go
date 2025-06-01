@@ -10,8 +10,8 @@ import (
 
 // Authenticate extracts JWT from Authorization header, validates it,
 // and adds userID and role to the request context.
-func Authenticate(next http.HandlerImpl) http.HandlerImpl {
-	return http.HandlerImplFunc(func(w http.ResponseWriter, r *http.Request) {
+func Authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1. Get the Authorization header
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {

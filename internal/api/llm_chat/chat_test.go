@@ -1,4 +1,4 @@
-package llmInteraction_test
+package llmChat
 
 import (
 	"context"

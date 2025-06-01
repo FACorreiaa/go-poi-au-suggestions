@@ -11,7 +11,7 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests"
-	llmInteraction "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_interaction"
+	llmChat "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_chat"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/settings"
@@ -30,7 +30,7 @@ type Container struct {
 	SettingsHandler           *settings.HandlerImpl
 	TagsHandler               *tags.HandlerImpl
 	SearchProfileHandler      *profiles.HandlerImpl
-	LLMInteractionHandlerImpl *llmInteraction.HandlerImpl
+	LLMInteractionHandlerImpl *llmChat.HandlerImpl
 	POIHandler                *poi.HandlerImpl
 	// Add other HandlerImpls, services, and repositories as needed
 }
@@ -86,15 +86,15 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 
 	poiRepo := poi.NewRepository(pool, logger)
 	// initialise the LLM interaction service
-	llmInteractionRepo := llmInteraction.NewRepositoryImpl(pool, logger)
-	llmInteractionService := llmInteraction.NewLlmInteractiontService(interestsRepo,
+	llmInteractionRepo := llmChat.NewRepositoryImpl(pool, logger)
+	llmInteractionService := llmChat.NewLlmInteractiontService(interestsRepo,
 		profilessRepo,
 		tagsRepo,
 		llmInteractionRepo,
 		cityRepo,
 		poiRepo,
 		logger)
-	llmInteractionHandlerImpl := llmInteraction.NewLLMHandlerImpl(llmInteractionService, logger)
+	llmInteractionHandlerImpl := llmChat.NewLLMHandlerImpl(llmInteractionService, logger)
 
 	poiRepository := poi.NewRepository(pool, logger)
 	poiService := poi.NewServiceImpl(poiRepository, logger)

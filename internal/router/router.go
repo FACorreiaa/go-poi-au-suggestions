@@ -10,7 +10,7 @@ import (
 
 	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests"
-	llmInteraction "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_interaction"
+	llmChat "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_chat"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/settings"
@@ -29,7 +29,7 @@ type Config struct {
 	SearchProfileHandler    *profiles.HandlerImpl
 	TagsHandler             *tags.HandlerImpl
 	PreferencesHandler      *settings.HandlerImpl
-	LLMInteractionHandler   *llmInteraction.HandlerImpl
+	LLMInteractionHandler   *llmChat.HandlerImpl
 	PointsOfInterestHandler *poi.HandlerImpl
 }
 
@@ -181,7 +181,7 @@ func profilesRoutes(HandlerImpl *profiles.HandlerImpl) http.Handler {
 	return r
 }
 
-func LLMInteractionRoutes(HandlerImpl *llmInteraction.HandlerImpl) http.Handler {
+func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
 	// LLM interaction routes
 	r.Post("/prompt-response/profile/{profileID}", HandlerImpl.GetPrompResponse)        // GET http://localhost:8000/api/v1/user/interests

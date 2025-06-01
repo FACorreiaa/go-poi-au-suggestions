@@ -1,4 +1,4 @@
-package llmInteraction
+package llmChat
 
 import (
 	"encoding/json"
@@ -1006,7 +1006,7 @@ func (h *HandlerImpl) GetItinerary(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        page query int false "Page number for pagination (default 1)"
 // @Param        page_size query int false "Number of items per page (default 10)"
-// @Success      200 {object} llmInteraction.PaginatedUserItinerariesResponse "Successfully retrieved list of itineraries"
+// @Success      200 {object} llmChat.PaginatedUserItinerariesResponse "Successfully retrieved list of itineraries"
 // @Failure      400 {object} types.Response "Invalid pagination parameters"
 // @Failure      401 {object} types.Response "Unauthorized"
 // @Failure      500 {object} types.Response "Internal server error"

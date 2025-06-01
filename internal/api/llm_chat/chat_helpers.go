@@ -1,4 +1,4 @@
-package llmInteraction
+package llmChat
 
 import (
 	"fmt"

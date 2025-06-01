@@ -85,12 +85,6 @@ type ChatTurn struct { // You might not need this explicit struct if directly us
 	Parts []genai.Part `json:"parts"`
 }
 
-type ChatSession struct {
-	History             []*ChatTurn  // If you want to store a serializable version
-	InternalChatSession *genai.Chats // Holds the live SDK chat session
-	LastUpdatedAt       time.Time
-}
-
 type UserLocation struct {
 	UserLat        float64
 	UserLon        float64

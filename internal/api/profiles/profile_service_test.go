@@ -140,7 +140,7 @@ func (m *MocktagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]*types.T
 }
 
 // Helper
-func setupprofilessServiceTest() (*profilessServiceImpl, *MockprofilessRepo, *MockinterestsRepo, *MocktagsRepo) {
+func setupprofilessServiceTest() (*ServiceImpl, *MockprofilessRepo, *MockinterestsRepo, *MocktagsRepo) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})) // Use LevelError to reduce noise
 	mockPrefRepo := new(MockprofilessRepo)
 	mockIntRepo := new(MockinterestsRepo)

@@ -11,6 +11,7 @@ import (
 
 	"log/slog"
 
+	"github.com/markbates/goth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
@@ -69,6 +70,19 @@ func (m *MockAuthService) VerifyPassword(ctx context.Context, userID, password s
 func (m *MockAuthService) ValidateRefreshToken(ctx context.Context, refreshToken string) (string, error) {
 	args := m.Called(ctx, refreshToken)
 	return args.String(0), args.Error(1)
+}
+
+func (m *MockAuthService) GenerateTokens(ctx context.Context, user *types.UserAuth, sub *types.Subscription) (accessToken string, refreshToken string, err error) {
+	args := m.Called(ctx, user, sub)
+	return args.String(0), args.String(0), args.Error(1)
+}
+
+func (m *MockAuthService) GetOrCreateUserFromProvider(ctx context.Context, provider string, providerUser goth.User) (*types.UserAuth, error) {
+	args := m.Called(ctx, provider, providerUser)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.UserAuth), args.Error(1)
 }
 
 // Test cases for AuthHandlerImpl

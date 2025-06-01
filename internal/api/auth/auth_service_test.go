@@ -72,6 +72,21 @@ func (m *MockAuthRepo) InvalidateAllUserRefreshTokens(ctx context.Context, userI
 	return args.Error(0)
 }
 
+func (m *MockAuthRepo) CreateUser(ctx context.Context, user *types.UserAuth) error {
+	args := m.Called(ctx, user)
+	return args.Error(0)
+}
+
+func (m *MockAuthRepo) CreateUserProvider(ctx context.Context, userID, provider, providerUserID string) error {
+	args := m.Called(ctx, userID, provider, providerUserID)
+	return args.Error(0)
+}
+
+func (m *MockAuthRepo) GetUserIDByProvider(ctx context.Context, provider, providerUserID string) (string, error) {
+	args := m.Called(ctx, provider, providerUserID)
+	return args.String(0), args.Error(0)
+}
+
 // Test cases for AuthService
 func TestLogin(t *testing.T) {
 	// Create a mock repository

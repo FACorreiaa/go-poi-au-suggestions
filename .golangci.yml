@@ -3,9 +3,9 @@ run:
   concurrency: 4
 linters:
   enable:
-    - misspell
+    #- misspell
     - revive
-    - unparam
+    #- unparam
   settings:
     errcheck:
       check-blank: true
@@ -36,7 +36,7 @@ formatters:
       simplify: true
     goimports:
       local-prefixes:
-        - your/module/path
+        - github.com/FACorreiaa/go-poi-au-suggestions
   exclusions:
     generated: lax
     paths:

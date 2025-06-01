@@ -34,12 +34,12 @@ type POIRepository interface {
 	// POI details
 	FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error)
 	SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
+	SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error)
 
 	// Hotels
 	FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error)
 	SaveHotelDetails(ctx context.Context, hotel types.HotelDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
 	GetHotelByID(ctx context.Context, hotelID uuid.UUID) (*types.HotelDetailedInfo, error)
-
 	// Restaurants
 	FindRestaurantDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64, preferences *types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error)
 	SaveRestaurantDetails(ctx context.Context, restaurant types.RestaurantDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
@@ -52,6 +52,7 @@ type POIRepository interface {
 	// GetPOIsByCityIDAndNamesSortedByDistance(ctx context.Context, cityID uuid.UUID, names []string, userLocation types.UserLocation) ([]types.POIDetail, error)
 
 	//AddPersonalizedPOItoFavourites(ctx context.Context, poiID uuid.UUID, userID uuid.UUID) (uuid.UUID, error)
+
 }
 
 type PostgresPOIRepository struct {
@@ -784,4 +785,111 @@ func (r *PostgresPOIRepository) GetRestaurantByID(ctx context.Context, restauran
 	}
 	span.SetStatus(codes.Ok, "Restaurant found")
 	return &restaurant, nil
+}
+
+func (r *PostgresPOIRepository) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error) {
+	ctx, span := otel.Tracer("POIRepository").Start(ctx, "SearchPOIs", trace.WithAttributes(
+		attribute.Float64("location.latitude", filter.Location.Latitude),
+		attribute.Float64("location.longitude", filter.Location.Longitude),
+		attribute.Float64("radius", filter.Radius),
+		attribute.String("category", filter.Category),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "SearchPOIs"))
+
+	// Base query using PostGIS for geospatial filtering
+	query := `
+        SELECT 
+            id, 
+            name, 
+            description, 
+            ST_X(location::geometry) AS longitude, 
+            ST_Y(location::geometry) AS latitude, 
+            category,
+            ST_Distance(
+                location,
+                ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+            ) AS distance_meters
+        FROM points_of_interest
+        WHERE ST_DWithin(
+            location,
+            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+            $3
+        )
+    `
+	args := []interface{}{
+		filter.Location.Longitude, // $1
+		filter.Location.Latitude,  // $2
+		filter.Radius * 1000,      // $3 (convert km to meters for ST_DWithin)
+	}
+
+	// Add category filter if provided
+	if filter.Category != "" {
+		query += ` AND category = $4`
+		args = append(args, filter.Category) // $4
+	}
+
+	// Order by distance
+	query += ` ORDER BY distance_meters ASC`
+
+	l.DebugContext(ctx, "Executing POI search query", slog.String("query", query), slog.Any("args", args))
+
+	// Execute query
+	rows, err := r.pgpool.Query(ctx, query, args...)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to query POIs", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database query failed")
+		return nil, fmt.Errorf("failed to search points_of_interest: %w", err)
+	}
+	defer rows.Close()
+
+	// Collect results
+	var pois []types.POIDetail
+	for rows.Next() {
+		var poi types.POIDetail
+		var distanceMeters float64
+		var description sql.NullString // Handle NULL description
+
+		err := rows.Scan(
+			&poi.ID,
+			&poi.Name,
+			&description,
+			&poi.Longitude,
+			&poi.Latitude,
+			&poi.Category,
+			&distanceMeters,
+		)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to scan POI row", slog.Any("error", err))
+			span.RecordError(err)
+			return nil, fmt.Errorf("failed to scan POI row: %w", err)
+		}
+
+		// Set description if valid
+		if description.Valid {
+			poi.DescriptionPOI = description.String
+		}
+
+		pois = append(pois, poi)
+	}
+
+	// Check for errors during row iteration
+	if err = rows.Err(); err != nil {
+		l.ErrorContext(ctx, "Error iterating POI rows", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("error iterating POI rows: %w", err)
+	}
+
+	// Log and set span status
+	if len(pois) == 0 {
+		l.InfoContext(ctx, "No POIs found")
+		span.SetStatus(codes.Ok, "No POIs found")
+	} else {
+		l.InfoContext(ctx, "POIs found", slog.Int("count", len(pois)))
+		span.SetStatus(codes.Ok, "POIs found")
+	}
+
+	return pois, nil
 }

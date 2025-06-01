@@ -196,6 +196,10 @@ func LLMInteractionRoutes(HandlerImpl *llmInteraction.HandlerImpl) http.Handler 
 	r.Get("/prompt-response/city/restaurants/nearby", HandlerImpl.GetRestaurantsNearby)
 	// TODO save on the db
 	r.Get("/prompt-response/city/restaurants/{restaurantID}", HandlerImpl.GetRestaurantDetails) // GET http://localhost:8000/api/v1/pois/city/poi/nearby
+	r.Get("/prompt-response/poi", HandlerImpl.GetItineraries)                                   // GET /api/v1/itineraries?page=1&page_size=20
+	r.Get("/prompt-response/poi/{itinerary_id}", HandlerImpl.GetItinerary)                      // GET /api/v1/itineraries/{uuid}
+	r.Put("/prompt-response/poi/{itinerary_id}", HandlerImpl.UpdateItinerary)                   // PUT /api/v1/itineraries/{uuid}
+
 	return r
 }
 
@@ -206,6 +210,8 @@ func POIRoutes(HandlerImpl *poi.HandlerImpl) http.Handler {
 	r.Post("/favourites", HandlerImpl.AddPoiToFavourites)        // POST http://localhost:8000/api/v1/pois/favourites
 	r.Delete("/favourites", HandlerImpl.RemovePoiFromFavourites) // DELETE http://localhost:8000/api/v1/pois/favourites/{poiID}
 	r.Get("/city/{cityID}", HandlerImpl.GetPOIsByCityID)
+
+	r.Get("/search", HandlerImpl.GetPOIs)
 	return r
 }
 

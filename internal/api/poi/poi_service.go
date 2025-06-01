@@ -16,6 +16,9 @@ type POIService interface {
 	RemovePoiFromFavourites(ctx context.Context, poiID uuid.UUID, userID uuid.UUID) error
 	GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error)
 	GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error)
+
+	//SearchPOIs
+	SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error)
 }
 
 type POIServiceImpl struct {
@@ -57,6 +60,15 @@ func (s *POIServiceImpl) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) 
 	pois, err := s.poiRepository.GetPOIsByCityID(ctx, cityID)
 	if err != nil {
 		s.logger.Error("failed to get POIs by city ID", "error", err)
+		return nil, err
+	}
+	return pois, nil
+}
+
+func (s *POIServiceImpl) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error) {
+	pois, err := s.poiRepository.SearchPOIs(ctx, filter)
+	if err != nil {
+		s.logger.Error("failed to search POIs", "error", err)
 		return nil, err
 	}
 	return pois, nil

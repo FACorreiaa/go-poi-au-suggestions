@@ -98,19 +98,36 @@ type UserLocation struct {
 }
 
 type UserSavedItinerary struct {
-	ID                     uuid.UUID
-	UserID                 uuid.UUID
-	SourceLlmInteractionID uuid.NullUUID // or uuid.UUID if always present for a bookmark
-	PrimaryCityID          uuid.NullUUID
-	Title                  string
-	Description            sql.NullString
-	MarkdownContent        string
-	Tags                   []string // pgx handles TEXT[] as []string
-	EstimatedDurationDays  sql.NullInt32
-	EstimatedCostLevel     sql.NullInt32
-	IsPublic               bool
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
+	ID                     uuid.UUID      `json:"id"`
+	UserID                 uuid.UUID      `json:"user_id"`
+	SourceLlmInteractionID uuid.NullUUID  `json:"source_llm_interaction_id,omitempty"` // Nullable UUID for the source LLM interaction
+	PrimaryCityID          uuid.NullUUID  `json:"primary_city_id,omitempty"`           // Nullable UUID for the primary city
+	Title                  string         `json:"title"`
+	Description            sql.NullString `json:"description"`             // Use sql.NullString for nullable text fields
+	MarkdownContent        string         `json:"markdown_content"`        // Markdown content for the itinerary
+	Tags                   []string       `json:"tags"`                    // Tags for the itinerary
+	EstimatedDurationDays  sql.NullInt32  `json:"estimated_duration_days"` // Nullable int32 for estimated duration in days
+	EstimatedCostLevel     sql.NullInt32  `json:"estimated_cost_level"`    // Nullable int32 for estimated cost level
+	IsPublic               bool           `json:"is_public"`               // Indicates if the itinerary is public
+	CreatedAt              time.Time      `json:"created_at"`
+	UpdatedAt              time.Time      `json:"updated_at"`
+}
+
+type UpdateItineraryRequest struct {
+	Title                 *string  `json:"title,omitempty"`
+	Description           *string  `json:"description,omitempty"` // If nil, means no change. If empty string, means clear description.
+	Tags                  []string `json:"tags,omitempty"`        // If nil, no change. If empty slice, clear tags.
+	EstimatedDurationDays *int32   `json:"estimated_duration_days,omitempty"`
+	EstimatedCostLevel    *int32   `json:"estimated_cost_level,omitempty"`
+	IsPublic              *bool    `json:"is_public,omitempty"`
+	MarkdownContent       *string  `json:"markdown_content,omitempty"`
+}
+
+type PaginatedUserItinerariesResponse struct {
+	Itineraries  []UserSavedItinerary `json:"itineraries"`
+	TotalRecords int                  `json:"total_records"`
+	Page         int                  `json:"page"`
+	PageSize     int                  `json:"page_size"`
 }
 
 type BookmarkRequest struct {
@@ -130,9 +147,35 @@ type ChatMessage struct {
 }
 
 type POIDetailrequest struct {
-	CityName  string  `json:"city"`
-	Latitude  float64 `json:"lat"`
-	Longitude float64 `json:"lon"`
+	CityName  string  `json:"city_name"` // e.g., "New York"
+	Latitude  float64 `json:"latitude"`  // e.g., 40.7128
+	Longitude float64 `json:"longitude"` // e.g., -74.0060
+}
+
+type POIFilter struct {
+	Location GeoPoint `json:"location"` // e.g., "restaurant", "hotel", "bar"
+	Radius   float64  `json:"radius"`   // Radius in kilometers for filtering POIs
+	Category string   `json:"category"` // e.g., "restaurant", "hotel", "bar"
+}
+
+type GeoPoint struct {
+	Latitude  float64 `json:"latitude"`  // Latitude of the point
+	Longitude float64 `json:"longitude"` // Longitude of the point
+}
+type SearchPOIRequest struct {
+	Query      string   `json:"query"` // The search query text
+	CityName   string   `json:"city"`
+	Latitude   float64  `json:"lat"`
+	Longitude  float64  `json:"lon"`
+	RadiusKm   float64  `json:"radius_km"`   // Optional, for filtering POIs within a certain radius
+	SearchText string   `json:"search_text"` // Optional, for searching by name or description
+	SearchTags []string `json:"search_tags"` // Optional, for filtering by tags
+	SearchType string   `json:"search_type"` // Optional, e.g., "restaurant", "hotel", "bar"
+	SortBy     string   `json:"sort_by"`     // Optional, e.g., "rating", "distance"
+	SortOrder  string   `json:"sort_order"`  // Optional, e.g., "asc", "desc"
+	MinRating  float64  `json:"min_rating"`  // Optional, for filtering by minimum rating
+	MinPrice   string   `json:"min_price"`   // Optional, for filtering by minimum price range
+	MinGuests  int32    `json:"min_guests"`  // Optional, for filtering by minimum number of guests (for restaurants)
 }
 
 type HotelUserPreferences struct {

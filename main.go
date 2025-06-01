@@ -12,6 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/providers/google"
+
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 
 	_ "github.com/FACorreiaa/go-poi-au-suggestions/docs" // Import for swagger docs
@@ -52,6 +55,17 @@ import (
 // @in header
 // @name Authorization
 // @description Type "Bearer" followed by a space and JWT token.
+
+func init() {
+	goth.UseProviders(
+		google.New(
+			os.Getenv("GOOGLE_CLIENT_ID"),
+			os.Getenv("GOOGLE_CLIENT_SECRET"),
+			os.Getenv("GOOGLE_CALLBACK_URL"),
+		),
+	)
+}
+
 func main() {
 	// --- Initial Loading ---
 	err := godotenv.Load()

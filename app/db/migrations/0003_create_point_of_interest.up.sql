@@ -35,6 +35,7 @@ CREATE TABLE points_of_interest (
     website TEXT,
     phone_number TEXT,
     opening_hours JSONB, -- Store opening hours structured (e.g., OSM opening_hours format or custom JSON)
+    category TEXT, -- e.g., "restaurant", "museum", "park"
     price_level INTEGER CHECK (
         price_level >= 1
         AND price_level <= 4

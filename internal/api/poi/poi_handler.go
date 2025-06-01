@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -27,13 +28,7 @@ type Handler interface {
 	GetPOIsByCityID(w http.ResponseWriter, r *http.Request)
 
 	// Search POIs with filters
-	SearchPOIs(w http.ResponseWriter, r *http.Request)
-
-	// Enhanced hotel search with filters (e.g., price range, amenities)
-	SearchHotels(w http.ResponseWriter, r *http.Request)
-
-	// Enhanced restaurant search with filters (e.g., cuisine, open now)
-	SearchRestaurants(w http.ResponseWriter, r *http.Request)
+	GetPOIs(w http.ResponseWriter, r *http.Request)
 }
 
 type HandlerImpl struct {
@@ -277,13 +272,34 @@ func (h *HandlerImpl) GetPOIsByCityID(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(semconv.HTTPRouteKey.String("/poi/city"))
 }
 
-func (h *HandlerImpl) SearchPOIs(w http.ResponseWriter, r *http.Request) {
-	return
-}
+// GetPOI from DB handler
+func (h *HandlerImpl) GetPOIs(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("SearchPOIs").Start(r.Context(), "SearchPOIs", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/poi/search"),
+	))
+	defer span.End()
+	l := h.logger.With(slog.String("HandlerImpl", "SearchPOIs"))
+	l.DebugContext(ctx, "Search POIs HandlerImpl invoked")
 
-func (h *HandlerImpl) SearchHotels(w http.ResponseWriter, r *http.Request) {
-	return
-}
-func (h *HandlerImpl) SearchRestaurants(w http.ResponseWriter, r *http.Request) {
-	return
+	lat, _ := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
+	lon, _ := strconv.ParseFloat(r.URL.Query().Get("lon"), 64)
+	radius, _ := strconv.ParseFloat(r.URL.Query().Get("radius"), 64)
+	category := r.URL.Query().Get("category")
+
+	filter := types.POIFilter{
+		Location: types.GeoPoint{Latitude: lat, Longitude: lon},
+		Radius:   radius,
+		Category: category,
+	}
+
+	pois, err := h.poiService.SearchPOIs(ctx, filter)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to search POIs", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to search POIs: %s", err.Error()))
+		return
+	}
+
+	l.InfoContext(ctx, "Successfully searched POIs")
+	api.WriteJSONResponse(w, r, http.StatusOK, pois)
 }

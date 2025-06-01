@@ -81,7 +81,7 @@ type LlmInteractiontServiceImpl struct {
 func NewLlmInteractiontService(interestRepo interests.Repository,
 	searchProfileRepo profiles.Repository,
 	tagsRepo tags.Repository,
-	llmInteractionRepo LLmInteractionRepository,
+	llmInteractionRepo Repository,
 	cityRepo city.Repository,
 	poiRepo poi.Repository,
 	logger *slog.Logger) *LlmInteractiontServiceImpl {

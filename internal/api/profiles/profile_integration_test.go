@@ -11,9 +11,9 @@ import (
 	"os"
 	"testing"
 
-	interestsRepoImpl "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests/repository" // Path to actual interest repo impl
-	userTagRepoImpl "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/tags/repository"        // Path to actual tag repo impl
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"                                      // Adjust path
+	// Path to actual interest repo impl
+	// Path to actual tag repo impl
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types" // Adjust path
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"

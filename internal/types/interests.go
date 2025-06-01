@@ -17,7 +17,7 @@ type Interest struct {
 	Source      string     `json:"source"`
 }
 
-type UpdateUserInterestParams struct {
+type UpdateinterestsParams struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Active      *bool   `json:"active,omitempty"`

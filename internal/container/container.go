@@ -10,13 +10,13 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/config"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests"
 	llmInteraction "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_interaction"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/settings"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/tags"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
-	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
-	userSearchProfile "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_search_profiles"
-	userSettings "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_settings"
-	userTags "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_tags"
 )
 
 // Container holds all application dependencies
@@ -26,10 +26,10 @@ type Container struct {
 	Pool                      *pgxpool.Pool
 	AuthHandler               *auth.HandlerImpl
 	UserHandler               *user.HandlerImpl
-	InterestHandler           *userInterest.HandlerImpl
-	SettingsHandler           *userSettings.HandlerImpl
-	TagsHandler               *userTags.HandlerImpl
-	SearchProfileHandler      *userSearchProfile.HandlerImpl
+	InterestHandler           *interests.HandlerImpl
+	SettingsHandler           *settings.HandlerImpl
+	TagsHandler               *tags.HandlerImpl
+	SearchProfileHandler      *profiles.HandlerImpl
 	LLMInteractionHandlerImpl *llmInteraction.HandlerImpl
 	POIHandler                *poi.HandlerImpl
 	// Add other HandlerImpls, services, and repositories as needed
@@ -64,40 +64,40 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	userService := user.NewUserService(userRepo, logger)
 	userHandlerImpl := user.NewHandlerImpl(userService, logger)
 
-	userInterestRepo := userInterest.NewPostgresUserInterestRepo(pool, logger)
-	userInterestService := userInterest.NewUserInterestService(userInterestRepo, logger)
-	HandlerImpl := userInterest.NewHandlerImpl(userInterestService, logger)
+	interestsRepo := interests.NewRepositoryImpl(pool, logger)
+	interestsService := interests.NewinterestsService(interestsRepo, logger)
+	HandlerImpl := interests.NewHandlerImpl(interestsService, logger)
 
-	userSettingsRepo := userSettings.NewPostgresUserSettingsRepo(pool, logger)
-	userSettingsService := userSettings.NewUserSettingsService(userSettingsRepo, logger)
-	userSettingsHandler := userSettings.NewHandlerImpl(userSettingsService, logger)
+	settingsRepo := settings.NewPostgressettingsRepo(pool, logger)
+	settingsService := settings.NewsettingsService(settingsRepo, logger)
+	settingsHandler := settings.NewHandlerImpl(settingsService, logger)
 
-	userTagsRepo := userTags.NewPostgresUserTagsRepo(pool, logger)
-	userTagsService := userTags.NewUserTagsService(userTagsRepo, logger)
-	userTagsHandler := userTags.NewHandlerImpl(userTagsService, logger)
+	tagsRepo := tags.NewRepositoryImpl(pool, logger)
+	tagsService := tags.NewtagsService(tagsRepo, logger)
+	tagsHandler := tags.NewHandlerImpl(tagsService, logger)
 
-	userSearchProfilesRepo := userSearchProfile.NewPostgresUserRepo(pool, logger)
-	userSearchProfilesService := userSearchProfile.NewUserProfilesService(userSearchProfilesRepo, userInterestRepo, userTagsRepo, logger)
-	userSearchProfilesHandlerImpl := userSearchProfile.NewUserHandlerImpl(userSearchProfilesService, logger)
+	profilessRepo := profiles.NewPostgresUserRepo(pool, logger)
+	profilessService := profiles.NewUserProfilesService(profilessRepo, interestsRepo, tagsRepo, logger)
+	profilessHandlerImpl := profiles.NewUserHandlerImpl(profilessService, logger)
 	// Create and return the container
 
 	// city repository
 	cityRepo := city.NewCityRepository(pool, logger)
 
-	poiRepo := poi.NewPOIRepository(pool, logger)
+	poiRepo := poi.NewRepository(pool, logger)
 	// initialise the LLM interaction service
-	llmInteractionRepo := llmInteraction.NewPostgresLlmInteractionRepo(pool, logger)
-	llmInteractionService := llmInteraction.NewLlmInteractiontService(userInterestRepo,
-		userSearchProfilesRepo,
-		userTagsRepo,
+	llmInteractionRepo := llmInteraction.NewRepositoryImpl(pool, logger)
+	llmInteractionService := llmInteraction.NewLlmInteractiontService(interestsRepo,
+		profilessRepo,
+		tagsRepo,
 		llmInteractionRepo,
 		cityRepo,
 		poiRepo,
 		logger)
 	llmInteractionHandlerImpl := llmInteraction.NewLLMHandlerImpl(llmInteractionService, logger)
 
-	poiRepository := poi.NewPOIRepository(pool, logger)
-	poiService := poi.NewPOIServiceImpl(poiRepository, logger)
+	poiRepository := poi.NewRepository(pool, logger)
+	poiService := poi.NewServiceImpl(poiRepository, logger)
 	poiHandler := poi.NewHandlerImpl(poiService, logger)
 	return &Container{
 		Config:                    cfg,
@@ -106,9 +106,9 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 		AuthHandler:               authHandlerImpl,
 		UserHandler:               userHandlerImpl,
 		InterestHandler:           HandlerImpl,
-		SettingsHandler:           userSettingsHandler,
-		TagsHandler:               userTagsHandler,
-		SearchProfileHandler:      userSearchProfilesHandlerImpl,
+		SettingsHandler:           settingsHandler,
+		TagsHandler:               tagsHandler,
+		SearchProfileHandler:      profilessHandlerImpl,
 		LLMInteractionHandlerImpl: llmInteractionHandlerImpl,
 		POIHandler:                poiHandler,
 		// Add other HandlerImpls, services, and repositories as needed

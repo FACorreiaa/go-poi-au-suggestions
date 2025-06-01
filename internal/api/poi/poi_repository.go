@@ -19,9 +19,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var _ POIRepository = (*PostgresPOIRepository)(nil)
+var _ Repository = (*PostgresRepository)(nil)
 
-type POIRepository interface {
+type Repository interface {
 	SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error)
 	FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetail, error)
 	//GetPOIsByNamesAndCitySortedByDistance(ctx context.Context, names []string, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error)
@@ -55,19 +55,19 @@ type POIRepository interface {
 
 }
 
-type PostgresPOIRepository struct {
+type PostgresRepository struct {
 	logger *slog.Logger
 	pgpool *pgxpool.Pool
 }
 
-func NewPOIRepository(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresPOIRepository {
-	return &PostgresPOIRepository{
+func NewRepository(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresRepository {
+	return &PostgresRepository{
 		logger: logger,
 		pgpool: pgxpool,
 	}
 }
 
-func (r *PostgresPOIRepository) SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
+func (r *PostgresRepository) SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -108,7 +108,7 @@ func (r *PostgresPOIRepository) SavePoi(ctx context.Context, poi types.POIDetail
 	return id, nil
 }
 
-func (r *PostgresPOIRepository) FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetail, error) {
+func (r *PostgresRepository) FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetail, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -138,7 +138,7 @@ func (r *PostgresPOIRepository) FindPoiByNameAndCity(ctx context.Context, name s
 	return &poi, nil
 }
 
-// func (r *PostgresPOIRepository) GetPOIsByNamesAndCitySortedByDistance(ctx context.Context, names []string, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error) {
+// func (r *PostgresRepository) GetPOIsByNamesAndCitySortedByDistance(ctx context.Context, names []string, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error) {
 // 	// Construct the user's location as a PostGIS POINT
 // 	userPoint := fmt.Sprintf("SRID=4326;POINT(%f %f)", userLocation.UserLon, userLocation.UserLat)
 
@@ -181,7 +181,7 @@ func (r *PostgresPOIRepository) FindPoiByNameAndCity(ctx context.Context, name s
 // 	return pois, nil
 // }
 
-func (r *PostgresPOIRepository) GetPOIsByCityAndDistance(ctx context.Context, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error) {
+func (r *PostgresRepository) GetPOIsByCityAndDistance(ctx context.Context, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error) {
 	userPoint := fmt.Sprintf("SRID=4326;POINT(%f %f)", userLocation.UserLon, userLocation.UserLat)
 	query := `
         SELECT 
@@ -219,7 +219,7 @@ func (r *PostgresPOIRepository) GetPOIsByCityAndDistance(ctx context.Context, ci
 	return pois, nil
 }
 
-func (r *PostgresPOIRepository) AddPoiToFavourites(ctx context.Context, userID, poiID uuid.UUID) (uuid.UUID, error) {
+func (r *PostgresRepository) AddPoiToFavourites(ctx context.Context, userID, poiID uuid.UUID) (uuid.UUID, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -246,7 +246,7 @@ func (r *PostgresPOIRepository) AddPoiToFavourites(ctx context.Context, userID, 
 	return id, nil
 }
 
-func (r *PostgresPOIRepository) RemovePoiFromFavourites(ctx context.Context, poiID uuid.UUID, userID uuid.UUID) error {
+func (r *PostgresRepository) RemovePoiFromFavourites(ctx context.Context, poiID uuid.UUID, userID uuid.UUID) error {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
@@ -272,7 +272,7 @@ func (r *PostgresPOIRepository) RemovePoiFromFavourites(ctx context.Context, poi
 	return nil
 }
 
-func (r *PostgresPOIRepository) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error) {
+func (r *PostgresRepository) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -310,7 +310,7 @@ func (r *PostgresPOIRepository) GetFavouritePOIsByUserID(ctx context.Context, us
 	return pois, nil
 }
 
-func (r *PostgresPOIRepository) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error) {
+func (r *PostgresRepository) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -350,8 +350,8 @@ func (r *PostgresPOIRepository) GetPOIsByCityID(ctx context.Context, cityID uuid
 	return pois, nil
 }
 
-func (r *PostgresPOIRepository) FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error) {
-	ctx, span := otel.Tracer("POIRepository").Start(ctx, "FindPOIDetails", trace.WithAttributes(
+func (r *PostgresRepository) FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error) {
+	ctx, span := otel.Tracer("Repository").Start(ctx, "FindPOIDetails", trace.WithAttributes(
 		attribute.String("city.id", cityID.String()),
 		attribute.Float64("latitude", lat),
 		attribute.Float64("longitude", lon),
@@ -398,8 +398,8 @@ func (r *PostgresPOIRepository) FindPOIDetails(ctx context.Context, cityID uuid.
 	return &poi, nil
 }
 
-func (r *PostgresPOIRepository) SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
-	ctx, span := otel.Tracer("POIRepository").Start(ctx, "SavePOIDetails", trace.WithAttributes(
+func (r *PostgresRepository) SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+	ctx, span := otel.Tracer("Repository").Start(ctx, "SavePOIDetails", trace.WithAttributes(
 		attribute.String("city.id", cityID.String()),
 		attribute.String("poi.name", poi.Name),
 	))
@@ -435,7 +435,7 @@ func (r *PostgresPOIRepository) SavePOIDetails(ctx context.Context, poi types.PO
 	return id, nil
 }
 
-func (r *PostgresPOIRepository) FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error) {
+func (r *PostgresRepository) FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error) {
 	ctx, span := otel.Tracer("HotelRepository").Start(ctx, "FindHotelDetails", trace.WithAttributes(
 		attribute.String("city.id", cityID.String()),
 		attribute.Float64("latitude", lat),
@@ -497,7 +497,7 @@ func (r *PostgresPOIRepository) FindHotelDetails(ctx context.Context, cityID uui
 	return hotels, nil
 }
 
-func (r *PostgresPOIRepository) SaveHotelDetails(ctx context.Context, hotel types.HotelDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+func (r *PostgresRepository) SaveHotelDetails(ctx context.Context, hotel types.HotelDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	ctx, span := otel.Tracer("HotelRepository").Start(ctx, "SaveHotelDetails", trace.WithAttributes(
 		attribute.String("city.id", cityID.String()),
 		attribute.String("hotel.name", hotel.Name),
@@ -546,7 +546,7 @@ func (r *PostgresPOIRepository) SaveHotelDetails(ctx context.Context, hotel type
 	return id, nil
 }
 
-func (r *PostgresPOIRepository) GetHotelByID(ctx context.Context, hotelID uuid.UUID) (*types.HotelDetailedInfo, error) {
+func (r *PostgresRepository) GetHotelByID(ctx context.Context, hotelID uuid.UUID) (*types.HotelDetailedInfo, error) {
 	ctx, span := otel.Tracer("HotelRepository").Start(ctx, "GetHotelByID", trace.WithAttributes(
 		attribute.String("hotel.id", hotelID.String()),
 	))
@@ -586,7 +586,7 @@ func (r *PostgresPOIRepository) GetHotelByID(ctx context.Context, hotelID uuid.U
 	return &hotel, nil
 }
 
-func (r *PostgresPOIRepository) FindRestaurantDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64, preferences *types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error) {
+func (r *PostgresRepository) FindRestaurantDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64, preferences *types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error) {
 	ctx, span := otel.Tracer("RestaurantRepository").Start(ctx, "FindRestaurantDetails")
 	defer span.End()
 
@@ -642,7 +642,7 @@ func (r *PostgresPOIRepository) FindRestaurantDetails(ctx context.Context, cityI
 	return restaurants, nil
 }
 
-func (r *PostgresPOIRepository) SaveRestaurantDetails(ctx context.Context, restaurant types.RestaurantDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+func (r *PostgresRepository) SaveRestaurantDetails(ctx context.Context, restaurant types.RestaurantDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	ctx, span := otel.Tracer("RestaurantRepository").Start(ctx, "SaveRestaurantDetails", trace.WithAttributes(
 		attribute.String("restaurant.name", restaurant.Name),
 		attribute.String("city.id", cityID.String()),
@@ -751,7 +751,7 @@ func (r *PostgresPOIRepository) SaveRestaurantDetails(ctx context.Context, resta
 	return id, nil
 }
 
-func (r *PostgresPOIRepository) GetRestaurantByID(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error) {
+func (r *PostgresRepository) GetRestaurantByID(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error) {
 	ctx, span := otel.Tracer("RestaurantRepository").Start(ctx, "GetRestaurantByID")
 	defer span.End()
 
@@ -787,8 +787,8 @@ func (r *PostgresPOIRepository) GetRestaurantByID(ctx context.Context, restauran
 	return &restaurant, nil
 }
 
-func (r *PostgresPOIRepository) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error) {
-	ctx, span := otel.Tracer("POIRepository").Start(ctx, "SearchPOIs", trace.WithAttributes(
+func (r *PostgresRepository) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error) {
+	ctx, span := otel.Tracer("Repository").Start(ctx, "SearchPOIs", trace.WithAttributes(
 		attribute.Float64("location.latitude", filter.Location.Latitude),
 		attribute.Float64("location.longitude", filter.Location.Longitude),
 		attribute.Float64("radius", filter.Radius),

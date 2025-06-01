@@ -1,4 +1,4 @@
-package userInterest
+package interests
 
 import (
 	"context"
@@ -20,16 +20,16 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-var _ UserInterestRepo = (*PostgresUserInterestRepo)(nil)
+var _ Repository = (*RepositoryImpl)(nil)
 
-// UserInterestRepo defines the contract for user data persistence.
-type UserInterestRepo interface {
+// interestsRepo defines the contract for user data persistence.
+type Repository interface {
 	// CreateInterest ---  / Interests ---
 	CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error)
-	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
+	Removeinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	GetAllInterests(ctx context.Context) ([]*types.Interest, error)
 	GetInterest(ctx context.Context, interestID uuid.UUID) (*types.Interest, error)
-	UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error
+	Updateinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateinterestsParams) error
 	AddInterestToProfile(ctx context.Context, profileID, interestID uuid.UUID) error
 	// GetInterestsForProfile retrieves all interests associated with a profile
 	GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Interest, error)
@@ -37,20 +37,20 @@ type UserInterestRepo interface {
 	//GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]types.EnhancedInterest, error)
 }
 
-type PostgresUserInterestRepo struct {
+type RepositoryImpl struct {
 	logger *slog.Logger
 	pgpool *pgxpool.Pool
 }
 
-func NewPostgresUserInterestRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresUserInterestRepo {
-	return &PostgresUserInterestRepo{
+func NewRepositoryImpl(pgxpool *pgxpool.Pool, logger *slog.Logger) *RepositoryImpl {
+	return &RepositoryImpl{
 		logger: logger,
 		pgpool: pgxpool,
 	}
 }
 
 // CreateInterest implements user.CreateInterest
-func (r *PostgresUserInterestRepo) CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error) {
+func (r *RepositoryImpl) CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "CreateInterest", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
@@ -109,9 +109,9 @@ func (r *PostgresUserInterestRepo) CreateInterest(ctx context.Context, name stri
 	return &interest, nil
 }
 
-// RemoveUserInterest implements user.UserRepo.
-func (r *PostgresUserInterestRepo) RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
-	ctx, span := otel.Tracer("UserRepo").Start(ctx, "RemoveUserInterest", trace.WithAttributes(
+// Removeinterests implements user.UserRepo.
+func (r *RepositoryImpl) Removeinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
+	ctx, span := otel.Tracer("UserRepo").Start(ctx, "Removeinterests", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "DELETE"),
 		attribute.String("db.sql.table", "user_custom_interests"),
@@ -120,7 +120,7 @@ func (r *PostgresUserInterestRepo) RemoveUserInterest(ctx context.Context, userI
 	))
 	defer span.End()
 
-	l := r.logger.With(slog.String("method", "RemoveUserInterest"), slog.String("userID", userID.String()), slog.String("interestID", interestID.String()))
+	l := r.logger.With(slog.String("method", "Removeinterests"), slog.String("userID", userID.String()), slog.String("interestID", interestID.String()))
 	l.DebugContext(ctx, "Removing user interest")
 
 	query := "DELETE FROM user_custom_interests WHERE user_id = $1 AND id = $2"
@@ -146,7 +146,7 @@ func (r *PostgresUserInterestRepo) RemoveUserInterest(ctx context.Context, userI
 
 // GetAllInterests TODO does it make sense to only return the active interests ? Just mark active on the UI ?
 // GetAllInterests implements user.UserRepo.
-func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]*types.Interest, error) {
+func (r *RepositoryImpl) GetAllInterests(ctx context.Context) ([]*types.Interest, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetAllInterests", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "interests"),
@@ -199,7 +199,7 @@ func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]*type
 }
 
 // GetUserEnhancedInterests implements user.UserRepo.
-//func (r *PostgresUserInterestRepo) GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]types.EnhancedInterest, error) {
+//func (r *RepositoryImpl) GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]types.EnhancedInterest, error) {
 //	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserEnhancedInterests", trace.WithAttributes(
 //		semconv.DBSystemPostgreSQL,
 //		attribute.String("db.sql.table", "user_custom_interests, interests"),
@@ -251,7 +251,7 @@ func (r *PostgresUserInterestRepo) GetAllInterests(ctx context.Context) ([]*type
 //	return interests, nil
 //}
 
-func (r *PostgresUserInterestRepo) UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error {
+func (r *RepositoryImpl) Updateinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateinterestsParams) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "UpdateUserCustomInterest", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),
@@ -361,7 +361,7 @@ func (r *PostgresUserInterestRepo) UpdateUserInterest(ctx context.Context, userI
 	return nil
 }
 
-func (r *PostgresUserInterestRepo) GetInterest(ctx context.Context, interestID uuid.UUID) (*types.Interest, error) {
+func (r *RepositoryImpl) GetInterest(ctx context.Context, interestID uuid.UUID) (*types.Interest, error) {
 	var interest types.Interest
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetInterest", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
@@ -398,7 +398,7 @@ func (r *PostgresUserInterestRepo) GetInterest(ctx context.Context, interestID u
 	return &interest, nil
 }
 
-func (r *PostgresUserInterestRepo) AddInterestToProfile(ctx context.Context, profileID, interestID uuid.UUID) error {
+func (r *RepositoryImpl) AddInterestToProfile(ctx context.Context, profileID, interestID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "AddInterestToProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
@@ -430,7 +430,7 @@ func (r *PostgresUserInterestRepo) AddInterestToProfile(ctx context.Context, pro
 }
 
 // GetInterestsForProfile retrieves all interests associated with a profile
-func (r *PostgresUserInterestRepo) GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Interest, error) {
+func (r *RepositoryImpl) GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Interest, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetInterestsForProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "SELECT"),

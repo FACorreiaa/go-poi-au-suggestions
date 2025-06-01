@@ -1,4 +1,4 @@
-package userSearchProfile
+package profiles
 
 import (
 	"context"
@@ -21,10 +21,10 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-var _ UserSearchProfilesRepo = (*PostgresUserSearchProfilesRepo)(nil)
+var _ Repository = (*RepositoryImpl)(nil)
 
-// UserSearchProfilesRepo defines the contract for user data persistence.
-type UserSearchProfilesRepo interface {
+// profilessRepo defines the contract for user data persistence.
+type Repository interface {
 	// GetSearchProfiles --- User Preference Profiles ---
 	// GetSearchProfiles retrieves all preference profiles for a user
 	GetSearchProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error)
@@ -42,13 +42,13 @@ type UserSearchProfilesRepo interface {
 	SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error
 }
 
-type PostgresUserSearchProfilesRepo struct {
+type RepositoryImpl struct {
 	logger *slog.Logger
 	pgpool *pgxpool.Pool
 }
 
-func NewPostgresUserRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresUserSearchProfilesRepo {
-	return &PostgresUserSearchProfilesRepo{
+func NewPostgresUserRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *RepositoryImpl {
+	return &RepositoryImpl{
 		logger: logger,
 		pgpool: pgxpool,
 	}
@@ -66,7 +66,7 @@ func NewPostgresUserRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresUs
 //ORDER BY upp.profile_name
 
 // GetProfiles implements user.UserRepo.
-func (r *PostgresUserSearchProfilesRepo) GetSearchProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error) {
+func (r *RepositoryImpl) GetSearchProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserPreferenceProfiles", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "user_preference_profiles"),
@@ -124,7 +124,7 @@ func (r *PostgresUserSearchProfilesRepo) GetSearchProfiles(ctx context.Context, 
 }
 
 // GetProfile implements user.UserRepo.
-func (r *PostgresUserSearchProfilesRepo) GetSearchProfile(ctx context.Context, userID, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
+func (r *RepositoryImpl) GetSearchProfile(ctx context.Context, userID, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "user_preference_profiles"),
@@ -163,7 +163,7 @@ func (r *PostgresUserSearchProfilesRepo) GetSearchProfile(ctx context.Context, u
 }
 
 // GetDefaultProfile implements user.UserRepo.
-func (r *PostgresUserSearchProfilesRepo) GetDefaultSearchProfile(ctx context.Context, userID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
+func (r *RepositoryImpl) GetDefaultSearchProfile(ctx context.Context, userID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetDefaultUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "user_preference_profiles"),
@@ -202,7 +202,7 @@ func (r *PostgresUserSearchProfilesRepo) GetDefaultSearchProfile(ctx context.Con
 }
 
 // CreateProfile implements user.UserRepo.
-func (r *PostgresUserSearchProfilesRepo) CreateSearchProfile(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error) {
+func (r *RepositoryImpl) CreateSearchProfile(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "CreateUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
@@ -323,7 +323,7 @@ func (r *PostgresUserSearchProfilesRepo) CreateSearchProfile(ctx context.Context
 }
 
 // UpdateProfile implements user.UserRepo.
-func (r *PostgresUserSearchProfilesRepo) UpdateSearchProfile(ctx context.Context, userID, profileID uuid.UUID, params types.UpdateSearchProfileParams) error {
+func (r *RepositoryImpl) UpdateSearchProfile(ctx context.Context, userID, profileID uuid.UUID, params types.UpdateSearchProfileParams) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "UpdateUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),
@@ -466,7 +466,7 @@ func (r *PostgresUserSearchProfilesRepo) UpdateSearchProfile(ctx context.Context
 }
 
 // DeleteProfile implements user.UserRepo.
-func (r *PostgresUserSearchProfilesRepo) DeleteSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
+func (r *RepositoryImpl) DeleteSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "DeleteUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "DELETE"),
@@ -527,7 +527,7 @@ func (r *PostgresUserSearchProfilesRepo) DeleteSearchProfile(ctx context.Context
 }
 
 // SetDefaultProfile implements user.UserRepo.
-func (r *PostgresUserSearchProfilesRepo) SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
+func (r *RepositoryImpl) SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "SetDefaultUserPreferenceProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),

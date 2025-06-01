@@ -1,4 +1,4 @@
-package userInterest
+package interests
 
 import (
 	"context"
@@ -15,40 +15,40 @@ import (
 )
 
 // Ensure implementation satisfies the interface
-var _ UserInterestService = (*UserInterestServiceImpl)(nil)
+var _ interestsService = (*interestsServiceImpl)(nil)
 
-// UserInterestService defines the business logic contract for user operations.
-type UserInterestService interface {
-	//RemoveUserInterest remove interests
-	RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
+// interestsService defines the business logic contract for user operations.
+type interestsService interface {
+	//Removeinterests remove interests
+	Removeinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error
 	GetAllInterests(ctx context.Context) ([]*types.Interest, error)
 	CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error)
-	UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error
+	Updateinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateinterestsParams) error
 }
 
-// UserInterestServiceImpl provides the implementation for UserInterestService.
-type UserInterestServiceImpl struct {
+// interestsServiceImpl provides the implementation for interestsService.
+type interestsServiceImpl struct {
 	logger *slog.Logger
-	repo   UserInterestRepo
+	repo   Repository
 }
 
-// NewUserInterestService creates a new user service instance.
-func NewUserInterestService(repo UserInterestRepo, logger *slog.Logger) *UserInterestServiceImpl {
-	return &UserInterestServiceImpl{
+// NewinterestsService creates a new user service instance.
+func NewinterestsService(repo Repository, logger *slog.Logger) *interestsServiceImpl {
+	return &interestsServiceImpl{
 		logger: logger,
 		repo:   repo,
 	}
 }
 
 // CreateInterest create user interest
-func (s *UserInterestServiceImpl) CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error) {
-	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "CreateUserInterest", trace.WithAttributes(
+func (s *interestsServiceImpl) CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error) {
+	ctx, span := otel.Tracer("interestsService").Start(ctx, "Createinterests", trace.WithAttributes(
 		attribute.String("name", name),
 		attribute.String("description", *description),
 	))
 	defer span.End()
 
-	l := s.logger.With(slog.String("method", "CreateUserInterest"),
+	l := s.logger.With(slog.String("method", "Createinterests"),
 		slog.String("name", name), slog.String("description", *description))
 	l.DebugContext(ctx, "Adding user interest")
 
@@ -65,18 +65,18 @@ func (s *UserInterestServiceImpl) CreateInterest(ctx context.Context, name strin
 	return interest, nil
 }
 
-// RemoveUserInterest removes an interest from a user's preferences.
-func (s *UserInterestServiceImpl) RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
-	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "RemoveUserInterest", trace.WithAttributes(
+// Removeinterests removes an interest from a user's preferences.
+func (s *interestsServiceImpl) Removeinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
+	ctx, span := otel.Tracer("interestsService").Start(ctx, "Removeinterests", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 		attribute.String("interest.id", interestID.String()),
 	))
 	defer span.End()
 
-	l := s.logger.With(slog.String("method", "RemoveUserInterest"), slog.String("userID", userID.String()), slog.String("interestID", interestID.String()))
+	l := s.logger.With(slog.String("method", "Removeinterests"), slog.String("userID", userID.String()), slog.String("interestID", interestID.String()))
 	l.DebugContext(ctx, "Removing user interest")
 
-	err := s.repo.RemoveUserInterest(ctx, userID, interestID)
+	err := s.repo.Removeinterests(ctx, userID, interestID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to remove user interest", slog.Any("error", err))
 		span.RecordError(err)
@@ -90,8 +90,8 @@ func (s *UserInterestServiceImpl) RemoveUserInterest(ctx context.Context, userID
 }
 
 // GetAllInterests retrieves all available interests.
-func (s *UserInterestServiceImpl) GetAllInterests(ctx context.Context) ([]*types.Interest, error) {
-	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "GetAllInterests")
+func (s *interestsServiceImpl) GetAllInterests(ctx context.Context) ([]*types.Interest, error) {
+	ctx, span := otel.Tracer("interestsService").Start(ctx, "GetAllInterests")
 	defer span.End()
 
 	l := s.logger.With(slog.String("method", "GetAllInterests"))
@@ -110,17 +110,17 @@ func (s *UserInterestServiceImpl) GetAllInterests(ctx context.Context) ([]*types
 	return interests, nil
 }
 
-func (s *UserInterestServiceImpl) UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error {
-	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "UpdateUserInterest", trace.WithAttributes(
+func (s *interestsServiceImpl) Updateinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateinterestsParams) error {
+	ctx, span := otel.Tracer("interestsService").Start(ctx, "Updateinterests", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 		attribute.String("interest.id", interestID.String()),
 	))
 	defer span.End()
 
-	l := s.logger.With(slog.String("method", "UpdateUserInterest"), slog.String("userID", userID.String()), slog.String("interestID", interestID.String()))
+	l := s.logger.With(slog.String("method", "Updateinterests"), slog.String("userID", userID.String()), slog.String("interestID", interestID.String()))
 	l.DebugContext(ctx, "Updating user interest")
 
-	err := s.repo.UpdateUserInterest(ctx, userID, interestID, params)
+	err := s.repo.Updateinterests(ctx, userID, interestID, params)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to update user interest", slog.Any("error", err))
 		span.RecordError(err)
@@ -131,8 +131,8 @@ func (s *UserInterestServiceImpl) UpdateUserInterest(ctx context.Context, userID
 }
 
 // GetUserEnhancedInterests retrieves a user's enhanced interests.
-//func (s *UserInterestServiceImpl) GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]types.EnhancedInterest, error) {
-//	ctx, span := otel.Tracer("UserInterestService").Start(ctx, "GetUserEnhancedInterests", trace.WithAttributes(
+//func (s *interestsServiceImpl) GetUserEnhancedInterests(ctx context.Context, userID uuid.UUID) ([]types.EnhancedInterest, error) {
+//	ctx, span := otel.Tracer("interestsService").Start(ctx, "GetUserEnhancedInterests", trace.WithAttributes(
 //		attribute.String("user.id", userID.String()),
 //	))
 //	defer span.End()

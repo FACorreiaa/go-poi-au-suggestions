@@ -11,13 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
-	generativeAI "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
-	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
-	userSearchProfile "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_search_profiles"
-	userTags "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_tags"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"github.com/google/uuid"
 	"github.com/patrickmn/go-cache"
 	"go.opentelemetry.io/otel"
@@ -25,6 +18,14 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/genai"
+
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
+	generativeAI "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/tags"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 const (
@@ -66,23 +67,23 @@ type LlmInteractiontService interface {
 // LlmInteractiontServiceImpl provides the implementation for LlmInteractiontService.
 type LlmInteractiontServiceImpl struct {
 	logger             *slog.Logger
-	interestRepo       userInterest.UserInterestRepo
-	searchProfileRepo  userSearchProfile.UserSearchProfilesRepo
-	tagsRepo           userTags.UserTagsRepo
+	interestRepo       interests.Repository
+	searchProfileRepo  profiles.Repository
+	tagsRepo           tags.Repository
 	aiClient           *generativeAI.AIClient
-	llmInteractionRepo LLmInteractionRepository
-	cityRepo           city.CityRepository
-	poiRepo            poi.POIRepository
+	llmInteractionRepo Repository
+	cityRepo           city.Repository
+	poiRepo            poi.Repository
 	cache              *cache.Cache
 }
 
 // NewLlmInteractiontService creates a new user service instance.
-func NewLlmInteractiontService(interestRepo userInterest.UserInterestRepo,
-	searchProfileRepo userSearchProfile.UserSearchProfilesRepo,
-	tagsRepo userTags.UserTagsRepo,
+func NewLlmInteractiontService(interestRepo interests.Repository,
+	searchProfileRepo profiles.Repository,
+	tagsRepo tags.Repository,
 	llmInteractionRepo LLmInteractionRepository,
-	cityRepo city.CityRepository,
-	poiRepo poi.POIRepository,
+	cityRepo city.Repository,
+	poiRepo poi.Repository,
 	logger *slog.Logger) *LlmInteractiontServiceImpl {
 	ctx := context.Background()
 	aiClient, err := generativeAI.NewAIClient(ctx)

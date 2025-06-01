@@ -22,6 +22,8 @@ type UserProfile struct {
 	IsActive        bool       `json:"is_active"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"` // Use pointer if nullable
 	LastLoginAt     *time.Time `json:"last_login_at,omitempty"`     // Use pointer if nullable
+	Theme           *string    `json:"theme,omitempty"`             // Use pointer if nullable
+	Language        *string    `json:"language,omitempty"`          // Use pointer if nullable
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 }

@@ -9,7 +9,7 @@ Your WanderWiseAI application leverages the Gemini API to:
 
  
 
- - Read User Interests: Fetch user preferences from the user_interests  
+ - Read User Interests: Fetch user preferences from the interests  
    or user_profile_interests tables and use them to craft personalized  
    itineraries.
    
@@ -138,13 +138,13 @@ Database Query
     
       
     
-    func (s *UserService) GetUserInterests(ctx context.Context, userID string) ([]string, error) {
+    func (s *UserService) Getinterestss(ctx context.Context, userID string) ([]string, error) {
     
     rows, err := s.db.Query(ctx, `
     
     SELECT i.name
     
-    FROM user_interests ui
+    FROM interests ui
     
     JOIN interests i ON ui.interest_id = i.id
     
@@ -200,7 +200,7 @@ Database Query
     
     userSvc := UserService{db: /* your DB connection */}
     
-    interests, err := userSvc.GetUserInterests(ctx, userID)
+    interests, err := userSvc.Getinterestss(ctx, userID)
     
     if err != nil {
     
@@ -348,7 +348,7 @@ Define a Function
     
     userSvc := UserService{db: /* your DB connection */}
     
-    interests, err := userSvc.GetUserInterests(ctx, userID)
+    interests, err := userSvc.Getinterestss(ctx, userID)
     
     if err != nil {
     

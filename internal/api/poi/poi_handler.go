@@ -32,11 +32,11 @@ type Handler interface {
 }
 
 type HandlerImpl struct {
-	poiService POIService
+	poiService Service
 	logger     *slog.Logger
 }
 
-func NewHandlerImpl(poiService POIService, logger *slog.Logger) *HandlerImpl {
+func NewHandlerImpl(poiService Service, logger *slog.Logger) *HandlerImpl {
 	return &HandlerImpl{
 		poiService: poiService,
 		logger:     logger,

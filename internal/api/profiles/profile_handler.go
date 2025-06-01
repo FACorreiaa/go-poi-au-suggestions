@@ -1,4 +1,4 @@
-package userSearchProfile
+package profiles
 
 import (
 	"errors"
@@ -32,12 +32,12 @@ type Handler interface {
 	SetDefaultSearchProfile(w http.ResponseWriter, r *http.Request)
 }
 type HandlerImpl struct {
-	userService UserSearchProfilesService
+	userService Service
 	logger      *slog.Logger
 }
 
 // NewUserHandlerImpl creates a new user HandlerImpl instance.
-func NewUserHandlerImpl(userService UserSearchProfilesService, logger *slog.Logger) *HandlerImpl {
+func NewUserHandlerImpl(userService Service, logger *slog.Logger) *HandlerImpl {
 	instanceAddress := fmt.Sprintf("%p", logger)
 	slog.Info("Creating NewUserHandlerImpl", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
 	if logger == nil {

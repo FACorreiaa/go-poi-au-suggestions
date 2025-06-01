@@ -58,7 +58,7 @@ Based on your "Elevator Pitch" and "Core Features," here are some high-impact ad
     *   **Why:** To get the initial data for personalization.
     *   **Implementation:**
         *   A simple onboarding flow after signup where users can select their top interests (from a predefined list that maps to what your AI understands).
-        *   These are saved via your existing `userInterest.UserInterestRepo`.
+        *   These are saved via your existing `interests.interestsRepo`.
         *   The `searchProfile` can have sensible defaults initially, with a separate "Settings" page for users to adjust radius, pace, vibes, etc., later.
 
 **What to Defer from the MVP (based on your current plan & complexity):**

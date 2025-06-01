@@ -1,4 +1,4 @@
-package userSearchProfile
+package profiles
 
 import (
 	"context"
@@ -12,16 +12,16 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
-	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
-	userTags "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_tags"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/tags"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
 // Ensure implementation satisfies the interface
-var _ UserSearchProfilesService = (*UserSearchProfilesServiceImpl)(nil)
+var _ Service = (*ServiceImpl)(nil)
 
-// UserSearchProfilesService defines the business logic contract for user operations.
-type UserSearchProfilesService interface {
+// profilessService defines the business logic contract for user operations.
+type Service interface {
 	//GetSearchProfiles User  Profiles
 	GetSearchProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error)
 	GetSearchProfile(ctx context.Context, userID, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error)
@@ -32,16 +32,16 @@ type UserSearchProfilesService interface {
 	SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error
 }
 
-// UserSearchProfilesServiceImpl provides the implementation for UserService.
-type UserSearchProfilesServiceImpl struct {
+// ServiceImpl provides the implementation for UserService.
+type ServiceImpl struct {
 	logger   *slog.Logger
-	prefRepo UserSearchProfilesRepo
-	intRepo  userInterest.UserInterestRepo
-	tagRepo  userTags.UserTagsRepo
+	prefRepo Repository
+	intRepo  interests.Repository
+	tagRepo  tags.Repository
 }
 
-func NewUserProfilesService(prefRepo UserSearchProfilesRepo, intRepo userInterest.UserInterestRepo, tagRepo userTags.UserTagsRepo, logger *slog.Logger) *UserSearchProfilesServiceImpl {
-	return &UserSearchProfilesServiceImpl{
+func NewUserProfilesService(prefRepo Repository, intRepo interests.Repository, tagRepo tags.Repository, logger *slog.Logger) *ServiceImpl {
+	return &ServiceImpl{
 		prefRepo: prefRepo,
 		intRepo:  intRepo,
 		tagRepo:  tagRepo,
@@ -50,7 +50,7 @@ func NewUserProfilesService(prefRepo UserSearchProfilesRepo, intRepo userInteres
 }
 
 // GetSearchProfiles retrieves all preference profiles for a user.
-func (s *UserSearchProfilesServiceImpl) GetSearchProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error) {
+func (s *ServiceImpl) GetSearchProfiles(ctx context.Context, userID uuid.UUID) ([]types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "GetSearchProfiles", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 	))
@@ -73,7 +73,7 @@ func (s *UserSearchProfilesServiceImpl) GetSearchProfiles(ctx context.Context, u
 }
 
 // GetSearchProfile retrieves a specific preference profile by ID.
-func (s *UserSearchProfilesServiceImpl) GetSearchProfile(ctx context.Context, userID, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
+func (s *ServiceImpl) GetSearchProfile(ctx context.Context, userID, profileID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "GetSearchProfile", trace.WithAttributes(
 		attribute.String("profile.id", profileID.String()),
 	))
@@ -96,7 +96,7 @@ func (s *UserSearchProfilesServiceImpl) GetSearchProfile(ctx context.Context, us
 }
 
 // GetDefaultSearchProfile retrieves the default preference profile for a user.
-func (s *UserSearchProfilesServiceImpl) GetDefaultSearchProfile(ctx context.Context, userID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
+func (s *ServiceImpl) GetDefaultSearchProfile(ctx context.Context, userID uuid.UUID) (*types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "GetDefaultSearchProfile", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 	))
@@ -118,31 +118,8 @@ func (s *UserSearchProfilesServiceImpl) GetDefaultSearchProfile(ctx context.Cont
 	return profile, nil
 }
 
-// CreateSearchProfile creates a new preference profile for a user.
-//func (s *UserProfilesServiceImpl) CreateSearchProfile(ctx context.Context, userID uuid.UUID, params api.CreateUserPreferenceProfileParams) (*api.UserPreferenceProfile, error) {
-//	ctx, span := otel.Tracer("UserService").Start(ctx, "CreateUserPreferenceProfile", trace.WithAttributes(
-//		attribute.String("user.id", userID.String()),
-//	))
-//	defer span.End()
-//
-//	l := s.logger.With(slog.String("method", "CreateUserPreferenceProfile"), slog.String("userID", userID.String()))
-//	l.DebugContext(ctx, "Creating user preference profile", slog.String("profileName", params.ProfileName))
-//
-//	profile, err := s.prefRepo.CreateSearchProfile(ctx, userID, params)
-//	if err != nil {
-//		l.ErrorContext(ctx, "Failed to create user preference profile", slog.Any("error", err))
-//		span.RecordError(err)
-//		span.SetStatus(codes.Error, "Failed to create user preference profile")
-//		return nil, fmt.Errorf("error creating user preference profile: %w", err)
-//	}
-//
-//	l.InfoContext(ctx, "User preference profile created successfully", slog.String("profileID", profile.ID.String()))
-//	span.SetStatus(codes.Ok, "User preference profile created successfully")
-//	return profile, nil
-//}
-
 // CreateSearchProfileCC TODO fix Create profile interests and tags
-func (s *UserSearchProfilesServiceImpl) CreateSearchProfileCC(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error) { // Return the richer response type
+func (s *ServiceImpl) CreateSearchProfileCC(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error) { // Return the richer response type
 
 	ctx, span := otel.Tracer("PreferenceService").Start(ctx, "CreateSearchProfile")
 	defer span.End()
@@ -155,7 +132,7 @@ func (s *UserSearchProfilesServiceImpl) CreateSearchProfileCC(ctx context.Contex
 		return nil, fmt.Errorf("%w: profile name cannot be empty", types.ErrBadRequest)
 	}
 
-	tx, err := s.prefRepo.(*PostgresUserSearchProfilesRepo).pgpool.Begin(ctx)
+	tx, err := s.prefRepo.(*RepositoryImpl).pgpool.Begin(ctx)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to begin transaction", slog.Any("error", err))
 		span.RecordError(err)
@@ -288,7 +265,7 @@ func (s *UserSearchProfilesServiceImpl) CreateSearchProfileCC(ctx context.Contex
 }
 
 // CreateSearchProfile userProfiles/service.go
-func (s *UserSearchProfilesServiceImpl) CreateSearchProfile(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error) {
+func (s *ServiceImpl) CreateSearchProfile(ctx context.Context, userID uuid.UUID, params types.CreateUserPreferenceProfileParams) (*types.UserPreferenceProfileResponse, error) {
 	ctx, span := otel.Tracer("PreferenceService").Start(ctx, "CreateSearchProfile", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 		attribute.String("profile.name", params.ProfileName),
@@ -332,7 +309,7 @@ func (s *UserSearchProfilesServiceImpl) CreateSearchProfile(ctx context.Context,
 	}
 
 	// Begin a transaction
-	tx, err := s.prefRepo.(*PostgresUserSearchProfilesRepo).pgpool.Begin(ctx)
+	tx, err := s.prefRepo.(*RepositoryImpl).pgpool.Begin(ctx)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to begin transaction", slog.Any("error", err))
 		span.RecordError(err)
@@ -424,7 +401,7 @@ func (s *UserSearchProfilesServiceImpl) CreateSearchProfile(ctx context.Context,
 }
 
 // DeleteSearchProfile deletes a preference profile.
-func (s *UserSearchProfilesServiceImpl) DeleteSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
+func (s *ServiceImpl) DeleteSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "DeleteSearchProfile", trace.WithAttributes(
 		attribute.String("profile.id", profileID.String()),
 	))
@@ -447,7 +424,7 @@ func (s *UserSearchProfilesServiceImpl) DeleteSearchProfile(ctx context.Context,
 }
 
 // SetDefaultSearchProfile sets a profile as the default for a user.
-func (s *UserSearchProfilesServiceImpl) SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
+func (s *ServiceImpl) SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "SetDefaultSearchProfile", trace.WithAttributes(
 		attribute.String("profile.id", profileID.String()),
 	))
@@ -469,8 +446,8 @@ func (s *UserSearchProfilesServiceImpl) SetDefaultSearchProfile(ctx context.Cont
 	return nil
 }
 
-// UpdateSearchProfile implements UserSearchProfilesService.
-func (s *UserSearchProfilesServiceImpl) UpdateSearchProfile(ctx context.Context, userID, profileID uuid.UUID, params types.UpdateSearchProfileParams) error {
+// UpdateSearchProfile implements profilessService.
+func (s *ServiceImpl) UpdateSearchProfile(ctx context.Context, userID, profileID uuid.UUID, params types.UpdateSearchProfileParams) error {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "UpdateSearchProfile", trace.WithAttributes(
 		attribute.String("profile.id", profileID.String()),
 	))

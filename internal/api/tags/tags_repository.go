@@ -1,4 +1,4 @@
-package userTags
+package tags
 
 import (
 	"context"
@@ -19,10 +19,10 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-var _ UserTagsRepo = (*PostgresUserTagsRepo)(nil)
+var _ Repository = (*RepositoryImpl)(nil)
 
-// UserTagsRepo defines the contract for user data persistence.
-type UserTagsRepo interface {
+// Repository tagsRepo defines the contract for user data persistence.
+type Repository interface {
 	// GetAll --- Global Tags & User Avoid Tags ---
 	// GetAll retrieves all global tags
 	GetAll(ctx context.Context, userID uuid.UUID) ([]*types.Tags, error)
@@ -49,20 +49,20 @@ type UserTagsRepo interface {
 	GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Tags, error)
 }
 
-type PostgresUserTagsRepo struct {
+type RepositoryImpl struct {
 	logger *slog.Logger
 	pgpool *pgxpool.Pool
 }
 
-func NewPostgresUserTagsRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresUserTagsRepo {
-	return &PostgresUserTagsRepo{
+func NewRepositoryImpl(pgxpool *pgxpool.Pool, logger *slog.Logger) *RepositoryImpl {
+	return &RepositoryImpl{
 		logger: logger,
 		pgpool: pgxpool,
 	}
 }
 
 // GetAll implements user.UserRepo.
-func (r *PostgresUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]*types.Tags, error) {
+func (r *RepositoryImpl) GetAll(ctx context.Context, userID uuid.UUID) ([]*types.Tags, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetAllGlobalTags", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "global_tags"),
@@ -137,7 +137,7 @@ func (r *PostgresUserTagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]
 }
 
 // Get implements user.UserRepo.
-func (r *PostgresUserTagsRepo) Get(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error) {
+func (r *RepositoryImpl) Get(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error) {
 	var tag types.Tags
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserAvoidTags", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
@@ -197,8 +197,8 @@ func (r *PostgresUserTagsRepo) Get(ctx context.Context, userID, tagID uuid.UUID)
 }
 
 // Create creates a new personal tag for a specific user.
-func (r *PostgresUserTagsRepo) Create(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error) {
-	ctx, span := otel.Tracer("UserTagsRepo").Start(ctx, "CreatePersonalTag", trace.WithAttributes(
+func (r *RepositoryImpl) Create(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error) {
+	ctx, span := otel.Tracer("tagsRepo").Start(ctx, "CreatePersonalTag", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
 		attribute.String("db.sql.table", "user_personal_tags"),
@@ -264,8 +264,8 @@ func (r *PostgresUserTagsRepo) Create(ctx context.Context, userID uuid.UUID, par
 }
 
 // Update updates the name and/or type of an existing personal tag for a specific user.
-func (r *PostgresUserTagsRepo) Update(ctx context.Context, userID, tagsID uuid.UUID, params types.UpdatePersonalTagParams) error {
-	ctx, span := otel.Tracer("UserTagsRepo").Start(ctx, "UpdatePersonalTag", trace.WithAttributes(
+func (r *RepositoryImpl) Update(ctx context.Context, userID, tagsID uuid.UUID, params types.UpdatePersonalTagParams) error {
+	ctx, span := otel.Tracer("tagsRepo").Start(ctx, "UpdatePersonalTag", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),
 		attribute.String("db.sql.table", "user_personal_tags"),
@@ -325,8 +325,8 @@ func (r *PostgresUserTagsRepo) Update(ctx context.Context, userID, tagsID uuid.U
 }
 
 // Delete deletes a specific personal tag belonging to a user.
-func (r *PostgresUserTagsRepo) Delete(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
-	ctx, span := otel.Tracer("UserTagsRepo").Start(ctx, "DeletePersonalTag", trace.WithAttributes(
+func (r *RepositoryImpl) Delete(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
+	ctx, span := otel.Tracer("tagsRepo").Start(ctx, "DeletePersonalTag", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "DELETE"),
 		attribute.String("db.sql.table", "user_personal_tags"),
@@ -379,7 +379,7 @@ func (r *PostgresUserTagsRepo) Delete(ctx context.Context, userID uuid.UUID, tag
 }
 
 // GetTagByName retrieves a tag by name
-func (r *PostgresUserTagsRepo) GetTagByName(ctx context.Context, name string) (*types.Tags, error) {
+func (r *RepositoryImpl) GetTagByName(ctx context.Context, name string) (*types.Tags, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetTagByName", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "SELECT"),
@@ -422,7 +422,7 @@ func (r *PostgresUserTagsRepo) GetTagByName(ctx context.Context, name string) (*
 }
 
 // LinkPersonalTagToProfile links a tag to a profile
-func (r *PostgresUserTagsRepo) LinkPersonalTagToProfile(ctx context.Context, userID, profileID, tagID uuid.UUID) error {
+func (r *RepositoryImpl) LinkPersonalTagToProfile(ctx context.Context, userID, profileID, tagID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "AddTagToProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
@@ -456,7 +456,7 @@ func (r *PostgresUserTagsRepo) LinkPersonalTagToProfile(ctx context.Context, use
 }
 
 // GetTagsForProfile retrieves all tags associated with a profile
-func (r *PostgresUserTagsRepo) GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Tags, error) {
+func (r *RepositoryImpl) GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Tags, error) {
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetTagsForProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "SELECT"),

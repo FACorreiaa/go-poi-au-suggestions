@@ -13,26 +13,26 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var _ CityRepository = (*PostgresCityRepository)(nil)
+var _ Repository = (*RepositoryImpl)(nil)
 
-type CityRepository interface {
+type Repository interface {
 	SaveCity(ctx context.Context, city types.CityDetail) (uuid.UUID, error)
 	FindCityByNameAndCountry(ctx context.Context, city, country string) (*types.CityDetail, error)
 }
 
-type PostgresCityRepository struct {
+type RepositoryImpl struct {
 	logger *slog.Logger
 	pgpool *pgxpool.Pool
 }
 
-func NewCityRepository(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresCityRepository {
-	return &PostgresCityRepository{
+func NewCityRepository(pgxpool *pgxpool.Pool, logger *slog.Logger) *RepositoryImpl {
+	return &RepositoryImpl{
 		logger: logger,
 		pgpool: pgxpool,
 	}
 }
 
-func (r *PostgresCityRepository) SaveCity(ctx context.Context, city types.CityDetail) (uuid.UUID, error) {
+func (r *RepositoryImpl) SaveCity(ctx context.Context, city types.CityDetail) (uuid.UUID, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -132,7 +132,7 @@ func NewNullFloat64(f float64) sql.NullFloat64 {
 }
 
 // You'll also need to update FindCityByNameAndCountry to retrieve these new fields.
-func (r *PostgresCityRepository) FindCityByNameAndCountry(ctx context.Context, cityName, countryName string) (*types.CityDetail, error) {
+func (r *RepositoryImpl) FindCityByNameAndCountry(ctx context.Context, cityName, countryName string) (*types.CityDetail, error) {
 	query := `
         SELECT 
             id, name, country, 

@@ -1,4 +1,4 @@
-package userTags
+package tags
 
 import (
 	"context"
@@ -15,10 +15,10 @@ import (
 )
 
 // Ensure implementation satisfies the interface
-var _ UserTagsService = (*UserTagsServiceImpl)(nil)
+var _ tagsService = (*tagsServiceImpl)(nil)
 
-// UserTagsService defines the business logic contract for user operations.
-type UserTagsService interface {
+// tagsService defines the business logic contract for user operations.
+type tagsService interface {
 	GetTags(ctx context.Context, userID uuid.UUID) ([]*types.Tags, error)
 	GetTag(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error)
 	CreateTag(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error)
@@ -26,22 +26,22 @@ type UserTagsService interface {
 	Update(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, params types.UpdatePersonalTagParams) error
 }
 
-// UserTagsServiceImpl provides the implementation for UserService.
-type UserTagsServiceImpl struct {
+// tagsServiceImpl provides the implementation for UserService.
+type tagsServiceImpl struct {
 	logger *slog.Logger
-	repo   UserTagsRepo
+	repo   Repository
 }
 
-// NewUserTagsService creates a new user service instance.
-func NewUserTagsService(repo UserTagsRepo, logger *slog.Logger) *UserTagsServiceImpl {
-	return &UserTagsServiceImpl{
+// NewtagsService creates a new user service instance.
+func NewtagsService(repo Repository, logger *slog.Logger) *tagsServiceImpl {
+	return &tagsServiceImpl{
 		logger: logger,
 		repo:   repo,
 	}
 }
 
 // GetTags retrieves all global tags.
-func (s *UserTagsServiceImpl) GetTags(ctx context.Context, userID uuid.UUID) ([]*types.Tags, error) {
+func (s *tagsServiceImpl) GetTags(ctx context.Context, userID uuid.UUID) ([]*types.Tags, error) {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "GetAllGlobalTags")
 	defer span.End()
 
@@ -62,7 +62,7 @@ func (s *UserTagsServiceImpl) GetTags(ctx context.Context, userID uuid.UUID) ([]
 }
 
 // GetTag retrieves all avoid tags for a user.
-func (s *UserTagsServiceImpl) GetTag(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error) {
+func (s *tagsServiceImpl) GetTag(ctx context.Context, userID, tagID uuid.UUID) (*types.Tags, error) {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "GetUserAvoidTags", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 	))
@@ -85,7 +85,7 @@ func (s *UserTagsServiceImpl) GetTag(ctx context.Context, userID, tagID uuid.UUI
 }
 
 // CreateTag adds an avoid tag for a user.
-func (s *UserTagsServiceImpl) CreateTag(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error) {
+func (s *tagsServiceImpl) CreateTag(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error) {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "AddUserAvoidTag", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 	))
@@ -108,7 +108,7 @@ func (s *UserTagsServiceImpl) CreateTag(ctx context.Context, userID uuid.UUID, p
 }
 
 // DeleteTag removes an avoid tag for a user.
-func (s *UserTagsServiceImpl) DeleteTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
+func (s *tagsServiceImpl) DeleteTag(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "RemoveUserAvoidTag", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 		attribute.String("tag.id", tagID.String()),
@@ -131,7 +131,7 @@ func (s *UserTagsServiceImpl) DeleteTag(ctx context.Context, userID uuid.UUID, t
 	return nil
 }
 
-func (s *UserTagsServiceImpl) Update(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, params types.UpdatePersonalTagParams) error {
+func (s *tagsServiceImpl) Update(ctx context.Context, userID uuid.UUID, tagID uuid.UUID, params types.UpdatePersonalTagParams) error {
 	ctx, span := otel.Tracer("UserService").Start(ctx, "UpdateUserAvoidTag", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 		attribute.String("tag.id", tagID.String()),

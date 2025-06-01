@@ -1,4 +1,4 @@
-package userTags
+package tags
 
 import (
 	"fmt"
@@ -27,12 +27,12 @@ type Handler interface {
 	UpdateTag(w http.ResponseWriter, r *http.Request)
 }
 type HandlerImpl struct {
-	userTagsService UserTagsService
-	logger          *slog.Logger
+	tagsService tagsService
+	logger      *slog.Logger
 }
 
 // NewHandlerImpl creates a new user HandlerImpl instance.
-func NewHandlerImpl(userService UserTagsService, logger *slog.Logger) *HandlerImpl {
+func NewHandlerImpl(userService tagsService, logger *slog.Logger) *HandlerImpl {
 	instanceAddress := fmt.Sprintf("%p", logger)
 	slog.Info("Creating NewUserHandlerImpl", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
 	if logger == nil {
@@ -40,8 +40,8 @@ func NewHandlerImpl(userService UserTagsService, logger *slog.Logger) *HandlerIm
 	}
 
 	return &HandlerImpl{
-		userTagsService: userService,
-		logger:          logger,
+		tagsService: userService,
+		logger:      logger,
 	}
 }
 
@@ -83,7 +83,7 @@ func (u *HandlerImpl) GetTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tags, err := u.userTagsService.GetTags(ctx, userID)
+	tags, err := u.tagsService.GetTags(ctx, userID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to get user tags", slog.Any("error", err))
 		span.RecordError(err)
@@ -131,7 +131,7 @@ func (u *HandlerImpl) GetTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tag, err := u.userTagsService.GetTag(ctx, userID, tagID)
+	tag, err := u.tagsService.GetTag(ctx, userID, tagID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to get user tag", slog.Any("error", err))
 		span.RecordError(err)
@@ -177,7 +177,7 @@ func (u *HandlerImpl) CreateTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tag, err := u.userTagsService.CreateTag(ctx, userID, req)
+	tag, err := u.tagsService.CreateTag(ctx, userID, req)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to create user tag", slog.Any("error", err))
 		span.RecordError(err)
@@ -223,7 +223,7 @@ func (u *HandlerImpl) DeleteTag(w http.ResponseWriter, r *http.Request) {
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid tag ID format")
 	}
 
-	err = u.userTagsService.DeleteTag(ctx, userID, tagID)
+	err = u.tagsService.DeleteTag(ctx, userID, tagID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to delete user tag", slog.Any("error", err))
 		span.RecordError(err)
@@ -279,7 +279,7 @@ func (u *HandlerImpl) UpdateTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = u.userTagsService.Update(ctx, userID, tagID, req)
+	err = u.tagsService.Update(ctx, userID, tagID, req)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to update user tag", slog.Any("error", err))
 		span.RecordError(err)

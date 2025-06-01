@@ -1,4 +1,4 @@
-package userInterest
+package interests
 
 import (
 	"context"
@@ -14,12 +14,12 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-// MockUserInterestRepo is a mock implementation of UserInterestRepo
-type MockUserInterestRepo struct {
+// MockinterestsRepo is a mock implementation of interestsRepo
+type MockinterestsRepo struct {
 	mock.Mock
 }
 
-func (m *MockUserInterestRepo) CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error) {
+func (m *MockinterestsRepo) CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error) {
 	args := m.Called(ctx, name, description, isActive, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -27,12 +27,12 @@ func (m *MockUserInterestRepo) CreateInterest(ctx context.Context, name string, 
 	return args.Get(0).(*types.Interest), args.Error(1)
 }
 
-func (m *MockUserInterestRepo) RemoveUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
+func (m *MockinterestsRepo) Removeinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
 	args := m.Called(ctx, userID, interestID)
 	return args.Error(0)
 }
 
-func (m *MockUserInterestRepo) GetAllInterests(ctx context.Context) ([]*types.Interest, error) {
+func (m *MockinterestsRepo) GetAllInterests(ctx context.Context) ([]*types.Interest, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -40,12 +40,12 @@ func (m *MockUserInterestRepo) GetAllInterests(ctx context.Context) ([]*types.In
 	return args.Get(0).([]*types.Interest), args.Error(1)
 }
 
-func (m *MockUserInterestRepo) UpdateUserInterest(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateUserInterestParams) error {
+func (m *MockinterestsRepo) Updateinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateinterestsParams) error {
 	args := m.Called(ctx, userID, interestID, params)
 	return args.Error(0)
 }
 
-func (m *MockUserInterestRepo) GetInterest(ctx context.Context, interestID uuid.UUID) (*types.Interest, error) {
+func (m *MockinterestsRepo) GetInterest(ctx context.Context, interestID uuid.UUID) (*types.Interest, error) {
 	args := m.Called(ctx, interestID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -53,12 +53,12 @@ func (m *MockUserInterestRepo) GetInterest(ctx context.Context, interestID uuid.
 	return args.Get(0).(*types.Interest), args.Error(1)
 }
 
-func (m *MockUserInterestRepo) AddInterestToProfile(ctx context.Context, profileID uuid.UUID, interestID uuid.UUID) error {
+func (m *MockinterestsRepo) AddInterestToProfile(ctx context.Context, profileID uuid.UUID, interestID uuid.UUID) error {
 	args := m.Called(ctx, profileID, interestID)
 	return args.Error(0)
 }
 
-func (m *MockUserInterestRepo) GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Interest, error) {
+func (m *MockinterestsRepo) GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Interest, error) {
 	args := m.Called(ctx, profileID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -68,9 +68,9 @@ func (m *MockUserInterestRepo) GetInterestsForProfile(ctx context.Context, profi
 
 func TestCreateInterest(t *testing.T) {
 	// Setup
-	mockRepo := new(MockUserInterestRepo)
+	mockRepo := new(MockinterestsRepo)
 	logger := slog.Default()
-	service := NewUserInterestService(mockRepo, logger)
+	service := NewinterestsService(mockRepo, logger)
 	ctx := context.Background()
 
 	// Test data
@@ -134,11 +134,11 @@ func TestCreateInterest(t *testing.T) {
 	}
 }
 
-func TestRemoveUserInterest(t *testing.T) {
+func TestRemoveinterests(t *testing.T) {
 	// Setup
-	mockRepo := new(MockUserInterestRepo)
+	mockRepo := new(MockinterestsRepo)
 	logger := slog.Default()
-	service := NewUserInterestService(mockRepo, logger)
+	service := NewinterestsService(mockRepo, logger)
 	ctx := context.Background()
 
 	// Test data
@@ -154,14 +154,14 @@ func TestRemoveUserInterest(t *testing.T) {
 		{
 			name: "Success",
 			setupMock: func() {
-				mockRepo.On("RemoveUserInterest", ctx, userID, interestID).Return(nil)
+				mockRepo.On("Removeinterests", ctx, userID, interestID).Return(nil)
 			},
 			expectedError: false,
 		},
 		{
 			name: "Repository Error",
 			setupMock: func() {
-				mockRepo.On("RemoveUserInterest", ctx, userID, interestID).Return(errors.New("repository error"))
+				mockRepo.On("Removeinterests", ctx, userID, interestID).Return(errors.New("repository error"))
 			},
 			expectedError: true,
 		},
@@ -174,7 +174,7 @@ func TestRemoveUserInterest(t *testing.T) {
 			tc.setupMock()
 
 			// Call the method
-			err := service.RemoveUserInterest(ctx, userID, interestID)
+			err := service.Removeinterests(ctx, userID, interestID)
 
 			// Assertions
 			if tc.expectedError {
@@ -191,9 +191,9 @@ func TestRemoveUserInterest(t *testing.T) {
 
 func TestGetAllInterests(t *testing.T) {
 	// Setup
-	mockRepo := new(MockUserInterestRepo)
+	mockRepo := new(MockinterestsRepo)
 	logger := slog.Default()
-	service := NewUserInterestService(mockRepo, logger)
+	service := NewinterestsService(mockRepo, logger)
 	ctx := context.Background()
 
 	// Test data
@@ -263,11 +263,11 @@ func TestGetAllInterests(t *testing.T) {
 	}
 }
 
-func TestUpdateUserInterest(t *testing.T) {
+func TestUpdateinterests(t *testing.T) {
 	// Setup
-	mockRepo := new(MockUserInterestRepo)
+	mockRepo := new(MockinterestsRepo)
 	logger := slog.Default()
-	service := NewUserInterestService(mockRepo, logger)
+	service := NewinterestsService(mockRepo, logger)
 	ctx := context.Background()
 
 	// Test data
@@ -276,7 +276,7 @@ func TestUpdateUserInterest(t *testing.T) {
 	name := "Updated Interest"
 	description := "Updated Description"
 	active := true
-	params := types.UpdateUserInterestParams{
+	params := types.UpdateinterestsParams{
 		Name:        &name,
 		Description: &description,
 		Active:      &active,
@@ -291,14 +291,14 @@ func TestUpdateUserInterest(t *testing.T) {
 		{
 			name: "Success",
 			setupMock: func() {
-				mockRepo.On("UpdateUserInterest", ctx, userID, interestID, params).Return(nil)
+				mockRepo.On("Updateinterests", ctx, userID, interestID, params).Return(nil)
 			},
 			expectedError: false,
 		},
 		{
 			name: "Repository Error",
 			setupMock: func() {
-				mockRepo.On("UpdateUserInterest", ctx, userID, interestID, params).Return(errors.New("repository error"))
+				mockRepo.On("Updateinterests", ctx, userID, interestID, params).Return(errors.New("repository error"))
 			},
 			expectedError: true,
 		},
@@ -311,7 +311,7 @@ func TestUpdateUserInterest(t *testing.T) {
 			tc.setupMock()
 
 			// Call the method
-			err := service.UpdateUserInterest(ctx, userID, interestID, params)
+			err := service.Updateinterests(ctx, userID, interestID, params)
 
 			// Assertions
 			if tc.expectedError {

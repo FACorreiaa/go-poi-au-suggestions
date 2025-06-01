@@ -20,9 +20,9 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-var _ LLmInteractionRepository = (*PostgresLlmInteractionRepo)(nil)
+var _ Repository = (*RepositoryImpl)(nil)
 
-type LLmInteractionRepository interface {
+type Repository interface {
 	SaveInteraction(ctx context.Context, interaction types.LlmInteraction) (uuid.UUID, error)
 	SaveLlmSuggestedPOIsBatch(ctx context.Context, pois []types.POIDetail, userID, searchProfileID, llmInteractionID, cityID uuid.UUID) error
 	GetLlmSuggestedPOIsByInteractionSortedByDistance(ctx context.Context, llmInteractionID uuid.UUID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error)
@@ -34,19 +34,19 @@ type LLmInteractionRepository interface {
 	UpdateItinerary(ctx context.Context, userID uuid.UUID, itineraryID uuid.UUID, updates types.UpdateItineraryRequest) (*types.UserSavedItinerary, error)
 }
 
-type PostgresLlmInteractionRepo struct {
+type RepositoryImpl struct {
 	logger *slog.Logger
 	pgpool *pgxpool.Pool
 }
 
-func NewPostgresLlmInteractionRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresLlmInteractionRepo {
-	return &PostgresLlmInteractionRepo{
+func NewRepositoryImpl(pgxpool *pgxpool.Pool, logger *slog.Logger) *RepositoryImpl {
+	return &RepositoryImpl{
 		logger: logger,
 		pgpool: pgxpool,
 	}
 }
 
-func (r *PostgresLlmInteractionRepo) SaveInteraction(ctx context.Context, interaction types.LlmInteraction) (uuid.UUID, error) {
+func (r *RepositoryImpl) SaveInteraction(ctx context.Context, interaction types.LlmInteraction) (uuid.UUID, error) {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SaveInteraction", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
@@ -104,7 +104,7 @@ func (r *PostgresLlmInteractionRepo) SaveInteraction(ctx context.Context, intera
 	return interactionID, nil
 }
 
-func (r *PostgresLlmInteractionRepo) SaveLlmSuggestedPOIsBatch(ctx context.Context, pois []types.POIDetail, userID, searchProfileID, llmInteractionID, cityID uuid.UUID) error {
+func (r *RepositoryImpl) SaveLlmSuggestedPOIsBatch(ctx context.Context, pois []types.POIDetail, userID, searchProfileID, llmInteractionID, cityID uuid.UUID) error {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SaveLlmSuggestedPOIsBatch", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
@@ -150,7 +150,7 @@ func (r *PostgresLlmInteractionRepo) SaveLlmSuggestedPOIsBatch(ctx context.Conte
 	return nil
 }
 
-func (r *PostgresLlmInteractionRepo) GetLlmSuggestedPOIsByInteractionSortedByDistance(
+func (r *RepositoryImpl) GetLlmSuggestedPOIsByInteractionSortedByDistance(
 	ctx context.Context, llmInteractionID uuid.UUID, cityID uuid.UUID, userLocation types.UserLocation,
 ) ([]types.POIDetail, error) {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "GetLlmSuggestedPOIsByInteractionSortedByDistance", trace.WithAttributes(
@@ -235,7 +235,7 @@ func (r *PostgresLlmInteractionRepo) GetLlmSuggestedPOIsByInteractionSortedByDis
 	return resultPois, nil
 }
 
-func (r *PostgresLlmInteractionRepo) AddChatToBookmark(ctx context.Context, itinerary *types.UserSavedItinerary) (uuid.UUID, error) {
+func (r *RepositoryImpl) AddChatToBookmark(ctx context.Context, itinerary *types.UserSavedItinerary) (uuid.UUID, error) {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "AddChatToBookmark", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
@@ -289,7 +289,7 @@ func (r *PostgresLlmInteractionRepo) AddChatToBookmark(ctx context.Context, itin
 	return savedItineraryID, nil
 }
 
-func (r *PostgresLlmInteractionRepo) GetInteractionByID(ctx context.Context, interactionID uuid.UUID) (*types.LlmInteraction, error) {
+func (r *RepositoryImpl) GetInteractionByID(ctx context.Context, interactionID uuid.UUID) (*types.LlmInteraction, error) {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "GetInteractionByID", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "SELECT"),
@@ -347,7 +347,7 @@ func (r *PostgresLlmInteractionRepo) GetInteractionByID(ctx context.Context, int
 	return &interaction, nil
 }
 
-func (r *PostgresLlmInteractionRepo) RemoveChatFromBookmark(ctx context.Context, userID, itineraryID uuid.UUID) error {
+func (r *RepositoryImpl) RemoveChatFromBookmark(ctx context.Context, userID, itineraryID uuid.UUID) error {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "RemoveChatFromBookmark", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "DELETE"),
@@ -393,7 +393,7 @@ func (r *PostgresLlmInteractionRepo) RemoveChatFromBookmark(ctx context.Context,
 	return nil
 }
 
-func (r *PostgresLlmInteractionRepo) GetItinerary(ctx context.Context, userID, itineraryID uuid.UUID) (*types.UserSavedItinerary, error) {
+func (r *RepositoryImpl) GetItinerary(ctx context.Context, userID, itineraryID uuid.UUID) (*types.UserSavedItinerary, error) {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "GetItinerary", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "SELECT"),
@@ -438,7 +438,7 @@ func (r *PostgresLlmInteractionRepo) GetItinerary(ctx context.Context, userID, i
 	return &itinerary, nil
 }
 
-func (r *PostgresLlmInteractionRepo) GetItineraries(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]types.UserSavedItinerary, int, error) {
+func (r *RepositoryImpl) GetItineraries(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]types.UserSavedItinerary, int, error) {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "GetItineraries", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "SELECT"),
@@ -509,7 +509,7 @@ func (r *PostgresLlmInteractionRepo) GetItineraries(ctx context.Context, userID 
 	return itineraries, totalRecords, nil
 }
 
-func (r *PostgresLlmInteractionRepo) UpdateItinerary(ctx context.Context, userID uuid.UUID, itineraryID uuid.UUID, updates types.UpdateItineraryRequest) (*types.UserSavedItinerary, error) {
+func (r *RepositoryImpl) UpdateItinerary(ctx context.Context, userID uuid.UUID, itineraryID uuid.UUID, updates types.UpdateItineraryRequest) (*types.UserSavedItinerary, error) {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "UpdateItinerary", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),

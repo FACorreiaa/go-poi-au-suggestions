@@ -9,13 +9,13 @@ import (
 	"github.com/go-chi/cors" // Import CORS middleware if needed
 
 	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests"
 	llmInteraction "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_interaction"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/settings"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/tags"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
-	userInterest "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_interests"
-	userProfiles "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_search_profiles"
-	userSettings "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_settings"
-	userTags "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user_tags"
 )
 
 // Config contains dependencies needed for the router setup
@@ -24,11 +24,11 @@ type Config struct {
 	AuthenticateMiddleware  func(http.Handler) http.Handler // Function signature for auth middleware
 	Logger                  *slog.Logger
 	UserHandler             *user.HandlerImpl
-	InterestHandler         *userInterest.HandlerImpl
-	SettingsHandler         *userSettings.HandlerImpl
-	SearchProfileHandler    *userProfiles.HandlerImpl
-	TagsHandler             *userTags.HandlerImpl
-	PreferencesHandler      *userSettings.HandlerImpl
+	InterestHandler         *interests.HandlerImpl
+	SettingsHandler         *settings.HandlerImpl
+	SearchProfileHandler    *profiles.HandlerImpl
+	TagsHandler             *tags.HandlerImpl
+	PreferencesHandler      *settings.HandlerImpl
 	LLMInteractionHandler   *llmInteraction.HandlerImpl
 	PointsOfInterestHandler *poi.HandlerImpl
 }
@@ -81,10 +81,10 @@ func SetupRouter(cfg *Config) chi.Router {
 
 			// Mount other protected resource routes
 			//r.Mount("/user", UserRoutes(cfg.UserHandlerImpl)) // User routes
-			r.Mount("/user/interests", UserInterestRoutes(cfg.InterestHandler))
+			r.Mount("/user/interests", interestsRoutes(cfg.InterestHandler))
 			r.Mount("/user/preferences", UserPreferencesRoutes(cfg.SettingsHandler))
-			r.Mount("/user/search-profile", UserSearchProfileRoutes(cfg.SearchProfileHandler))
-			r.Mount("/user/tags", UserTagsRoutes(cfg.TagsHandler))
+			r.Mount("/user/search-profile", profilesRoutes(cfg.SearchProfileHandler))
+			r.Mount("/user/tags", tagsRoutes(cfg.TagsHandler))
 			r.Mount("/llm", LLMInteractionRoutes(cfg.LLMInteractionHandler))
 			r.Mount("/pois", POIRoutes(cfg.PointsOfInterestHandler)) // Points of Interest routes
 			// r.Mount("/pois", POIRoutes(cfg.HandlerImpl))   // Example for POI routes
@@ -134,7 +134,7 @@ func SetupRouter(cfg *Config) chi.Router {
 //	return r
 //}
 
-func UserTagsRoutes(HandlerImpl *userTags.HandlerImpl) http.Handler {
+func tagsRoutes(HandlerImpl *tags.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
 
 	r.Get("/", HandlerImpl.GetTags) // GET http://localhost:8000/api/v1/user/tags
@@ -146,29 +146,29 @@ func UserTagsRoutes(HandlerImpl *userTags.HandlerImpl) http.Handler {
 	return r
 }
 
-// UserInterestRoutes TODO
-func UserInterestRoutes(HandlerImpl *userInterest.HandlerImpl) http.Handler {
+// interestsRoutes TODO
+func interestsRoutes(HandlerImpl *interests.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
 	// Interest routes
 	r.Get("/", HandlerImpl.GetAllInterests) // GET http://localhost:8000/api/v1/user/interests
 	r.Post("/create", HandlerImpl.CreateInterest)
-	r.Put("/{interestID}", HandlerImpl.UpdateUserInterest)    // POST http://localhost:8000/api/v1/user/interests/create
-	r.Delete("/{interestID}", HandlerImpl.RemoveUserInterest) // DELETE http://localhost:8000/api/v1/user/interests/{interestID}
+	r.Put("/{interestID}", HandlerImpl.Updateinterests)    // POST http://localhost:8000/api/v1/user/interests/create
+	r.Delete("/{interestID}", HandlerImpl.Removeinterests) // DELETE http://localhost:8000/api/v1/user/interests/{interestID}
 	return r
 }
 
 // UserPreferencesRoutes ..
-func UserPreferencesRoutes(HandlerImpl *userSettings.HandlerImpl) http.Handler {
+func UserPreferencesRoutes(HandlerImpl *settings.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
 	// User preferences routes
 
-	r.Get("/", HandlerImpl.GetUserSettings) // GET http://localhost:8000/api/v1/user/preferences
-	r.Put("/{profileID}", HandlerImpl.UpdateUserSettings)
+	r.Get("/", HandlerImpl.Getsettings) // GET http://localhost:8000/api/v1/user/preferences
+	r.Put("/{profileID}", HandlerImpl.Updatesettings)
 
 	return r
 }
 
-func UserSearchProfileRoutes(HandlerImpl *userProfiles.HandlerImpl) http.Handler {
+func profilesRoutes(HandlerImpl *profiles.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/{profileID}", HandlerImpl.GetSearchProfile)
 	r.Get("/default", HandlerImpl.GetDefaultSearchProfile)             // GET http://localhost:8000/api/v1/user/search-profile/default

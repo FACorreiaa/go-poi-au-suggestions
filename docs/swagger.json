@@ -671,7 +671,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/types.UpdateUserInterestParams"
+                            "$ref": "#/definitions/types.UpdateinterestsParams"
                         }
                     }
                 ],
@@ -840,7 +840,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/types.UserSettings"
+                                "$ref": "#/definitions/types.settings"
                             }
                         }
                     },
@@ -952,7 +952,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/types.UpdateUserSettingsParams"
+                            "$ref": "#/definitions/types.UpdatesettingsParams"
                         }
                     }
                 ],
@@ -1924,7 +1924,7 @@
                 }
             }
         },
-        "types.UpdateUserInterestParams": {
+        "types.UpdateinterestsParams": {
             "type": "object",
             "properties": {
                 "active": {
@@ -2006,7 +2006,7 @@
                 }
             }
         },
-        "types.UpdateUserSettingsParams": {
+        "types.UpdatesettingsParams": {
             "type": "object",
             "properties": {
                 "default_budget_level": {
@@ -2172,7 +2172,7 @@
                 }
             }
         },
-        "types.UserSettings": {
+        "types.settings": {
             "type": "object",
             "properties": {
                 "created_at": {

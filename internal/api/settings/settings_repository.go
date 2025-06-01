@@ -1,4 +1,4 @@
-package userSettings
+package settings
 
 import (
 	"context"
@@ -26,12 +26,12 @@ var _ SettingsRepository = (*PostgresSettingsRepo)(nil)
 type SettingsRepository interface {
 	// Get retrieves the settings profile for a specific user.
 	// Returns ErrNotFound if no settings exist for the user (shouldn't happen if trigger works).
-	Get(ctx context.Context, userID uuid.UUID) (*UserSettings, error)
+	Get(ctx context.Context, userID uuid.UUID) (*types.Settings, error)
 
 	// Update updates specific fields in the user's settings profile.
 	// Uses pointers in params struct for partial updates. Ensures updated_at is set.
 	// Returns ErrNotFound if the user doesn't have a settings row (shouldn't happen).
-	Update(ctx context.Context, userID, profileID uuid.UUID, params UpdateUserSettingsParams) error
+	Update(ctx context.Context, userID, profileID uuid.UUID, params types.UpdatesettingsParams) error
 }
 
 type PostgresSettingsRepo struct {
@@ -39,23 +39,23 @@ type PostgresSettingsRepo struct {
 	pgpool *pgxpool.Pool
 }
 
-func NewPostgresUserSettingsRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresSettingsRepo {
+func NewPostgressettingsRepo(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresSettingsRepo {
 	return &PostgresSettingsRepo{
 		logger: logger,
 		pgpool: pgxpool,
 	}
 }
 
-func (r *PostgresSettingsRepo) Get(ctx context.Context, userID uuid.UUID) (*UserSettings, error) {
-	var settings UserSettings
-	ctx, span := otel.Tracer("UserRepo").Start(ctx, "GetUserSettings", trace.WithAttributes(
+func (r *PostgresSettingsRepo) Get(ctx context.Context, userID uuid.UUID) (*types.Settings, error) {
+	var settings types.Settings
+	ctx, span := otel.Tracer("UserRepo").Start(ctx, "Getsettings", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.sql.table", "user_preference_profiles"),
 		attribute.String("db.user.id", userID.String()),
 	))
 	defer span.End()
 
-	l := r.logger.With(slog.String("method", "GetUserSettings"), slog.String("userID", userID.String()))
+	l := r.logger.With(slog.String("method", "Getsettings"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Fetching user settings")
 
 	query := `
@@ -98,8 +98,8 @@ func (r *PostgresSettingsRepo) Get(ctx context.Context, userID uuid.UUID) (*User
 	return &settings, nil
 }
 
-func (r *PostgresSettingsRepo) Update(ctx context.Context, userID, profileID uuid.UUID, params UpdateUserSettingsParams) error {
-	ctx, span := otel.Tracer("SettingsRepo").Start(ctx, "UpdateUserSettings", trace.WithAttributes(
+func (r *PostgresSettingsRepo) Update(ctx context.Context, userID, profileID uuid.UUID, params types.UpdatesettingsParams) error {
+	ctx, span := otel.Tracer("SettingsRepo").Start(ctx, "Updatesettings", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "UPDATE"),
 		attribute.String("db.sql.table", "user_preference_profiles"),
@@ -107,7 +107,7 @@ func (r *PostgresSettingsRepo) Update(ctx context.Context, userID, profileID uui
 	))
 	defer span.End()
 
-	l := r.logger.With(slog.String("method", "UpdateUserSettings"), slog.String("userID", userID.String()))
+	l := r.logger.With(slog.String("method", "Updatesettings"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Updating user settings", slog.Any("params", params))
 
 	// Build query dynamically
@@ -167,7 +167,7 @@ func (r *PostgresSettingsRepo) Update(ctx context.Context, userID, profileID uui
 
 	// If no fields were provided to update, return successfully
 	if len(setClauses) == 0 {
-		l.InfoContext(ctx, "UpdateUserSettings called with no fields to update")
+		l.InfoContext(ctx, "Updatesettings called with no fields to update")
 		span.SetStatus(codes.Ok, "No update fields provided")
 		return nil
 	}

@@ -677,7 +677,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/types.UpdateUserInterestParams"
+                            "$ref": "#/definitions/types.UpdateinterestsParams"
                         }
                     }
                 ],
@@ -846,7 +846,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/types.UserSettings"
+                                "$ref": "#/definitions/types.settings"
                             }
                         }
                     },
@@ -958,7 +958,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/types.UpdateUserSettingsParams"
+                            "$ref": "#/definitions/types.UpdatesettingsParams"
                         }
                     }
                 ],
@@ -1930,7 +1930,7 @@ const docTemplate = `{
                 }
             }
         },
-        "types.UpdateUserInterestParams": {
+        "types.UpdateinterestsParams": {
             "type": "object",
             "properties": {
                 "active": {
@@ -2012,7 +2012,7 @@ const docTemplate = `{
                 }
             }
         },
-        "types.UpdateUserSettingsParams": {
+        "types.UpdatesettingsParams": {
             "type": "object",
             "properties": {
                 "default_budget_level": {
@@ -2178,7 +2178,7 @@ const docTemplate = `{
                 }
             }
         },
-        "types.UserSettings": {
+        "types.settings": {
             "type": "object",
             "properties": {
                 "created_at": {

@@ -14,9 +14,9 @@ type Interest struct {
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
 
-// UserInterest represents a many-to-many relationship between users and interests
-type UserInterest struct {
-	UserID    uuid.UUID `json:"user_id" db:"user_id"`
+// interests represents a many-to-many relationship between users and interests
+type interests struct {
+	UserID     uuid.UUID `json:"user_id" db:"user_id"`
 	InterestID uuid.UUID `json:"interest_id" db:"interest_id"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 }
@@ -38,10 +38,10 @@ func NewInterest(name, description string) *Interest {
 	}
 }
 
-// NewUserInterest creates a new user interest relationship
-func NewUserInterest(userID, interestID uuid.UUID) *UserInterest {
-	return &UserInterest{
-		UserID:    userID,
+// Newinterests creates a new user interest relationship
+func Newinterests(userID, interestID uuid.UUID) *interests {
+	return &interests{
+		UserID:     userID,
 		InterestID: interestID,
 		CreatedAt:  time.Now(),
 	}

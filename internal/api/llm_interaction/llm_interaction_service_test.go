@@ -133,9 +133,9 @@ func (m *MockLLMInteractionRepository) RemoveItinerary(ctx context.Context, user
 	return args.Error(0)
 }
 
-type MockUserInterestRepo struct{ mock.Mock }
+type MockinterestsRepo struct{ mock.Mock }
 
-func (m *MockUserInterestRepo) GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Interest, error) {
+func (m *MockinterestsRepo) GetInterestsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Interest, error) {
 	args := m.Called(ctx, profileID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -167,7 +167,7 @@ func (m *MockTagsRepo) GetTagsForProfile(ctx context.Context, profileID uuid.UUI
 func setupTestServiceWithMocks() (
 	*LlmInteractiontServiceImpl,
 	*MockAIClient, // Assuming AIClient will be interface type in service
-	*MockUserInterestRepo,
+	*MockinterestsRepo,
 	*MockSearchProfileRepo,
 	*MockTagsRepo,
 	*MockLLMInteractionRepository,
@@ -176,7 +176,7 @@ func setupTestServiceWithMocks() (
 ) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})) // Or io.Discard for less noise
 	mockAI := new(MockAIClient)
-	mockInterestR := new(MockUserInterestRepo)
+	mockInterestR := new(MockinterestsRepo)
 	mockSearchProfileR := new(MockSearchProfileRepo)
 	mockTagsR := new(MockTagsRepo)
 	mockLLMInteractionR := new(MockLLMInteractionRepository)
@@ -385,7 +385,7 @@ func TestLlmInteractionServiceImpl_GetPOIDetailsResponse_Integration(t *testing.
 	// logger := slog.New(...)
 	// dbpool := setupTestDB(t) // Helper function to connect to test DB
 	// realAIC, _ := generativeAI.NewAIClient(context.Background()) // Needs API Key
-	// realInterestRepo := userInterest.NewPostgresUserInterestRepo(dbpool, logger)
+	// realInterestRepo := interests.NewPostgresinterestsRepo(dbpool, logger)
 	// ... initialize all real repos ...
 	// service := NewLlmInteractiontService(realInterestRepo, ..., realAIC, logger)
 

@@ -480,7 +480,7 @@ Here's the recommended breakdown:
     *   When the user saves these settings, the frontend sends a request (e.g., `PUT /api/v1/users/me/preferences`) to your backend with the list of selected `interestIDs`.
     *   Your backend **HandlerImpl** receives this list.
     *   The HandlerImpl calls a **service** method (e.g., `UserService.UpdatePreferences`).
-    *   The service method calls `UserRepo.SetUserPreferences` to atomically update the `user_interests` table for that user in the database (usually involving deleting old entries and inserting new ones within a transaction).
+    *   The service method calls `UserRepo.SetUserPreferences` to atomically update the `interests` table for that user in the database (usually involving deleting old entries and inserting new ones within a transaction).
 
 2.  **Handling Preferences During Search (Backend Logic Driven by Frontend Input):**
     *   **This is NOT just a frontend task.** While the frontend *displays* the filters and allows modification, the *actual filtering logic* and the decision of *which preferences to use* should happen on the **backend**.

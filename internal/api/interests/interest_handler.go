@@ -1,4 +1,4 @@
-package userInterest
+package interests
 
 import (
 	"errors"
@@ -23,19 +23,19 @@ var _ Handler = (*HandlerImpl)(nil)
 
 type Handler interface {
 	GetAllInterests(w http.ResponseWriter, r *http.Request)
-	RemoveUserInterest(w http.ResponseWriter, r *http.Request)
+	Removeinterests(w http.ResponseWriter, r *http.Request)
 	CreateInterest(w http.ResponseWriter, r *http.Request)
-	UpdateUserInterest(w http.ResponseWriter, r *http.Request)
+	Updateinterests(w http.ResponseWriter, r *http.Request)
 }
 
 // HandlerImpl handles HTTP requests related to user operations.
 type HandlerImpl struct {
-	userInterestService UserInterestService
-	logger              *slog.Logger
+	interestsService interestsService
+	logger           *slog.Logger
 }
 
 // NewHandlerImpl creates a new user HandlerImpl instance.
-func NewHandlerImpl(userInterestService UserInterestService, logger *slog.Logger) *HandlerImpl {
+func NewHandlerImpl(interestsService interestsService, logger *slog.Logger) *HandlerImpl {
 	instanceAddress := fmt.Sprintf("%p", logger)
 	slog.Info("Creating NewHandlerImpl", slog.String("logger_address", instanceAddress), slog.Bool("logger_is_nil", logger == nil))
 	if logger == nil {
@@ -43,8 +43,8 @@ func NewHandlerImpl(userInterestService UserInterestService, logger *slog.Logger
 	}
 
 	return &HandlerImpl{
-		userInterestService: userInterestService,
-		logger:              logger,
+		interestsService: interestsService,
+		logger:           logger,
 	}
 }
 
@@ -66,7 +66,7 @@ func (h *HandlerImpl) GetAllInterests(w http.ResponseWriter, r *http.Request) {
 
 	l := h.logger.With(slog.String("HandlerImpl", "GetAllInterests"))
 
-	interests, err := h.userInterestService.GetAllInterests(ctx)
+	interests, err := h.interestsService.GetAllInterests(ctx)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to get all interests", slog.Any("error", err))
 		span.RecordError(err)
@@ -79,7 +79,7 @@ func (h *HandlerImpl) GetAllInterests(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSONResponse(w, r, http.StatusOK, interests)
 }
 
-// RemoveUserInterest godoc
+// Removeinterests godoc
 // @Summary      Remove User Interest
 // @Description  Removes an interest from the authenticated user's preferences.
 // @Tags         User
@@ -93,14 +93,14 @@ func (h *HandlerImpl) GetAllInterests(w http.ResponseWriter, r *http.Request) {
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/preferences/interests/{interestId} [delete]
-func (h *HandlerImpl) RemoveUserInterest(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "RemoveUserInterest", trace.WithAttributes(
+func (h *HandlerImpl) Removeinterests(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "Removeinterests", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		semconv.HTTPRouteKey.String("/user/preferences/interests/{interestId}"),
 	))
 	defer span.End()
 
-	l := h.logger.With(slog.String("HandlerImpl", "RemoveUserInterest"))
+	l := h.logger.With(slog.String("HandlerImpl", "Removeinterests"))
 
 	// Get UserID from context (set by Authenticate middleware)
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
@@ -130,7 +130,7 @@ func (h *HandlerImpl) RemoveUserInterest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	err = h.userInterestService.RemoveUserInterest(ctx, userID, interestID)
+	err = h.interestsService.Removeinterests(ctx, userID, interestID)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to remove user interest", slog.Any("error", err))
 		span.RecordError(err)
@@ -201,7 +201,7 @@ func (h *HandlerImpl) CreateInterest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call service to create interest
-	interest, err := h.userInterestService.CreateInterest(ctx, req.Name, req.Description, req.Active, userIDStr)
+	interest, err := h.interestsService.CreateInterest(ctx, req.Name, req.Description, req.Active, userIDStr)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to create interest", slog.Any("error", err))
 		span.RecordError(err)
@@ -257,7 +257,7 @@ func (h *HandlerImpl) CreateInterest(w http.ResponseWriter, r *http.Request) {
 //		return
 //	}
 //
-//	interests, err := h.userInterestService.GetUserEnhancedInterests(ctx, userID)
+//	interests, err := h.interestsService.GetUserEnhancedInterests(ctx, userID)
 //	if err != nil {
 //		l.ErrorContext(ctx, "Failed to get user enhanced interests", slog.Any("error", err))
 //		span.RecordError(err)
@@ -270,14 +270,14 @@ func (h *HandlerImpl) CreateInterest(w http.ResponseWriter, r *http.Request) {
 //	api.WriteJSONResponse(w, r, http.StatusOK, interests)
 //}
 
-// UpdateUserInterest godoc
+// Updateinterests godoc
 // @Summary      Update Custom Interest
 // @Description  Updates a specific interest created by the authenticated user.
 // @Tags         User Preferences
 // @Accept       json
 // @Produce      json
 // @Param        interestID path string true "ID of the custom interest to update" Format(uuid)
-// @Param        interest body types.UpdateUserInterestParams true "Fields to update"
+// @Param        interest body types.UpdateinterestsParams true "Fields to update"
 // @Success      200 {object} types.Response "Interest Updated Successfully"
 // @Failure      400 {object} types.Response "Invalid Input or Bad Request"
 // @Failure      401 {object} types.Response "Unauthorized"
@@ -287,7 +287,7 @@ func (h *HandlerImpl) CreateInterest(w http.ResponseWriter, r *http.Request) {
 // @Failure      500 {object} types.Response "Internal Server Error"
 // @Security     BearerAuth
 // @Router       /user/custom-interests/{interestID} [put] // Changed route for clarity
-func (h *HandlerImpl) UpdateUserInterest(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) Updateinterests(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("UserHandlerImpl").Start(r.Context(), "UpdateCustomInterest", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
 		// Note: Getting the exact route template might require specific Chi helpers if available
@@ -330,7 +330,7 @@ func (h *HandlerImpl) UpdateUserInterest(w http.ResponseWriter, r *http.Request)
 	span.SetAttributes(attribute.String("interest.id", interestID.String()))
 
 	// 3. Decode request body
-	var params types.UpdateUserInterestParams
+	var params types.UpdateinterestsParams
 	if err := api.DecodeJSONBody(w, r, &params); err != nil {
 		l.WarnContext(ctx, "Failed to decode request body", slog.Any("error", err))
 		span.RecordError(err)
@@ -348,7 +348,7 @@ func (h *HandlerImpl) UpdateUserInterest(w http.ResponseWriter, r *http.Request)
 	}
 
 	// 4. Call service
-	err = h.userInterestService.UpdateUserInterest(ctx, userID, interestID, params)
+	err = h.interestsService.Updateinterests(ctx, userID, interestID, params)
 	if err != nil {
 		l.ErrorContext(ctx, "Service failed to update custom interest", slog.Any("error", err))
 		span.RecordError(err)

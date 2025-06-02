@@ -6,6 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
+
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 
 	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel"
@@ -19,7 +23,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var _ Repository = (*PostgresRepository)(nil)
+var _ Repository = (*RepositoryImpl)(nil)
 
 type Repository interface {
 	SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error)
@@ -53,21 +57,24 @@ type Repository interface {
 
 	//AddPersonalizedPOItoFavourites(ctx context.Context, poiID uuid.UUID, userID uuid.UUID) (uuid.UUID, error)
 
+	GetItinerary(ctx context.Context, userID, itineraryID uuid.UUID) (*types.UserSavedItinerary, error)
+	GetItineraries(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]types.UserSavedItinerary, int, error)
+	UpdateItinerary(ctx context.Context, userID uuid.UUID, itineraryID uuid.UUID, updates types.UpdateItineraryRequest) (*types.UserSavedItinerary, error)
 }
 
-type PostgresRepository struct {
+type RepositoryImpl struct {
 	logger *slog.Logger
 	pgpool *pgxpool.Pool
 }
 
-func NewRepository(pgxpool *pgxpool.Pool, logger *slog.Logger) *PostgresRepository {
-	return &PostgresRepository{
+func NewRepository(pgxpool *pgxpool.Pool, logger *slog.Logger) *RepositoryImpl {
+	return &RepositoryImpl{
 		logger: logger,
 		pgpool: pgxpool,
 	}
 }
 
-func (r *PostgresRepository) SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
+func (r *RepositoryImpl) SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -108,7 +115,7 @@ func (r *PostgresRepository) SavePoi(ctx context.Context, poi types.POIDetail, c
 	return id, nil
 }
 
-func (r *PostgresRepository) FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetail, error) {
+func (r *RepositoryImpl) FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetail, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -138,7 +145,7 @@ func (r *PostgresRepository) FindPoiByNameAndCity(ctx context.Context, name stri
 	return &poi, nil
 }
 
-// func (r *PostgresRepository) GetPOIsByNamesAndCitySortedByDistance(ctx context.Context, names []string, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error) {
+// func (r *RepositoryImpl) GetPOIsByNamesAndCitySortedByDistance(ctx context.Context, names []string, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error) {
 // 	// Construct the user's location as a PostGIS POINT
 // 	userPoint := fmt.Sprintf("SRID=4326;POINT(%f %f)", userLocation.UserLon, userLocation.UserLat)
 
@@ -181,7 +188,7 @@ func (r *PostgresRepository) FindPoiByNameAndCity(ctx context.Context, name stri
 // 	return pois, nil
 // }
 
-func (r *PostgresRepository) GetPOIsByCityAndDistance(ctx context.Context, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error) {
+func (r *RepositoryImpl) GetPOIsByCityAndDistance(ctx context.Context, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error) {
 	userPoint := fmt.Sprintf("SRID=4326;POINT(%f %f)", userLocation.UserLon, userLocation.UserLat)
 	query := `
         SELECT 
@@ -219,7 +226,7 @@ func (r *PostgresRepository) GetPOIsByCityAndDistance(ctx context.Context, cityI
 	return pois, nil
 }
 
-func (r *PostgresRepository) AddPoiToFavourites(ctx context.Context, userID, poiID uuid.UUID) (uuid.UUID, error) {
+func (r *RepositoryImpl) AddPoiToFavourites(ctx context.Context, userID, poiID uuid.UUID) (uuid.UUID, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -246,7 +253,7 @@ func (r *PostgresRepository) AddPoiToFavourites(ctx context.Context, userID, poi
 	return id, nil
 }
 
-func (r *PostgresRepository) RemovePoiFromFavourites(ctx context.Context, poiID uuid.UUID, userID uuid.UUID) error {
+func (r *RepositoryImpl) RemovePoiFromFavourites(ctx context.Context, poiID uuid.UUID, userID uuid.UUID) error {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
@@ -272,7 +279,7 @@ func (r *PostgresRepository) RemovePoiFromFavourites(ctx context.Context, poiID 
 	return nil
 }
 
-func (r *PostgresRepository) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error) {
+func (r *RepositoryImpl) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -310,7 +317,7 @@ func (r *PostgresRepository) GetFavouritePOIsByUserID(ctx context.Context, userI
 	return pois, nil
 }
 
-func (r *PostgresRepository) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error) {
+func (r *RepositoryImpl) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -350,7 +357,7 @@ func (r *PostgresRepository) GetPOIsByCityID(ctx context.Context, cityID uuid.UU
 	return pois, nil
 }
 
-func (r *PostgresRepository) FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error) {
+func (r *RepositoryImpl) FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("Repository").Start(ctx, "FindPOIDetails", trace.WithAttributes(
 		attribute.String("city.id", cityID.String()),
 		attribute.Float64("latitude", lat),
@@ -398,7 +405,7 @@ func (r *PostgresRepository) FindPOIDetails(ctx context.Context, cityID uuid.UUI
 	return &poi, nil
 }
 
-func (r *PostgresRepository) SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	ctx, span := otel.Tracer("Repository").Start(ctx, "SavePOIDetails", trace.WithAttributes(
 		attribute.String("city.id", cityID.String()),
 		attribute.String("poi.name", poi.Name),
@@ -435,7 +442,7 @@ func (r *PostgresRepository) SavePOIDetails(ctx context.Context, poi types.POIDe
 	return id, nil
 }
 
-func (r *PostgresRepository) FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error) {
+func (r *RepositoryImpl) FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error) {
 	ctx, span := otel.Tracer("HotelRepository").Start(ctx, "FindHotelDetails", trace.WithAttributes(
 		attribute.String("city.id", cityID.String()),
 		attribute.Float64("latitude", lat),
@@ -497,7 +504,7 @@ func (r *PostgresRepository) FindHotelDetails(ctx context.Context, cityID uuid.U
 	return hotels, nil
 }
 
-func (r *PostgresRepository) SaveHotelDetails(ctx context.Context, hotel types.HotelDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+func (r *RepositoryImpl) SaveHotelDetails(ctx context.Context, hotel types.HotelDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	ctx, span := otel.Tracer("HotelRepository").Start(ctx, "SaveHotelDetails", trace.WithAttributes(
 		attribute.String("city.id", cityID.String()),
 		attribute.String("hotel.name", hotel.Name),
@@ -546,7 +553,7 @@ func (r *PostgresRepository) SaveHotelDetails(ctx context.Context, hotel types.H
 	return id, nil
 }
 
-func (r *PostgresRepository) GetHotelByID(ctx context.Context, hotelID uuid.UUID) (*types.HotelDetailedInfo, error) {
+func (r *RepositoryImpl) GetHotelByID(ctx context.Context, hotelID uuid.UUID) (*types.HotelDetailedInfo, error) {
 	ctx, span := otel.Tracer("HotelRepository").Start(ctx, "GetHotelByID", trace.WithAttributes(
 		attribute.String("hotel.id", hotelID.String()),
 	))
@@ -586,7 +593,7 @@ func (r *PostgresRepository) GetHotelByID(ctx context.Context, hotelID uuid.UUID
 	return &hotel, nil
 }
 
-func (r *PostgresRepository) FindRestaurantDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64, preferences *types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error) {
+func (r *RepositoryImpl) FindRestaurantDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64, preferences *types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error) {
 	ctx, span := otel.Tracer("RestaurantRepository").Start(ctx, "FindRestaurantDetails")
 	defer span.End()
 
@@ -642,7 +649,7 @@ func (r *PostgresRepository) FindRestaurantDetails(ctx context.Context, cityID u
 	return restaurants, nil
 }
 
-func (r *PostgresRepository) SaveRestaurantDetails(ctx context.Context, restaurant types.RestaurantDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+func (r *RepositoryImpl) SaveRestaurantDetails(ctx context.Context, restaurant types.RestaurantDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	ctx, span := otel.Tracer("RestaurantRepository").Start(ctx, "SaveRestaurantDetails", trace.WithAttributes(
 		attribute.String("restaurant.name", restaurant.Name),
 		attribute.String("city.id", cityID.String()),
@@ -751,7 +758,7 @@ func (r *PostgresRepository) SaveRestaurantDetails(ctx context.Context, restaura
 	return id, nil
 }
 
-func (r *PostgresRepository) GetRestaurantByID(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error) {
+func (r *RepositoryImpl) GetRestaurantByID(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error) {
 	ctx, span := otel.Tracer("RestaurantRepository").Start(ctx, "GetRestaurantByID")
 	defer span.End()
 
@@ -787,7 +794,7 @@ func (r *PostgresRepository) GetRestaurantByID(ctx context.Context, restaurantID
 	return &restaurant, nil
 }
 
-func (r *PostgresRepository) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error) {
+func (r *RepositoryImpl) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error) {
 	ctx, span := otel.Tracer("Repository").Start(ctx, "SearchPOIs", trace.WithAttributes(
 		attribute.Float64("location.latitude", filter.Location.Latitude),
 		attribute.Float64("location.longitude", filter.Location.Longitude),
@@ -892,4 +899,243 @@ func (r *PostgresRepository) SearchPOIs(ctx context.Context, filter types.POIFil
 	}
 
 	return pois, nil
+}
+
+func (r *RepositoryImpl) GetItinerary(ctx context.Context, userID, itineraryID uuid.UUID) (*types.UserSavedItinerary, error) {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "GetItinerary", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "user_saved_itineraries"),
+		attribute.String("user.id", userID.String()),
+		attribute.String("itinerary.id", itineraryID.String()),
+	))
+	defer span.End()
+
+	query := `
+		SELECT 
+			id, user_id, source_llm_interaction_id, primary_city_id, title, description,
+			markdown_content, tags, estimated_duration_days, estimated_cost_level, is_public
+		FROM user_saved_itineraries
+		WHERE id = $1 AND user_id = $2
+	`
+	row := r.pgpool.QueryRow(ctx, query, itineraryID, userID)
+
+	var itinerary types.UserSavedItinerary
+	if err := row.Scan(
+		&itinerary.ID,
+		&itinerary.UserID,
+		&itinerary.SourceLlmInteractionID,
+		&itinerary.PrimaryCityID,
+		&itinerary.Title,
+		&itinerary.Description,
+		&itinerary.MarkdownContent,
+		&itinerary.Tags,
+		&itinerary.EstimatedDurationDays,
+		&itinerary.EstimatedCostLevel,
+		&itinerary.IsPublic,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			err = fmt.Errorf("no itinerary found with ID %s for user %s", itineraryID, userID)
+			span.RecordError(err)
+			return nil, err
+		}
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to scan user_saved_itineraries row: %w", err)
+	}
+
+	return &itinerary, nil
+}
+
+func (r *RepositoryImpl) GetItineraries(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]types.UserSavedItinerary, int, error) {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "GetItineraries", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "user_saved_itineraries"),
+		attribute.String("user.id", userID.String()),
+		attribute.Int("page", page),
+		attribute.Int("page_size", pageSize),
+	))
+	defer span.End()
+
+	offset := (page - 1) * pageSize
+	query := `
+		SELECT 
+			id, user_id, source_llm_interaction_id, primary_city_id, title, description,
+			markdown_content, tags, estimated_duration_days, estimated_cost_level, is_public
+		FROM user_saved_itineraries
+		WHERE user_id = $1
+		LIMIT $2 OFFSET $3
+	`
+	rows, err := r.pgpool.Query(ctx, query, userID, pageSize, offset)
+	if err != nil {
+		span.RecordError(err)
+		return nil, 0, fmt.Errorf("failed to query user_saved_itineraries: %w", err)
+	}
+	defer rows.Close()
+
+	var itineraries []types.UserSavedItinerary
+	for rows.Next() {
+		var itinerary types.UserSavedItinerary
+		if err := rows.Scan(
+			&itinerary.ID,
+			&itinerary.UserID,
+			&itinerary.SourceLlmInteractionID,
+			&itinerary.PrimaryCityID,
+			&itinerary.Title,
+			&itinerary.Description,
+			&itinerary.MarkdownContent,
+			&itinerary.Tags,
+			&itinerary.EstimatedDurationDays,
+			&itinerary.EstimatedCostLevel,
+			&itinerary.IsPublic,
+		); err != nil {
+			if err == pgx.ErrNoRows {
+				continue // No more rows to scan
+			}
+			return nil, 0, fmt.Errorf("failed to scan user_saved_itineraries row: %w", err)
+		}
+		itineraries = append(itineraries, itinerary)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating user_saved_itineraries rows: %w", err)
+	}
+
+	countQuery := `
+		SELECT COUNT(*) FROM user_saved_itineraries WHERE user_id = $1
+	`
+	var totalRecords int
+	if err := r.pgpool.QueryRow(ctx, countQuery, userID).Scan(&totalRecords); err != nil {
+		span.RecordError(err)
+		return nil, 0, fmt.Errorf("failed to count user_saved_itineraries: %w", err)
+	}
+	span.SetAttributes(
+		attribute.Int("total_records", totalRecords),
+		attribute.Int("itineraries.count", len(itineraries)),
+	)
+	span.SetStatus(codes.Ok, "Itineraries retrieved successfully")
+	return itineraries, totalRecords, nil
+}
+
+func (r *RepositoryImpl) UpdateItinerary(ctx context.Context, userID uuid.UUID, itineraryID uuid.UUID, updates types.UpdateItineraryRequest) (*types.UserSavedItinerary, error) {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "UpdateItinerary", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "UPDATE"),
+		attribute.String("db.sql.table", "user_saved_itineraries"),
+		attribute.String("user.id", userID.String()),
+		attribute.String("itinerary.id", itineraryID.String()),
+	))
+	defer span.End()
+
+	setClauses := []string{}
+	args := []interface{}{}
+	argCount := 1 // Start arg counter for $1, $2, ...
+
+	if updates.Title != nil {
+		setClauses = append(setClauses, fmt.Sprintf("title = $%d", argCount))
+		args = append(args, *updates.Title)
+		argCount++
+		span.SetAttributes(attribute.Bool("update.title", true))
+	}
+	if updates.Description != nil {
+		setClauses = append(setClauses, fmt.Sprintf("description = $%d", argCount))
+		if *updates.Description == "" {
+			args = append(args, sql.NullString{Valid: false})
+		} else {
+			args = append(args, sql.NullString{String: *updates.Description, Valid: true})
+		}
+		argCount++
+		span.SetAttributes(attribute.Bool("update.description", true))
+	}
+	if updates.Tags != nil {
+		setClauses = append(setClauses, fmt.Sprintf("tags = $%d", argCount))
+		args = append(args, updates.Tags)
+		argCount++
+		span.SetAttributes(attribute.Bool("update.tags", true))
+	}
+	if updates.EstimatedDurationDays != nil {
+		setClauses = append(setClauses, fmt.Sprintf("estimated_duration_days = $%d", argCount))
+		args = append(args, sql.NullInt32{Int32: *updates.EstimatedDurationDays, Valid: true})
+		argCount++
+		span.SetAttributes(attribute.Bool("update.duration", true))
+	}
+	if updates.EstimatedCostLevel != nil {
+		setClauses = append(setClauses, fmt.Sprintf("estimated_cost_level = $%d", argCount))
+		args = append(args, sql.NullInt32{Int32: *updates.EstimatedCostLevel, Valid: true})
+		argCount++
+		span.SetAttributes(attribute.Bool("update.cost", true))
+	}
+	if updates.IsPublic != nil {
+		setClauses = append(setClauses, fmt.Sprintf("is_public = $%d", argCount))
+		args = append(args, *updates.IsPublic)
+		argCount++
+		span.SetAttributes(attribute.Bool("update.is_public", true))
+	}
+	if updates.MarkdownContent != nil {
+		setClauses = append(setClauses, fmt.Sprintf("markdown_content = $%d", argCount))
+		args = append(args, *updates.MarkdownContent)
+		argCount++
+		span.SetAttributes(attribute.Bool("update.markdown", true))
+	}
+
+	if len(setClauses) == 0 {
+		span.AddEvent("No fields provided for update.")
+		return nil, fmt.Errorf("no fields to update for itinerary %s", itineraryID)
+	}
+
+	// Always update the updated_at timestamp
+	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argCount))
+	args = append(args, time.Now())
+	argCount++
+
+	// Store the current argCount for the WHERE clause
+	whereIDPlaceholder := argCount
+	args = append(args, itineraryID)
+	argCount++
+	userIDPlaceholder := argCount
+	args = append(args, userID)
+
+	query := fmt.Sprintf(`
+        UPDATE user_saved_itineraries
+        SET %s
+        WHERE id = $%d AND user_id = $%d
+        RETURNING id, user_id, source_llm_interaction_id, primary_city_id, title, description,
+                  markdown_content, tags, estimated_duration_days, estimated_cost_level, is_public,
+                  created_at, updated_at
+    `, strings.Join(setClauses, ", "), whereIDPlaceholder, userIDPlaceholder)
+
+	r.logger.DebugContext(ctx, "Executing UpdateItinerary query", slog.String("query", query), slog.Any("args_count", len(args)))
+
+	var updatedItinerary types.UserSavedItinerary
+	err := r.pgpool.QueryRow(ctx, query, args...).Scan(
+		&updatedItinerary.ID,
+		&updatedItinerary.UserID,
+		&updatedItinerary.SourceLlmInteractionID,
+		&updatedItinerary.PrimaryCityID,
+		&updatedItinerary.Title,
+		&updatedItinerary.Description,
+		&updatedItinerary.MarkdownContent,
+		&updatedItinerary.Tags,
+		&updatedItinerary.EstimatedDurationDays,
+		&updatedItinerary.EstimatedCostLevel,
+		&updatedItinerary.IsPublic,
+		&updatedItinerary.CreatedAt,
+		&updatedItinerary.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			notFoundErr := fmt.Errorf("itinerary with ID %s not found for user %s or does not exist", itineraryID, userID)
+			span.RecordError(notFoundErr)
+			span.SetStatus(codes.Error, "Itinerary not found or not owned by user")
+			return nil, notFoundErr
+		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB UPDATE failed")
+		r.logger.ErrorContext(ctx, "Failed to update itinerary", slog.Any("error", err))
+		return nil, fmt.Errorf("failed to update user_saved_itineraries: %w", err)
+	}
+
+	span.SetStatus(codes.Ok, "Itinerary updated successfully")
+	return &updatedItinerary, nil
 }

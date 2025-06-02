@@ -50,9 +50,6 @@ type LlmInteractiontService interface {
 	RemoveItenerary(ctx context.Context, userID, itineraryID uuid.UUID) error
 	GetPOIDetailsResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64) (*types.POIDetailedInfo, error)
 	GetGeneralPOIByDistanceResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon, distance float64) ([]types.POIDetailedInfo, error)
-	GetItinerary(ctx context.Context, userID, itineraryID uuid.UUID) (*types.UserSavedItinerary, error)
-	GetItineraries(ctx context.Context, userID uuid.UUID, page, pageSize int) (*types.PaginatedUserItinerariesResponse, error)
-	UpdateItinerary(ctx context.Context, userID, itineraryID uuid.UUID, updates types.UpdateItineraryRequest) (*types.UserSavedItinerary, error)
 	// hotels
 	GetHotelsByPreferenceResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64, userPreferences types.HotelUserPreferences) ([]types.HotelDetailedInfo, error)
 	GetHotelsNearbyResponse(ctx context.Context, userID uuid.UUID, city string, userLocation *types.UserLocation) ([]types.HotelDetailedInfo, error)
@@ -1801,85 +1798,4 @@ func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceResponse(ctx context
 	l.cache.Set(cacheKey, poisDetailed, cache.DefaultExpiration)
 	span.SetStatus(codes.Ok, "POIs generated and cached")
 	return poisDetailed, nil
-}
-
-func (l *LlmInteractiontServiceImpl) GetItinerary(ctx context.Context, userID, itineraryID uuid.UUID) (*types.UserSavedItinerary, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetItinerary")
-	defer span.End()
-
-	itinerary, err := l.llmInteractionRepo.GetItinerary(ctx, userID, itineraryID)
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Repository failed to get itinerary", slog.Any("error", err))
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to get itinerary: %w", err)
-	}
-	if itinerary == nil {
-		return nil, fmt.Errorf("itinerary not found")
-	}
-
-	span.SetStatus(codes.Ok, "Itinerary retrieved successfully")
-	return itinerary, nil
-}
-
-func (l *LlmInteractiontServiceImpl) GetItineraries(ctx context.Context, userID uuid.UUID, page, pageSize int) (*types.PaginatedUserItinerariesResponse, error) {
-	_, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetItineraries", trace.WithAttributes(
-		attribute.String("user.id", userID.String()),
-		attribute.Int("page", page),
-		attribute.Int("page_size", pageSize),
-	))
-	defer span.End()
-
-	l.logger.DebugContext(ctx, "Service: Getting itineraries for user", slog.String("userID", userID.String()))
-
-	if page <= 0 {
-		page = 1 // Default to page 1
-	}
-	if pageSize <= 0 {
-		pageSize = 10 // Default page size
-	}
-
-	itineraries, totalRecords, err := l.llmInteractionRepo.GetItineraries(ctx, userID, page, pageSize)
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Repository failed to get itineraries", slog.Any("error", err))
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to retrieve itineraries: %w", err)
-	}
-
-	span.SetAttributes(attribute.Int("itineraries.count", len(itineraries)), attribute.Int("total_records", totalRecords))
-	span.SetStatus(codes.Ok, "Itineraries retrieved")
-
-	return &types.PaginatedUserItinerariesResponse{
-		Itineraries:  itineraries,
-		TotalRecords: totalRecords,
-		Page:         page,
-		PageSize:     pageSize,
-	}, nil
-}
-
-func (l *LlmInteractiontServiceImpl) UpdateItinerary(ctx context.Context, userID, itineraryID uuid.UUID, updates types.UpdateItineraryRequest) (*types.UserSavedItinerary, error) {
-	_, span := otel.Tracer("LlmInteractionService").Start(ctx, "UpdateItinerary", trace.WithAttributes(
-		attribute.String("user.id", userID.String()),
-		attribute.String("itinerary.id", itineraryID.String()),
-	))
-	defer span.End()
-
-	l.logger.DebugContext(ctx, "Service: Updating itinerary", slog.String("userID", userID.String()), slog.String("itineraryID", itineraryID.String()), slog.Any("updates", updates))
-
-	if updates.Title == nil && updates.Description == nil && updates.Tags == nil &&
-		updates.EstimatedDurationDays == nil && updates.EstimatedCostLevel == nil &&
-		updates.IsPublic == nil && updates.MarkdownContent == nil {
-		span.AddEvent("No update fields provided.")
-		l.logger.InfoContext(ctx, "No fields provided for itinerary update, fetching current.", slog.String("itineraryID", itineraryID.String()))
-		return l.llmInteractionRepo.GetItinerary(ctx, userID, itineraryID) // Assumes GetItinerary checks ownership
-	}
-
-	updatedItinerary, err := l.llmInteractionRepo.UpdateItinerary(ctx, userID, itineraryID, updates)
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Repository failed to update itinerary", slog.Any("error", err))
-		span.RecordError(err)
-		return nil, err // Propagate error (could be not found, or DB error)
-	}
-
-	span.SetStatus(codes.Ok, "Itinerary updated")
-	return updatedItinerary, nil
 }

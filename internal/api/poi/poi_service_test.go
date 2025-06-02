@@ -172,6 +172,29 @@ func (r *MockPOIRepository) SaveRestaurantDetails(ctx context.Context, restauran
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
+func (m *MockPOIRepository) GetItinerary(ctx context.Context, userID, itineraryID uuid.UUID) (*types.UserSavedItinerary, error) {
+	args := m.Called(ctx, userID, itineraryID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.UserSavedItinerary), args.Error(1)
+}
+
+func (m *MockPOIRepository) GetItineraries(ctx context.Context, userID uuid.UUID) ([]*types.UserSavedItinerary, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*types.UserSavedItinerary), args.Error(1)
+}
+func (m *MockPOIRepository) UpdateItinerary(ctx context.Context, itinerary types.UserSavedItinerary) error {
+	args := m.Called(ctx, itinerary)
+	if args.Get(0) == nil {
+		return args.Error(0)
+	}
+	return args.Error(0)
+}
+
 // Helper to setup service with mock repository
 func setupPOIServiceTest() (*Service, *MockPOIRepository) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})) // or io.Discard

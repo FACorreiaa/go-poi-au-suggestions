@@ -11,10 +11,10 @@ type POIDetail struct {
 	Category       string  `json:"category"`
 	DescriptionPOI string  `json:"description_poi"`
 	// Rating               float64   `json:"rating"`
-	// Address              string    `json:"address"`
+	Address string `json:"address"`
 	// PhoneNumber          string    `json:"phone_number"`
-	// Website              string    `json:"website"`
-	// OpeningHours         string    `json:"opening_hours"`
+	Website      string `json:"website"`
+	OpeningHours string `json:"opening_hours"`
 	// Images               []string  `json:"images"`
 	// Reviews              []string  `json:"reviews"`
 	// PriceRange           string    `json:"price_range"`

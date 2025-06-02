@@ -146,3 +146,15 @@ CREATE TABLE restaurant_details (
 CREATE INDEX restaurant_details_location_idx ON restaurant_details USING GIST (location);
 
 CREATE INDEX restaurant_details_city_name_idx ON restaurant_details (city_id, name);
+
+CREATE TABLE chat_sessions (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users (id),
+    current_itinerary JSONB,
+    conversation_history JSONB,
+    session_context JSONB,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    status VARCHAR(20) NOT NULL
+);

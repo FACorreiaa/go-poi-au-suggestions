@@ -3,8 +3,10 @@ package llmChat
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -27,6 +29,17 @@ type Repository interface {
 	AddChatToBookmark(ctx context.Context, itinerary *types.UserSavedItinerary) (uuid.UUID, error)
 	RemoveChatFromBookmark(ctx context.Context, userID, itineraryID uuid.UUID) error
 	GetInteractionByID(ctx context.Context, interactionID uuid.UUID) (*types.LlmInteraction, error)
+
+	// Session methods
+	CreateSession(ctx context.Context, session types.ChatSession) error
+	GetSession(ctx context.Context, sessionID uuid.UUID) (*types.ChatSession, error)
+	UpdateSession(ctx context.Context, session types.ChatSession) error
+	AddMessageToSession(ctx context.Context, sessionID uuid.UUID, message types.ConversationMessage) error
+
+	//
+	SaveSinglePOI(ctx context.Context, poi types.POIDetail, userID, cityID uuid.UUID, llmInteractionID uuid.UUID) (uuid.UUID, error)
+	GetPOIsBySessionSortedByDistance(ctx context.Context, sessionID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error)
+	CalculateDistancePostGIS(ctx context.Context, userLat, userLon, poiLat, poiLon float64) (float64, error)
 }
 
 type RepositoryImpl struct {
@@ -387,3 +400,191 @@ func (r *RepositoryImpl) RemoveChatFromBookmark(ctx context.Context, userID, iti
 	span.SetStatus(codes.Ok, "Itinerary removed successfully")
 	return nil
 }
+
+// sessions
+func (r *RepositoryImpl) CreateSession(ctx context.Context, session types.ChatSession) error {
+	query := `
+        INSERT INTO chat_sessions (
+            id, user_id, current_itinerary, conversation_history, session_context,
+            created_at, updated_at, expires_at, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `
+	itineraryJSON, _ := json.Marshal(session.CurrentItinerary)
+	historyJSON, _ := json.Marshal(session.ConversationHistory)
+	contextJSON, _ := json.Marshal(session.SessionContext)
+
+	_, err := r.pgpool.Exec(ctx, query, session.ID, session.UserID, itineraryJSON, historyJSON, contextJSON,
+		session.CreatedAt, session.UpdatedAt, session.ExpiresAt, session.Status)
+	if err != nil {
+		r.logger.ErrorContext(ctx, "Failed to create session", slog.Any("error", err))
+		return fmt.Errorf("failed to create session: %w", err)
+	}
+	return nil
+}
+
+// GetSession retrieves a session by ID
+func (r *RepositoryImpl) GetSession(ctx context.Context, sessionID uuid.UUID) (*types.ChatSession, error) {
+	query := `
+        SELECT id, user_id, current_itinerary, conversation_history, session_context,
+               created_at, updated_at, expires_at, status
+        FROM chat_sessions WHERE id = $1
+    `
+	row := r.pgpool.QueryRow(ctx, query, sessionID)
+
+	var session types.ChatSession
+	var itineraryJSON, historyJSON, contextJSON []byte
+	err := row.Scan(&session.ID, &session.UserID, &itineraryJSON, &historyJSON, &contextJSON,
+		&session.CreatedAt, &session.UpdatedAt, &session.ExpiresAt, &session.Status)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("session %s not found", sessionID)
+		}
+		r.logger.ErrorContext(ctx, "Failed to get session", slog.Any("error", err))
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	json.Unmarshal(itineraryJSON, &session.CurrentItinerary)
+	json.Unmarshal(historyJSON, &session.ConversationHistory)
+	json.Unmarshal(contextJSON, &session.SessionContext)
+	return &session, nil
+}
+
+// UpdateSession updates an existing session
+func (r *RepositoryImpl) UpdateSession(ctx context.Context, session types.ChatSession) error {
+	query := `
+        UPDATE chat_sessions SET current_itinerary = $2, conversation_history = $3, session_context = $4,
+                                 updated_at = $5, expires_at = $6, status = $7
+        WHERE id = $1
+    `
+	itineraryJSON, _ := json.Marshal(session.CurrentItinerary)
+	historyJSON, _ := json.Marshal(session.ConversationHistory)
+	contextJSON, _ := json.Marshal(session.SessionContext)
+
+	_, err := r.pgpool.Exec(ctx, query, session.ID, itineraryJSON, historyJSON, contextJSON,
+		session.UpdatedAt, session.ExpiresAt, session.Status)
+	if err != nil {
+		r.logger.ErrorContext(ctx, "Failed to update session", slog.Any("error", err))
+		return fmt.Errorf("failed to update session: %w", err)
+	}
+	return nil
+}
+
+// AddMessageToSession appends a message to the session's conversation history
+func (r *RepositoryImpl) AddMessageToSession(ctx context.Context, sessionID uuid.UUID, message types.ConversationMessage) error {
+	session, err := r.GetSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	session.ConversationHistory = append(session.ConversationHistory, message)
+	session.UpdatedAt = time.Now()
+	return r.UpdateSession(ctx, *session)
+}
+
+func (r *RepositoryImpl) SaveSinglePOI(ctx context.Context, poi types.POIDetail, userID, cityID uuid.UUID, llmInteractionID uuid.UUID) (uuid.UUID, error) {
+	poiID := uuid.New()
+	query := `
+        INSERT INTO llm_suggested_pois (
+            id, user_id, city_id, llm_interaction_id, name, latitude, longitude, 
+            category, description_poi, distance
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id;
+    `
+	_, err := r.pgpool.Exec(ctx, query, poiID, userID, cityID, llmInteractionID,
+		poi.Name, poi.Latitude, poi.Longitude, poi.Category, poi.DescriptionPOI, poi.Distance)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to save POI: %w", err)
+	}
+	return poiID, nil
+}
+
+func (r *RepositoryImpl) GetPOIsBySessionSortedByDistance(ctx context.Context, sessionID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error) {
+	query := `
+        SELECT id, name, latitude, longitude, category, description_poi, 
+               ST_Distance(
+                   ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography,
+                   ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography
+               ) AS distance
+        FROM llm_suggested_pois
+        WHERE city_id = $1
+        ORDER BY distance ASC;
+    `
+	rows, err := r.pgpool.Query(ctx, query, cityID, userLocation.UserLon, userLocation.UserLat)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query POIs: %w", err)
+	}
+	defer rows.Close()
+
+	var pois []types.POIDetail
+	for rows.Next() {
+		var poi types.POIDetail
+		err := rows.Scan(&poi.ID, &poi.Name, &poi.Latitude, &poi.Longitude,
+			&poi.Category, &poi.DescriptionPOI, &poi.Distance)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan POI: %w", err)
+		}
+		pois = append(pois, poi)
+	}
+	return pois, nil
+}
+
+// calculateDistancePostGIS computes the distance between two points using PostGIS (in meters)
+func (l *RepositoryImpl) CalculateDistancePostGIS(ctx context.Context, userLat, userLon, poiLat, poiLon float64) (float64, error) {
+	query := `
+        SELECT ST_Distance(
+            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+            ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography
+        ) AS distance;
+    `
+	var distance float64
+	err := l.pgpool.QueryRow(ctx, query, userLon, userLat, poiLon, poiLat).Scan(&distance)
+	if err != nil {
+		return 0, fmt.Errorf("failed to calculate distance with PostGIS: %w", err)
+	}
+	return distance, nil
+}
+
+// func (r *RepositoryImpl) CalculateDistancePostGIS(ctx context.Context, poi types.POIDetail, userLocation types.UserLocation) (float64, error) {
+// 	ctx, span := otel.Tracer("Repository").Start(ctx, "CalculateDistancePostGIS", trace.WithAttributes(
+// 		attribute.String("poi.name", poi.Name),
+// 		attribute.Float64("poi.latitude", poi.Latitude),
+// 		attribute.Float64("poi.longitude", poi.Longitude),
+// 		attribute.Float64("user.latitude", userLocation.UserLat),
+// 		attribute.Float64("user.longitude", userLocation.UserLon),
+// 	))
+// 	defer span.End()
+
+// 	// Validate coordinates
+// 	if poi.Latitude < -90 || poi.Latitude > 90 || poi.Longitude < -180 || poi.Longitude > 180 {
+// 		err := fmt.Errorf("invalid POI coordinates: lat=%f, lon=%f", poi.Latitude, poi.Longitude)
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Invalid POI coordinates")
+// 		return 0, err
+// 	}
+// 	if userLocation.UserLat < -90 || userLocation.UserLat > 90 || userLocation.UserLon < -180 || userLocation.UserLon > 180 {
+// 		err := fmt.Errorf("invalid user coordinates: lat=%f, lon=%f", userLocation.UserLat, userLocation.UserLon)
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Invalid user coordinates")
+// 		return 0, err
+// 	}
+
+// 	query := `
+//         SELECT ST_Distance(
+//             ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+//             ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography
+//         ) AS distance
+//     `
+// 	var distance float64
+// 	err := r.pgpool.QueryRow(ctx, query, poi.Longitude, poi.Latitude, userLocation.UserLon, userLocation.UserLat).Scan(&distance)
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to calculate distance")
+// 		return 0, fmt.Errorf("failed to calculate distance: %w", err)
+// 	}
+
+// 	span.SetAttributes(attribute.Float64("distance.meters", distance))
+// 	span.SetStatus(codes.Ok, "Distance calculated successfully")
+// 	r.logger.Info("Distance calculated",
+// 		slog.String("poi.name", poi.Name),
+// 		slog.Float64("distance.meters", distance))
+// 	return distance, nil
+// }

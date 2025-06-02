@@ -221,6 +221,22 @@ func getRestaurantsNearbyPrompt(city string, userLocation types.UserLocation) st
     `, city, userLocation.SearchRadiusKm, userLocation.UserLat, userLocation.UserLon)
 }
 
+func generatedContinuedConversationPrompt(poi, city string) string {
+	return fmt.Sprintf(
+		`Provide detailed information about "%s" in %s. 
+		Analise this POI (The user can insert a POI name, a Restaurant name or an Hotel/Hostel name) and return the following JSON structure:
+    {
+        "name": "string (the POI name)",
+        "latitude": number (approximate latitude as float),
+        "longitude": number (approximate longitude as float),
+        "category": "string (e.g., Museum, Park, Historical Site)",
+        "description_poi": "string (50-100 words description)"
+    }
+    
+    If the POI is not found, return: {"name": "", "latitude": 0, "longitude": 0, "category": "", "description_poi": ""}`,
+		poi, city)
+}
+
 // TOOD
 // func getRestaurantDetailsPrompt(city string, lat, lon float64) string {
 // 	return fmt.Sprintf(`

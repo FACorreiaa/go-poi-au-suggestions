@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,20 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
+type SimpleIntentClassifier struct{}
+
+func (c *SimpleIntentClassifier) Classify(ctx context.Context, message string) (string, error) {
+	message = strings.ToLower(message)
+	if matched, _ := regexp.MatchString(`add|include|visit`, message); matched {
+		return "add_poi", nil
+	} else if matched, _ := regexp.MatchString(`remove|delete|skip`, message); matched {
+		return "remove_poi", nil
+	} else if matched, _ := regexp.MatchString(`what|where|how|why|when`, message); matched {
+		return "ask_question", nil
+	}
+	return "modify_itinerary", nil // Default intent
+}
+
 const (
 	model              = "gemini-2.0-flash"
 	defaultTemperature = 0.5
@@ -37,8 +52,7 @@ type ChatSession struct {
 	History []genai.Chat
 }
 
-var sessions = make(map[string]*ChatSession) // In-memory session store
-var sessionsMu sync.Mutex                    // Mutex for thread-safe access
+// Mutex for thread-safe access
 
 // Ensure implementation satisfies the interface
 var _ LlmInteractiontService = (*LlmInteractiontServiceImpl)(nil)
@@ -59,6 +73,13 @@ type LlmInteractiontService interface {
 	GetRestaurantsByPreferencesResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64, preferences types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error)
 	GetRestaurantsNearbyResponse(ctx context.Context, userID uuid.UUID, city string, userLocation types.UserLocation) ([]types.RestaurantDetailedInfo, error)
 	GetRestaurantDetailsResponse(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error)
+
+	StartNewSession(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (uuid.UUID, *types.AiCityResponse, error)
+	ContinueSession(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation) (*types.AiCityResponse, error)
+}
+
+type IntentClassifier interface {
+	Classify(ctx context.Context, message string) (string, error) // e.g., "start_trip", "modify_itinerary"
 }
 
 // LlmInteractiontServiceImpl provides the implementation for LlmInteractiontService.
@@ -72,6 +93,7 @@ type LlmInteractiontServiceImpl struct {
 	cityRepo           city.Repository
 	poiRepo            poi.Repository
 	cache              *cache.Cache
+	intentClassifier   IntentClassifier
 }
 
 // NewLlmInteractiontService creates a new user service instance.
@@ -99,6 +121,7 @@ func NewLlmInteractiontService(interestRepo interests.Repository,
 		cityRepo:           cityRepo,
 		poiRepo:            poiRepo,
 		cache:              cache,
+		intentClassifier:   &SimpleIntentClassifier{},
 	}
 }
 
@@ -141,7 +164,7 @@ func (l *LlmInteractiontServiceImpl) GenerateCityDataWorker(wg *sync.WaitGroup,
 		}
 		span.SetAttributes(attribute.Int("response.length", len(txt)))
 
-		jsonStr := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(txt), "```"), "```json")
+		cleanTxt := cleanJSONResponse(txt)
 		var cityDataFromAI struct {
 			CityName        string  `json:"city_name"`
 			StateProvince   *string `json:"state_province"` // Use pointer for nullable string
@@ -151,7 +174,7 @@ func (l *LlmInteractiontServiceImpl) GenerateCityDataWorker(wg *sync.WaitGroup,
 			Description     string  `json:"description"`
 			// BoundingBox     string  `json:"bounding_box,omitempty"` // If trying to get BBox string
 		}
-		if err := json.Unmarshal([]byte(jsonStr), &cityDataFromAI); err != nil {
+		if err := json.Unmarshal([]byte(cleanTxt), &cityDataFromAI); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "Failed to parse city data JSON")
 			resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to parse city data JSON: %w", err)}
@@ -225,11 +248,11 @@ func (l *LlmInteractiontServiceImpl) GenerateGeneralPOIWorker(wg *sync.WaitGroup
 	}
 	span.SetAttributes(attribute.Int("response.length", len(txt)))
 
-	jsonStr := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(txt), "```"), "```json")
+	cleanTxt := cleanJSONResponse(txt)
 	var poiData struct {
 		PointsOfInterest []types.POIDetail `json:"points_of_interest"`
 	}
-	if err := json.Unmarshal([]byte(jsonStr), &poiData); err != nil {
+	if err := json.Unmarshal([]byte(cleanTxt), &poiData); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to parse general POI JSON")
 		resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to parse general POI JSON: %w", err)}
@@ -283,14 +306,14 @@ func (l *LlmInteractiontServiceImpl) GeneratePersonalisedPOIWorker(wg *sync.Wait
 	}
 	span.SetAttributes(attribute.Int("response.length", len(txt)))
 
-	jsonStr := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(txt), "```"), "```json")
+	cleanTxt := cleanJSONResponse(txt)
 	var itineraryData struct {
 		ItineraryName      string            `json:"itinerary_name"`
 		OverallDescription string            `json:"overall_description"`
 		PointsOfInterest   []types.POIDetail `json:"points_of_interest"`
 	}
 
-	if err := json.Unmarshal([]byte(jsonStr), &itineraryData); err != nil {
+	if err := json.Unmarshal([]byte(cleanTxt), &itineraryData); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to parse personalized itinerary JSON")
 		resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to parse personalized itinerary JSON: %w", err)}
@@ -719,9 +742,9 @@ func (l *LlmInteractiontServiceImpl) getPOIdetails(wg *sync.WaitGroup, ctx conte
 	}
 
 	span.SetAttributes(attribute.Int("response.length", len(txt)))
-	jsonStr := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(txt), "```"), "```json")
+	cleanTxt := cleanJSONResponse(txt)
 	var detailedInfo types.POIDetailedInfo
-	if err := json.Unmarshal([]byte(jsonStr), &detailedInfo); err != nil {
+	if err := json.Unmarshal([]byte(cleanTxt), &detailedInfo); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to parse POI details JSON")
 		resultCh <- types.POIDetailedInfo{Err: fmt.Errorf("failed to parse POI details JSON: %w", err)}
@@ -928,11 +951,11 @@ func (l *LlmInteractiontServiceImpl) getHotelsByPreferenceDetails(wg *sync.WaitG
 	}
 
 	span.SetAttributes(attribute.Int("response.length", len(txt)))
-	jsonStr := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(txt), "```"), "```json")
+	cleanTxt := cleanJSONResponse(txt)
 	var hotelResponse struct {
 		Hotels []types.HotelDetailedInfo `json:"hotels"`
 	}
-	if err := json.Unmarshal([]byte(jsonStr), &hotelResponse); err != nil {
+	if err := json.Unmarshal([]byte(cleanTxt), &hotelResponse); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to parse hotel details JSON")
 		resultCh <- []types.HotelDetailedInfo{{Err: fmt.Errorf("failed to parse hotel details JSON: %w", err)}}
@@ -1135,11 +1158,11 @@ func (l *LlmInteractiontServiceImpl) getHotelsNearby(wg *sync.WaitGroup, ctx con
 	}
 
 	span.SetAttributes(attribute.Int("response.length", len(txt)))
-	jsonStr := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(txt), "```"), "```json")
+	cleanTxt := cleanJSONResponse(txt)
 	var hotelResponse struct {
 		Hotels []types.HotelDetailedInfo `json:"hotels"`
 	}
-	if err := json.Unmarshal([]byte(jsonStr), &hotelResponse); err != nil {
+	if err := json.Unmarshal([]byte(cleanTxt), &hotelResponse); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to parse hotel details JSON")
 		resultCh <- []types.HotelDetailedInfo{{Err: fmt.Errorf("failed to parse hotel details JSON: %w", err)}}
@@ -1341,11 +1364,11 @@ func (l *LlmInteractiontServiceImpl) getRestaurantsByPreferences(wg *sync.WaitGr
 		return
 	}
 
-	jsonStr := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(txt), "```"), "```json")
+	cleanTxt := cleanJSONResponse(txt)
 	var restaurantResponse struct {
 		Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
 	}
-	if err := json.Unmarshal([]byte(jsonStr), &restaurantResponse); err != nil {
+	if err := json.Unmarshal([]byte(cleanTxt), &restaurantResponse); err != nil {
 		span.RecordError(err)
 		resultCh <- []types.RestaurantDetailedInfo{{Err: fmt.Errorf("failed to parse restaurant JSON: %w", err)}}
 		return
@@ -1481,11 +1504,11 @@ func (l *LlmInteractiontServiceImpl) getRestaurantsNearby(wg *sync.WaitGroup, ct
 	span.SetAttributes(attribute.Int("response.length", len(txt)))
 
 	// Parse the JSON response
-	jsonStr := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(txt), "```"), "```json")
+	cleanTxt := cleanJSONResponse(txt)
 	var restaurantResponse struct {
 		Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
 	}
-	if err := json.Unmarshal([]byte(jsonStr), &restaurantResponse); err != nil {
+	if err := json.Unmarshal([]byte(cleanTxt), &restaurantResponse); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to parse restaurant details JSON")
 		resultCh <- []types.RestaurantDetailedInfo{{Err: fmt.Errorf("failed to parse restaurant details JSON: %w", err)}}
@@ -1710,11 +1733,11 @@ func (l *LlmInteractiontServiceImpl) getGeneralPOIByDistance(wg *sync.WaitGroup,
 	}
 	span.SetAttributes(attribute.Int("response.length", len(txt)))
 
-	jsonStr := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(txt), "```"), "```json")
+	cleanTxt := cleanJSONResponse(txt)
 	var poiData struct {
 		PointsOfInterest []types.POIDetail `json:"points_of_interest"`
 	}
-	if err := json.Unmarshal([]byte(jsonStr), &poiData); err != nil {
+	if err := json.Unmarshal([]byte(cleanTxt), &poiData); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to parse general POI JSON")
 		resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to parse general POI JSON: %w", err)}
@@ -1798,4 +1821,378 @@ func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceResponse(ctx context
 	l.cache.Set(cacheKey, poisDetailed, cache.DefaultExpiration)
 	span.SetStatus(codes.Ok, "POIs generated and cached")
 	return poisDetailed, nil
+}
+
+// StartNewSession creates a new chat session
+func (l *LlmInteractiontServiceImpl) StartNewSession(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (uuid.UUID, *types.AiCityResponse, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "StartNewSession", trace.WithAttributes(
+		attribute.String("city.name", cityName),
+		attribute.String("user.id", userID.String()),
+	))
+	defer span.End()
+
+	l.logger.DebugContext(ctx, "Starting new chat session", slog.String("cityName", cityName), slog.String("userID", userID.String()))
+
+	// Generate message if not provided
+	if message == "" {
+		message = fmt.Sprintf("Plan a trip to %s", cityName)
+	}
+	span.SetAttributes(attribute.String("message", message))
+
+	// Fetch user data
+	interests, searchProfile, tags, err := l.FetchUserData(ctx, userID, profileID) // ProfileID set to nil for simplicity
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to fetch user data")
+		l.logger.ErrorContext(ctx, "Failed to fetch user data", slog.Any("error", err))
+		return uuid.Nil, nil, fmt.Errorf("failed to fetch user data: %w", err)
+	}
+
+	// Prepare prompt data
+	interestNames, tagsPromptPart, userPrefs := l.PreparePromptData(interests, tags, searchProfile)
+	span.SetAttributes(
+		attribute.Int("interests.count", len(interestNames)),
+		attribute.Int("tags.count", len(tags)),
+	)
+
+	// Determine user location
+	if searchProfile.UserLatitude != nil && searchProfile.UserLongitude != nil {
+
+		span.SetAttributes(
+			attribute.Float64("user.latitude", userLocation.UserLat),
+			attribute.Float64("user.longitude", userLocation.UserLon),
+		)
+	} else {
+		l.logger.WarnContext(ctx, "User location not available, cannot sort personalised POIs by distance")
+		span.AddEvent("User location not available")
+	}
+
+	// Set up channels and wait group for fan-in fan-out
+	resultCh := make(chan types.GenAIResponse, 3)
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	// Fan-out: Start workers
+	go l.GenerateCityDataWorker(&wg, ctx, cityName, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	go l.GenerateGeneralPOIWorker(&wg, ctx, cityName, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	go l.GeneratePersonalisedPOIWorker(&wg, ctx, cityName, userID, uuid.Nil, resultCh, interestNames, tagsPromptPart, userPrefs, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+
+	// Close channel after workers complete
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	// Fan-in: Collect results
+	itinerary, llmInteractionID, rawPersonalisedPOIs, errors := l.CollectResults(resultCh)
+	if len(errors) > 0 {
+		l.logger.ErrorContext(ctx, "Errors during itinerary generation", slog.Any("errors", errors))
+		for _, err := range errors {
+			span.RecordError(err)
+		}
+		span.SetStatus(codes.Error, "Failed to generate itinerary")
+		return uuid.Nil, nil, fmt.Errorf("failed to generate itinerary: %v", errors)
+	}
+
+	// Handle city data
+	cityID, err := l.HandleCityData(ctx, itinerary.GeneralCityData)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to handle city data")
+		l.logger.ErrorContext(ctx, "Failed to handle city data", slog.Any("error", err))
+		return uuid.Nil, nil, err
+	}
+	span.SetAttributes(attribute.String("city.id", cityID.String()))
+
+	// Handle general POIs
+	l.HandleGeneralPOIs(ctx, itinerary.PointsOfInterest, cityID)
+	span.SetAttributes(attribute.Int("general_pois.count", len(itinerary.PointsOfInterest)))
+
+	// Handle personalized POIs
+	sortedPois, err := l.HandlePersonalisedPOIs(ctx, rawPersonalisedPOIs, cityID, userLocation, llmInteractionID, userID, uuid.Nil)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to handle personalized POIs")
+		l.logger.ErrorContext(ctx, "Failed to handle personalized POIs", slog.Any("error", err))
+		return uuid.Nil, nil, err
+	}
+	itinerary.AIItineraryResponse.PointsOfInterest = sortedPois
+	span.SetAttributes(
+		attribute.Int("personalized_pois.count", len(sortedPois)),
+		attribute.String("llm_interaction.id", llmInteractionID.String()),
+	)
+
+	// Create new session
+	sessionID := uuid.New()
+	session := types.ChatSession{
+		ID:               sessionID,
+		UserID:           userID,
+		CurrentItinerary: &itinerary,
+		ConversationHistory: []types.ConversationMessage{
+			{Role: "user", Content: message, Timestamp: time.Now()},
+			{Role: "assistant", Content: "Here’s your initial trip plan for " + cityName, Timestamp: time.Now()},
+		},
+		SessionContext: types.SessionContext{
+			CityName:            cityName,
+			ConversationSummary: fmt.Sprintf("Initial trip plan for %s", cityName),
+		},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		Status:    "active",
+	}
+
+	// Save session to database
+	if err := l.llmInteractionRepo.CreateSession(ctx, session); err != nil {
+		l.logger.ErrorContext(ctx, "Failed to save session", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to save session")
+		return uuid.Nil, nil, fmt.Errorf("failed to save session: %w", err)
+	}
+
+	l.logger.InfoContext(ctx, "New session started",
+		slog.String("sessionID", sessionID.String()),
+		slog.String("itinerary_name", itinerary.AIItineraryResponse.ItineraryName),
+		slog.Int("personalised_poi_count", len(itinerary.AIItineraryResponse.PointsOfInterest)))
+	span.SetAttributes(attribute.String("session.id", sessionID.String()))
+	span.SetStatus(codes.Ok, "Session started successfully")
+
+	return sessionID, &itinerary, nil
+}
+
+// ContinueSession handles subsequent messages in an existing session
+func (l *LlmInteractiontServiceImpl) ContinueSession(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation) (*types.AiCityResponse, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ContinueSession", trace.WithAttributes(
+		attribute.String("session.id", sessionID.String()),
+		attribute.String("message", message),
+	))
+	defer span.End()
+
+	// Fetch session
+	session, err := l.llmInteractionRepo.GetSession(ctx, sessionID)
+	if err != nil || session.Status != "active" {
+		l.logger.ErrorContext(ctx, "Invalid or inactive session", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid or inactive session")
+		return nil, fmt.Errorf("invalid or inactive session: %w", err)
+	}
+
+	// Fetch city ID
+	city, err := l.cityRepo.FindCityByNameAndCountry(ctx, session.SessionContext.CityName, "")
+	if err != nil || city == nil {
+		l.logger.ErrorContext(ctx, "Failed to find city", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("city %s not found: %w", session.SessionContext.CityName, err)
+	}
+	cityID := city.ID
+
+	// Add user message
+	userMessage := types.ConversationMessage{
+		ID:          uuid.New(),
+		Role:        "user",
+		Content:     message,
+		Timestamp:   time.Now(),
+		MessageType: types.TypeModificationRequest,
+	}
+	if err := l.llmInteractionRepo.AddMessageToSession(ctx, sessionID, userMessage); err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to add message to session: %w", err)
+	}
+
+	intent, err := l.intentClassifier.Classify(ctx, message)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to classify intent", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to classify intent")
+		return nil, fmt.Errorf("failed to classify intent: %w", err)
+	}
+
+	var responseText string
+	switch intent {
+	case "add_poi":
+		poiName := extractPOIName(message)
+		for _, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
+			if strings.EqualFold(poi.Name, poiName) {
+				responseText = fmt.Sprintf("%s is already in your itinerary.", poiName)
+				break
+			}
+		}
+		if responseText == "" {
+			newPOI, err := l.generatePOIData(ctx, poiName, session.SessionContext.CityName, userLocation, session.UserID, cityID)
+			if err != nil {
+				l.logger.ErrorContext(ctx, "Failed to generate POI data", slog.Any("error", err))
+				span.RecordError(err)
+				responseText = fmt.Sprintf("Could not add %s due to an error.", poiName)
+			} else {
+				session.CurrentItinerary.AIItineraryResponse.PointsOfInterest = append(
+					session.CurrentItinerary.AIItineraryResponse.PointsOfInterest, newPOI)
+				responseText = fmt.Sprintf("I’ve added %s to your itinerary.", poiName)
+			}
+		}
+	case "remove_poi":
+		poiName := extractPOIName(message)
+		for i, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
+			if strings.Contains(strings.ToLower(poi.Name), strings.ToLower(poiName)) {
+				session.CurrentItinerary.AIItineraryResponse.PointsOfInterest = append(
+					session.CurrentItinerary.AIItineraryResponse.PointsOfInterest[:i],
+					session.CurrentItinerary.AIItineraryResponse.PointsOfInterest[i+1:]...,
+				)
+				responseText = fmt.Sprintf("I’ve removed %s from your itinerary.", poiName)
+				break
+			}
+		}
+		if responseText == "" {
+			responseText = fmt.Sprintf("Could not find %s in your itinerary.", poiName)
+		}
+	case "ask_question":
+		responseText = "I’m here to help! For now, I’ll assume you’re asking about your trip. What specifically would you like to know?"
+	default: // modify_itinerary
+		if matches := regexp.MustCompile(`replace\s+(.+?)\s+with\s+(.+?)(?:\s+in\s+my\s+itinerary)?`).FindStringSubmatch(strings.ToLower(message)); len(matches) == 3 {
+			oldPOI := matches[1]
+			newPOIName := matches[2]
+			for i, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
+				if strings.Contains(strings.ToLower(poi.Name), oldPOI) {
+					newPOI, err := l.generatePOIData(ctx, newPOIName, session.SessionContext.CityName, userLocation, session.UserID, cityID)
+					if err != nil {
+						l.logger.ErrorContext(ctx, "Failed to generate POI data", slog.Any("error", err))
+						span.RecordError(err)
+						responseText = fmt.Sprintf("Could not replace %s with %s due to an error.", oldPOI, newPOIName)
+					} else {
+						session.CurrentItinerary.AIItineraryResponse.PointsOfInterest[i] = newPOI
+						responseText = fmt.Sprintf("I’ve replaced %s with %s in your itinerary.", oldPOI, newPOIName)
+					}
+					break
+				}
+			}
+			if responseText == "" {
+				responseText = fmt.Sprintf("Could not find %s in your itinerary.", oldPOI)
+			}
+		} else {
+			responseText = "I’ve noted your request to modify the itinerary. Please specify the changes (e.g., 'replace X with Y')."
+		}
+	}
+
+	// Sort POIs by distance if userLocation is provided
+	if (intent == "add_poi" || intent == "modify_itinerary") && userLocation != nil && userLocation.UserLat != 0 && userLocation.UserLon != 0 {
+		sortedPOIs, err := l.llmInteractionRepo.GetPOIsBySessionSortedByDistance(ctx, sessionID, cityID, *userLocation)
+		if err != nil {
+			l.logger.WarnContext(ctx, "Failed to sort POIs by distance", slog.Any("error", err))
+			span.RecordError(err)
+		} else {
+			session.CurrentItinerary.AIItineraryResponse.PointsOfInterest = sortedPOIs
+			l.logger.InfoContext(ctx, "POIs sorted by distance",
+				slog.Int("poi_count", len(sortedPOIs)))
+			span.SetAttributes(attribute.Int("sorted_pois.count", len(sortedPOIs)))
+		}
+	}
+
+	// Add assistant response
+	assistantMessage := types.ConversationMessage{
+		ID:          uuid.New(),
+		Role:        "assistant",
+		Content:     responseText,
+		Timestamp:   time.Now(),
+		MessageType: types.TypeModificationRequest,
+	}
+	if err := l.llmInteractionRepo.AddMessageToSession(ctx, sessionID, assistantMessage); err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to add assistant message: %w", err)
+	}
+
+	// Update session
+	session.UpdatedAt = time.Now()
+	session.ExpiresAt = time.Now().Add(24 * time.Hour)
+	if err := l.llmInteractionRepo.UpdateSession(ctx, *session); err != nil {
+		l.logger.ErrorContext(ctx, "Failed to update session", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to update session: %w", err)
+	}
+
+	l.logger.InfoContext(ctx, "Session continued",
+		slog.String("sessionID", sessionID.String()),
+		slog.String("intent", intent))
+	span.SetStatus(codes.Ok, "Session continued successfully")
+	return session.CurrentItinerary, nil
+}
+
+// generatePOIData queries the LLM for POI details and calculates distance using PostGIS
+func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiName, cityName string, userLocation *types.UserLocation, userID, cityID uuid.UUID) (types.POIDetail, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GeneratePOIData", trace.WithAttributes(
+		attribute.String("poi.name", poiName),
+		attribute.String("city.name", cityName),
+	))
+	defer span.End()
+
+	// Create a prompt for the LLM
+	prompt := generatedContinuedConversationPrompt(poiName, cityName)
+
+	// Generate LLM response
+	response, err := l.aiClient.GenerateContent(ctx, prompt, &genai.GenerateContentConfig{
+		Temperature: genai.Ptr[float32](0.7),
+	})
+	if err != nil {
+		span.RecordError(err)
+		return types.POIDetail{}, fmt.Errorf("failed to generate POI data: %w", err)
+	}
+
+	cleanResponse := cleanJSONResponse(response)
+	var poiData types.POIDetail
+	if err := json.Unmarshal([]byte(cleanResponse), &poiData); err != nil || poiData.Name == "" {
+		l.logger.WarnContext(ctx, "LLM returned invalid or empty POI data",
+			slog.String("poiName", poiName),
+			slog.String("llmResponse", response),
+			slog.Any("unmarshalError", err))
+		span.AddEvent("Invalid LLM response")
+		poiData = types.POIDetail{
+			ID:             uuid.New(),
+			Name:           poiName,
+			Latitude:       0,
+			Longitude:      0,
+			Category:       "Attraction",
+			DescriptionPOI: fmt.Sprintf("Added %s based on user request, but detailed data not available.", poiName),
+			Distance:       0,
+		}
+	}
+
+	// Calculate distance if coordinates are valid
+	if userLocation != nil && userLocation.UserLat != 0 && userLocation.UserLon != 0 && poiData.Latitude != 0 && poiData.Longitude != 0 {
+		distance, err := l.llmInteractionRepo.CalculateDistancePostGIS(ctx, userLocation.UserLat, userLocation.UserLon, poiData.Latitude, poiData.Longitude)
+		if err != nil {
+			l.logger.WarnContext(ctx, "Failed to calculate distance", slog.Any("error", err))
+			span.RecordError(err)
+			poiData.Distance = 0
+		} else {
+			poiData.Distance = distance
+			span.SetAttributes(attribute.Float64("poi.distance_meters", distance))
+			l.logger.DebugContext(ctx, "Calculated distance for POI",
+				slog.String("poiName", poiName),
+				slog.Float64("distance_meters", distance))
+		}
+	} else {
+		poiData.Distance = 0
+		span.AddEvent("Distance not calculated due to missing location data")
+		l.logger.WarnContext(ctx, "Cannot calculate distance",
+			slog.Bool("userLocationAvailable", userLocation != nil),
+			slog.Float64("userLat", userLocation.UserLat),
+			slog.Float64("userLon", userLocation.UserLon),
+			slog.Float64("poiLatitude", poiData.Latitude),
+			slog.Float64("poiLongitude", poiData.Longitude))
+	}
+
+	// Save POI to database
+	llmInteractionID := uuid.New()
+	_, err = l.llmInteractionRepo.SaveSinglePOI(ctx, poiData, userID, cityID, llmInteractionID)
+	if err != nil {
+		l.logger.WarnContext(ctx, "Failed to save POI to database", slog.Any("error", err))
+		span.RecordError(err)
+	}
+
+	span.SetAttributes(
+		attribute.String("poi.name", poiData.Name),
+		attribute.Float64("poi.latitude", poiData.Latitude),
+		attribute.Float64("poi.longitude", poiData.Longitude),
+		attribute.String("poi.category", poiData.Category),
+		attribute.String("llm_interaction.id", llmInteractionID.String()),
+	)
+	return poiData, nil
 }

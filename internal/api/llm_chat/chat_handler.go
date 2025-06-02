@@ -47,6 +47,10 @@ type Handler interface {
 
 	// GetNearbyRecommendations(w http.ResponseWriter, r *http.Request)
 	GetNearbyRecommendations(w http.ResponseWriter, r *http.Request)
+
+	// sessions
+	StartChatSession(w http.ResponseWriter, r *http.Request)
+	ContinueChatSession(w http.ResponseWriter, r *http.Request)
 }
 type HandlerImpl struct {
 	llmInteractionService LlmInteractiontService
@@ -60,50 +64,95 @@ func NewLLMHandlerImpl(llmInteractionService LlmInteractiontService, logger *slo
 	}
 }
 
-//func RunLLM(ctx context.Context) {
-//	aiClient, err := generativeAI.NewAIClient(ctx)
-//	if err != nil {
-//		log.Fatal(err)
-//	}
-//
-//	prompt := `Generate a list of points of interest in Berlin.
-//				Return the response in JSON format with each POI containing 'name', 'latitude', 'longitude', and 'category'.
-//				Do not wrap the response in json markers.`
-//
-//	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.5)}
-//	response, err := aiClient.GenerateResponse(ctx, prompt, config)
-//	if err != nil {
-//		log.Fatal(err)
-//	}
-//	for _, candidate := range response.Candidates {
-//		if candidate.Content == nil || len(candidate.Content.Parts) == 0 {
-//			log.Println("Candidate has no content or parts.")
-//			continue
-//		}
-//
-//		part := candidate.Content.Parts[0]
-//		txt := part.Text
-//		fmt.Printf("Part text: [%s]\n", txt)
-//		if txt != "" {
-//			log.Printf("Extracted text: [%s]\n", txt)
-//			type POI struct {
-//				Name      string  `json:"name"`
-//				Latitude  float64 `json:"latitude"`
-//				Longitude float64 `json:"longitude"`
-//				Category  string  `json:"category"`
-//			}
-//			var pois []POI
-//
-//			if err := json.Unmarshal([]byte(txt), &pois); err != nil {
-//				log.Printf("Failed to unmarshal AI response text into POIs: %v. Text was: %s\n", err, txt)
-//			} else {
-//				fmt.Println("POIs (successfully unmarshalled):", pois)
-//			}
-//		} else {
-//			log.Println("Part's text was empty.")
-//		}
-//	}
-//}
+func (h *HandlerImpl) StartChatSession(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetPrompResponse", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/prompt-response/chat/sessions/{profileID}"),
+	))
+	defer span.End()
+	l := h.logger.With(slog.String("HandlerImpl", "StartChatSession"))
+
+	var req struct {
+		CityName string `json:"city_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+
+	profileIDStr := chi.URLParam(r, "profileID")
+	profileID, err := uuid.Parse(profileIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid profile ID format", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid profile ID format")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid profile ID format in URL")
+		return
+	}
+	span.SetAttributes(attribute.String("app.profile.id", profileID.String()))
+
+	userLocation := &types.UserLocation{
+		UserLat: 41.3851,
+		UserLon: 2.1734,
+	}
+
+	sessionID, itinerary, err := h.llmInteractionService.StartNewSession(ctx, userID, profileID, req.CityName, "", userLocation)
+	if err != nil {
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to start session: "+err.Error())
+		return
+	}
+
+	response := struct {
+		SessionID uuid.UUID             `json:"session_id"`
+		Data      *types.AiCityResponse `json:"data"`
+	}{SessionID: sessionID, Data: itinerary}
+	api.WriteJSONResponse(w, r, http.StatusCreated, response)
+}
+
+func (h *HandlerImpl) ContinueChatSession(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	sessionIDStr := chi.URLParam(r, "sessionID")
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid session ID")
+		return
+	}
+
+	var req struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	userLocation := &types.UserLocation{
+		UserLat: 41.3851,
+		UserLon: 2.1734,
+	}
+
+	itinerary, err := h.llmInteractionService.ContinueSession(ctx, sessionID, req.Message, userLocation)
+	if err != nil {
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to continue session: "+err.Error())
+		return
+	}
+
+	response := struct {
+		Data *types.AiCityResponse `json:"data"`
+	}{Data: itinerary}
+	api.WriteJSONResponse(w, r, http.StatusOK, response)
+}
 
 func (HandlerImpl *HandlerImpl) GetPrompResponse(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetPrompResponse", trace.WithAttributes(

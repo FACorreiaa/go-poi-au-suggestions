@@ -53,7 +53,7 @@ type AiCityResponse struct {
 	GeneralCityData     GeneralCityData     `json:"general_city_data"`
 	PointsOfInterest    []POIDetail         `json:"points_of_interest"`
 	AIItineraryResponse AIItineraryResponse `json:"itinerary_response"`
-	SessionID           string              `json:"session_id"`
+	SessionID           uuid.UUID           `json:"session_id"`
 }
 
 type GenAIResponse struct {

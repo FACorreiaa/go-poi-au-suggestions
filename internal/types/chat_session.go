@@ -14,11 +14,11 @@ type ChatSession struct {
 	CityName            string                `json:"city_name"`
 	CurrentItinerary    *AiCityResponse       `json:"current_itinerary,omitempty"`
 	ConversationHistory []ConversationMessage `json:"conversation_history"`
-	SessionContext      SessionContext        `json:"session_context"`
+	SessionContext      SessionContext        `json:"session_context"` // cigty_name: Barcelona
 	CreatedAt           time.Time             `json:"created_at"`
 	UpdatedAt           time.Time             `json:"updated_at"`
 	ExpiresAt           time.Time             `json:"expires_at"`
-	Status              SessionStatus         `json:"status"`
+	Status              SessionStatus         `json:"status"` // "active", "expired", etc.
 }
 
 type ConversationMessage struct {
@@ -54,6 +54,7 @@ type MessageMetadata struct {
 }
 
 type SessionContext struct {
+	CityName            string                         `json:"city_name"` // e.g., "Barcelona"
 	LastCityID          uuid.UUID                      `json:"last_city_id"`
 	UserPreferences     *UserPreferenceProfileResponse `json:"user_preferences"`
 	ActiveInterests     []string                       `json:"active_interests"`

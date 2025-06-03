@@ -14,8 +14,14 @@ CREATE TABLE global_tags (
     description TEXT,
     tag_type TEXT NOT NULL DEFAULT 'general', -- e.g., 'vibe', 'cost', 'logistics', 'atmosphere'
     active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT unique_tag_name UNIQUE (name)
 );
+
+CREATE INDEX idx_global_tags_name ON global_tags (name);
+
+CREATE INDEX idx_global_tags_active ON global_tags (active);
 -- Seed some common avoid tags
 INSERT INTO
     global_tags (name, tag_type, description)
@@ -54,11 +60,13 @@ CREATE TABLE user_personal_tags (
     tag_type TEXT DEFAULT 'personal', -- Differentiate from global
     description TEXT,
     active bool DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ,
-    CONSTRAINT unique_user_personal_tag_name UNIQUE (user_id, name) -- Unique per user
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE,
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    FOREIGN KEY (profile_id) REFERENCES user_preference_profiles (id) ON DELETE SET NULL,
+    CONSTRAINT unique_user_tag_name UNIQUE (user_id, name)
 );
 
-CREATE INDEX idx_user_personal_tags_profile_id ON user_personal_tags (profile_id);
+CREATE INDEX idx_user_personal_tags_user_id ON user_personal_tags (user_id);
 
-CREATE INDEX idx_user_personal_tags_tags_tag_id ON user_personal_tags (id);
+CREATE INDEX idx_user_personal_tags_profile_id ON user_personal_tags (profile_id);

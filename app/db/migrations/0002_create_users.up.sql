@@ -9,7 +9,8 @@ CREATE TABLE users (
     city CITEXT,
     country CITEXT,
     about_you TEXT,
-    password_hash TEXT NOT NULL, -- Store hashed passwords only!
+    role VARCHAR(50) NOT NULL DEFAULT 'user', -- e.g., 'admin', 'user', 'moderator'
+    password_hash VARCHAR(255), -- Store hashed passwords only!
     display_name TEXT, -- Fallback display name if username is null
     profile_image_url TEXT, -- URL to user's avatar
     is_active BOOLEAN NOT NULL DEFAULT TRUE, -- For soft deletes or disabling accounts
@@ -17,7 +18,7 @@ CREATE TABLE users (
     last_login_at TIMESTAMPTZ, -- Track last login time
     -- Preferences might be stored separately or as JSONB here
     -- preferences JSONB DEFAULT '{}'::jsonb, -- Option A: Simple, less queryable
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -52,7 +53,7 @@ CREATE TABLE subscriptions (
     trial_end_date TIMESTAMPTZ, -- When a trial period expires
     external_provider TEXT, -- e.g., 'stripe', 'paypal'
     external_subscription_id TEXT UNIQUE, -- Subscription ID from the payment provider
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -74,7 +75,7 @@ CREATE TABLE refresh_tokens (
     user_id UUID NOT NULL,
     token VARCHAR(255) UNIQUE NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     revoked_at TIMESTAMPTZ,
     CONSTRAINT fk_user_refresh_token FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
@@ -85,7 +86,7 @@ CREATE TABLE sessions (
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE, -- Link to the user
     expires_at TIMESTAMPTZ NOT NULL, -- When the session automatically becomes invalid
     invalidated_at TIMESTAMPTZ, -- When the session was manually invalidated (e.g., logout), NULL if still valid until expiry
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- Tracks updates, e.g., extending session activity
     -- Optional: Add metadata like IP address or User-Agent if needed
     ip_address INET,

@@ -10,13 +10,13 @@ CREATE TABLE cities (
     bounding_box GEOMETRY (Polygon, 4326), -- Optional: Bounding box for spatial queries
     ai_summary TEXT, -- AI-generated summary of the city
     embedding VECTOR (768), -- Optional: Embedding vector for the city (adjust dimension)
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Index for faster city lookups
-CREATE INDEX idx_cities_name_country ON cities (name, country);
--- Spatial index for center point (if used frequently)
+CREATE INDEX idx_cities_name_country ON cities (LOWER(name), country);
+
 CREATE INDEX idx_cities_center_location ON cities USING GIST (center_location);
 
 -- Trigger to update 'updated_at' timestamp
@@ -50,13 +50,16 @@ CREATE TABLE points_of_interest (
     embedding VECTOR (768), -- Uses pgvector type (adjust dimension as needed)
     tags TEXT [], -- Array of simple text tags (e.g., {"historic", "good for kids", "romantic"}) - Alternatively use a join table
     accessibility_info TEXT, -- Description of accessibility features
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (city_id) REFERENCES cities (id) ON DELETE CASCADE
 );
 
 -- Core spatial index for location-based queries (finding nearby POIs)
 CREATE INDEX idx_poi_location ON points_of_interest USING GIST (location);
 -- Index for filtering by city
+CREATE INDEX idx_points_of_interest_city_name ON points_of_interest (city_id, name);
+
 CREATE INDEX idx_poi_city_id ON points_of_interest (city_id);
 -- Index for filtering by type
 CREATE INDEX idx_poi_type ON points_of_interest (poi_type);

@@ -15,11 +15,13 @@ CREATE TABLE user_saved_itineraries (
         AND estimated_cost_level <= 4
     ),
     is_public BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    FOREIGN KEY (source_llm_interaction_id) REFERENCES llm_interactions (id) ON DELETE SET NULL,
+    FOREIGN KEY (primary_city_id) REFERENCES cities (id) ON DELETE CASCADE
     -- Consider uniqueness constraint if needed, e.g., UNIQUE (user_id, title)
 );
-
 -- Indexes for user_saved_itineraries
 CREATE INDEX idx_user_saved_itineraries_user_id ON user_saved_itineraries (user_id);
 

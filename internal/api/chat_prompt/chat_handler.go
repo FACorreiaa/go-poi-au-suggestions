@@ -50,6 +50,7 @@ type Handler interface {
 
 	// sessions
 	StartChatSession(w http.ResponseWriter, r *http.Request)
+	StartChatSessionStream(w http.ResponseWriter, r *http.Request)
 	ContinueChatSession(w http.ResponseWriter, r *http.Request)
 }
 type HandlerImpl struct {
@@ -119,6 +120,114 @@ func (h *HandlerImpl) StartChatSession(w http.ResponseWriter, r *http.Request) {
 	}{SessionID: sessionID, Data: itinerary}
 	api.WriteJSONResponse(w, r, http.StatusCreated, response)
 }
+
+// func (h *HandlerImpl) StartChatSessionStream(w http.ResponseWriter, r *http.Request) {
+// 	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetPrompResponse", trace.WithAttributes(
+// 		semconv.HTTPRequestMethodKey.String(r.Method),
+// 		semconv.HTTPRouteKey.String("/prompt-response/chat/sessions/{profileID}"),
+// 	))
+// 	defer span.End()
+// 	l := h.logger.With(slog.String("HandlerImpl", "StartChatSession"))
+
+// 	// Parse request body
+// 	var req struct {
+// 		CityName string `json:"city_name"`
+// 	}
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+// 		return
+// 	}
+
+// 	// Authentication and user ID validation
+// 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+// 	if !ok || userIDStr == "" {
+// 		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+// 		return
+// 	}
+// 	userID, err := uuid.Parse(userIDStr)
+// 	if err != nil {
+// 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+// 		return
+// 	}
+
+// 	// Profile ID validation
+// 	profileIDStr := chi.URLParam(r, "profileID")
+// 	profileID, err := uuid.Parse(profileIDStr)
+// 	if err != nil {
+// 		l.ErrorContext(ctx, "Invalid profile ID format", slog.Any("error", err))
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Invalid profile ID format")
+// 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid profile ID format in URL")
+// 		return
+// 	}
+// 	span.SetAttributes(attribute.String("app.profile.id", profileID.String()))
+
+// 	// Set SSE headers
+// 	w.Header().Set("Content-Type", "text/event-stream")
+// 	w.Header().Set("Cache-Control", "no-cache")
+// 	w.Header().Set("Connection", "keep-alive")
+// 	w.Header().Set("X-Accel-Buffering", "no") // Disable buffering in proxies like Nginx
+
+// 	// Ensure the response is flushed to the client
+// 	flusher, ok := w.(http.Flusher)
+// 	if !ok {
+// 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Streaming not supported")
+// 		return
+// 	}
+
+// 	// User location (hardcoded for now)
+// 	userLocation := &types.UserLocation{
+// 		UserLat: 41.3851,
+// 		UserLon: 2.1734,
+// 	}
+
+// 	// Start the streaming session
+// 	sessionID, streamCh, err := h.llmInteractionService.StartNewSessionStream(ctx, userID, profileID, req.CityName, "", userLocation)
+// 	if err != nil {
+// 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to start session: "+err.Error())
+// 		return
+// 	}
+
+// 	// Send session ID as the first event
+// 	sessionData := struct {
+// 		SessionID uuid.UUID `json:"session_id"`
+// 	}{SessionID: sessionID}
+// 	sessionJSON, _ := json.Marshal(sessionData)
+// 	fmt.Fprintf(w, "event: session\n")
+// 	fmt.Fprintf(w, "data: %s\n\n", sessionJSON)
+// 	flusher.Flush()
+
+// 	// Stream itinerary data
+// 	for {
+// 		select {
+// 		case data, ok := <-streamCh:
+// 			if !ok {
+// 				// Channel closed, streaming complete
+// 				fmt.Fprintf(w, "event: complete\n")
+// 				fmt.Fprintf(w, "data: {}\n\n")
+// 				flusher.Flush()
+// 				return
+// 			}
+// 			// Send each piece of data as an SSE event
+// 			dataJSON, err := json.Marshal(data)
+// 			if err != nil {
+// 				l.ErrorContext(ctx, "Failed to marshal streaming data", slog.Any("error", err))
+// 				continue
+// 			}
+// 			fmt.Fprintf(w, "event: data\n")
+// 			fmt.Fprintf(w, "data: %s\n\n", dataJSON)
+// 			flusher.Flush()
+// 		case <-ctx.Done():
+// 			// Client disconnected or context canceled
+// 			l.InfoContext(ctx, "Client disconnected or context canceled")
+// 			return
+// 		case <-r.Context().Done():
+// 			// Client explicitly closed the connection
+// 			l.InfoContext(ctx, "Client closed connection")
+// 			return
+// 		}
+// 	}
+// }
 
 func (h *HandlerImpl) ContinueChatSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

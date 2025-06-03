@@ -13,7 +13,8 @@ CREATE TABLE llm_interactions (
     completion_tokens INTEGER,
     total_tokens INTEGER,
     latency_ms INTEGER, -- Time taken for the API call
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+    --FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
 -- Indexes for querying logs
@@ -23,41 +24,40 @@ CREATE INDEX idx_llm_interactions_created_at ON llm_interactions (created_at);
 -- Consider JSONB indexes if querying payload frequently:
 -- CREATE INDEX idx_llm_interactions_resp_payload_gin ON llm_interactions USING GIN (response_payload);
 
-
 CREATE TABLE llm_suggested_pois (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL, -- The user for whom this was generated
     search_profile_id UUID, -- The specific search profile used (if applicable)
     llm_interaction_id UUID NOT NULL REFERENCES llm_interactions(id) ON DELETE CASCADE, -- Links to the LLM request/response log
     city_id UUID REFERENCES cities(id) ON DELETE SET NULL, -- The city context for this POI
-
+    latitude DOUBLE PRECISION, -- LLM provided latitude
+    longitude DOUBLE PRECISION, -- LLM provided longitude
+    distance DOUBLE PRECISION, -- Distance from the user's current location (if applicable)
+    location GEOMETRY(Point, 4326) NOT NULL, -- PostGIS geometry type for spatial queries
     name TEXT NOT NULL,
     description_poi TEXT, -- LLM-generated description
-    location GEOMETRY(Point, 4326) NOT NULL, -- Store LLM provided lat/lon here
     category TEXT, -- LLM-suggested category
     address TEXT, -- If LLM provides it
     website TEXT, -- If LLM provides it
     opening_hours_suggestion TEXT, -- If LLM provides it
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    --FOREIGN KEY (search_profile_id) REFERENCES user_preference_profiles(id) ON DELETE SET NULL,
+    FOREIGN KEY (llm_interaction_id) REFERENCES llm_interactions(id) ON DELETE CASCADE,
+    FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
     -- You can add other fields from types.POIDetail if the LLM commonly provides them
 
 -- Foreign key constraints (if not defined inline above)
 -- CONSTRAINT fk_llm_suggested_pois_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, -- Assuming you have a users table
 -- CONSTRAINT fk_llm_suggested_pois_profile FOREIGN KEY (search_profile_id) REFERENCES user_search_profiles(id) ON DELETE SET NULL,
 
-created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Indexes
-CREATE INDEX idx_llm_suggested_pois_user_id ON llm_suggested_pois (user_id);
-
-CREATE INDEX idx_llm_suggested_pois_search_profile_id ON llm_suggested_pois (search_profile_id);
-
-CREATE INDEX idx_llm_suggested_pois_llm_interaction_id ON llm_suggested_pois (llm_interaction_id);
-
-CREATE INDEX idx_llm_suggested_pois_city_id ON llm_suggested_pois (city_id);
-
 CREATE INDEX idx_llm_suggested_pois_location ON llm_suggested_pois USING GIST (location);
+
+CREATE INDEX idx_llm_suggested_pois_interaction_id ON llm_suggested_pois (llm_interaction_id);
 -- Crucial for distance sorting
 
 -- Trigger to update 'updated_at' timestamp
@@ -86,13 +86,15 @@ CREATE TABLE poi_details (
     rating DOUBLE PRECISION,
     llm_interaction_id UUID REFERENCES llm_interactions (id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (city_id) REFERENCES cities (id) ON DELETE CASCADE,
+    FOREIGN KEY (llm_interaction_id) REFERENCES llm_interactions (id) ON DELETE SET NULL
 );
 
 -- Index for spatial queries
-CREATE INDEX poi_details_location_idx ON poi_details USING GIST (location);
--- Index for city and name lookups
-CREATE INDEX poi_details_city_name_idx ON poi_details (city_id, name);
+CREATE INDEX idx_poi_details_location ON poi_details USING GIST (location);
+
+CREATE INDEX idx_poi_details_city_name ON poi_details (city_id, name);
 
 CREATE TABLE hotel_details (
     id UUID PRIMARY KEY,
@@ -113,12 +115,14 @@ CREATE TABLE hotel_details (
     rating DOUBLE PRECISION,
     llm_interaction_id UUID REFERENCES llm_interactions (id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (city_id) REFERENCES cities (id) ON DELETE CASCADE,
+    FOREIGN KEY (llm_interaction_id) REFERENCES llm_interactions (id) ON DELETE SET NULL
 );
 
-CREATE INDEX hotel_details_location_idx ON hotel_details USING GIST (location);
+CREATE INDEX idx_hotel_details_location ON hotel_details USING GIST (location);
 
-CREATE INDEX hotel_details_city_name_idx ON hotel_details (city_id, name);
+CREATE INDEX idx_hotel_details_city_name ON hotel_details (city_id, name);
 
 CREATE TABLE restaurant_details (
     id UUID PRIMARY KEY,
@@ -140,12 +144,14 @@ CREATE TABLE restaurant_details (
     rating DOUBLE PRECISION,
     llm_interaction_id UUID REFERENCES llm_interactions (id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (city_id) REFERENCES cities (id) ON DELETE CASCADE,
+    FOREIGN KEY (llm_interaction_id) REFERENCES llm_interactions (id) ON DELETE SET NULL
 );
 
-CREATE INDEX restaurant_details_location_idx ON restaurant_details USING GIST (location);
+CREATE INDEX idx_restaurant_details_location ON restaurant_details USING GIST (location);
 
-CREATE INDEX restaurant_details_city_name_idx ON restaurant_details (city_id, name);
+CREATE INDEX idx_restaurant_details_city_name ON restaurant_details (city_id, name);
 
 CREATE TABLE chat_sessions (
     id UUID PRIMARY KEY,
@@ -153,8 +159,11 @@ CREATE TABLE chat_sessions (
     current_itinerary JSONB,
     conversation_history JSONB,
     session_context JSONB,
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    status VARCHAR(20) NOT NULL
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
+
+CREATE INDEX idx_chat_sessions_user_id ON chat_sessions (user_id);

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"iter"
 	"log"
 	"os"
 
@@ -177,3 +178,46 @@ func (cs *ChatSession) SendMessage(ctx context.Context, message string) (string,
 //	}
 //	return resp.Embedding.Values, nil
 //}
+
+// GenerateContentStream initiates a streaming content generation process.
+func (ai *AIClient) GenerateContentStream(
+	ctx context.Context,
+	prompt string,
+	config *genai.GenerateContentConfig,
+) (iter.Seq2[*genai.GenerateContentResponse, error], error) {
+	ctx, span := otel.Tracer("GenerativeAI").Start(ctx, "GenerateContentStream", trace.WithAttributes(
+		attribute.String("prompt.length", fmt.Sprintf("%d", len(prompt))),
+		attribute.String("model", ai.model),
+	))
+	defer span.End()
+
+	if ai.client == nil {
+		err := fmt.Errorf("AIClient's internal genai.Client is not initialized")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Client not initialized for stream")
+		return nil, err
+	}
+
+	// Assuming the genai library has a method like this; adjust as needed
+	stream := ai.client.Models.GenerateContentStream(ctx, ai.model, genai.Text(prompt), config)
+
+	span.SetStatus(codes.Ok, "Content stream initiated")
+	return stream, nil
+}
+
+// func (cs *ChatSession) SendMessageStream(ctx context.Context, message string) (iter.Seq2[*genai.GenerateContentResponse, error], error) {
+// 	ctx, span := otel.Tracer("GenerativeAI").Start(ctx, "SendMessage", trace.WithAttributes(
+// 		attribute.String("message.length", fmt.Sprintf("%d", len(message))),
+// 	))
+// 	defer span.End()
+
+// 	iter := cs.chat.SendMessageStream(ctx, genai.Part{Text: message})
+
+// 	span.SetStatus(codes.Ok, "Content stream initiated")
+// 	return iter, nil
+// }
+
+// Add SendMessageStream to ChatSession
+func (cs *ChatSession) SendMessageStream(ctx context.Context, message string) iter.Seq2[*genai.GenerateContentResponse, error] {
+	return cs.chat.SendMessageStream(ctx, genai.Part{Text: message})
+}

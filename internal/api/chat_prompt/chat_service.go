@@ -75,6 +75,14 @@ type LlmInteractiontService interface {
 	GetRestaurantDetailsResponse(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error)
 
 	StartNewSession(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (uuid.UUID, *types.AiCityResponse, error)
+	StartNewSessionStreamed(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (*types.StreamingResponse, error)
+	ContinueSessionStreamed(
+		ctx context.Context,
+		sessionID uuid.UUID,
+		message string,
+		userLocation *types.UserLocation, // For distance sorting context
+		eventCh chan<- types.StreamEvent, // Channel to send events back
+	) error
 	ContinueSession(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation) (*types.AiCityResponse, error)
 }
 
@@ -2135,6 +2143,20 @@ func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiNam
 		return types.POIDetail{}, fmt.Errorf("failed to generate POI data: %w", err)
 	}
 
+	interaction := types.LlmInteraction{
+		UserID:       userID,
+		Prompt:       prompt,
+		ResponseText: response,
+		ModelUsed:    model,
+	}
+	savedLlmInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to save LLM interaction in generatePOIData", slog.Any("error", err))
+		// Decide if this is fatal for POI generation. It might be if FK is NOT NULL.
+		return types.POIDetail{}, fmt.Errorf("failed to save LLM interaction: %w", err)
+	}
+	span.SetAttributes(attribute.String("llm.interaction_id.for_poi_data", savedLlmInteractionID.String()))
+
 	cleanResponse := cleanJSONResponse(response)
 	var poiData types.POIDetail
 	if err := json.Unmarshal([]byte(cleanResponse), &poiData); err != nil || poiData.Name == "" {
@@ -2153,6 +2175,10 @@ func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiNam
 			Distance:       0,
 		}
 	}
+	if poiData.ID == uuid.Nil { // Assign an ID if LLM didn't provide one
+		poiData.ID = uuid.New()
+	}
+	poiData.LlmInteractionID = savedLlmInteractionID
 
 	// Calculate distance if coordinates are valid
 	if userLocation != nil && userLocation.UserLat != 0 && userLocation.UserLon != 0 && poiData.Latitude != 0 && poiData.Longitude != 0 {
@@ -2181,7 +2207,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiNam
 
 	// Save POI to database
 	llmInteractionID := uuid.New()
-	_, err = l.llmInteractionRepo.SaveSinglePOI(ctx, poiData, userID, cityID, llmInteractionID)
+	_, err = l.llmInteractionRepo.SaveSinglePOI(ctx, poiData, userID, cityID, savedLlmInteractionID)
 	if err != nil {
 		l.logger.WarnContext(ctx, "Failed to save POI to database", slog.Any("error", err))
 		span.RecordError(err)

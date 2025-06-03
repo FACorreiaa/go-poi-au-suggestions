@@ -545,7 +545,7 @@ CREATE TABLE points_of_interest (
     embedding VECTOR(768),
     tags TEXT[],
     accessibility_info TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

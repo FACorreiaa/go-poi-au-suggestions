@@ -898,22 +898,22 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 	session.ConversationHistory = append(session.ConversationHistory, userMessage)
 
 	// --- 4. Classify Intent ---
-	intentStr, err := l.intentClassifier.Classify(ctx, message)
+	intent, err := l.intentClassifier.Classify(ctx, message)
 	if err != nil {
 		err = fmt.Errorf("failed to classify intent for message '%s': %w", message, err)
 		sendEvt(types.StreamEvent{Type: types.EventTypeError, Error: err.Error(), IsFinal: true})
 		return err
 	}
-	l.logger.InfoContext(ctx, "Intent classified", slog.String("intent", intentStr))
-	sendEvt(types.StreamEvent{Type: "intent_classified", Data: map[string]string{"intent": intentStr}})
+	l.logger.InfoContext(ctx, "Intent classified", slog.String("intent", string(intent)))
+	sendEvt(types.StreamEvent{Type: "intent_classified", Data: map[string]string{"intent": string(intent)}})
 
 	// --- 5. Handle Intent and Generate Response ---
 	var finalResponseMessage string
 	var assistantMessageType types.MessageType = types.TypeResponse
 	itineraryModifiedByThisTurn := false
 
-	switch intentStr { // Align with ContinueSession's string-based intents
-	case "add_poi":
+	switch intent { // Align with ContinueSession's string-based intents
+	case types.IntentAddPOI:
 		sendEvt(types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Adding Point of Interest..."})
 		poiName := extractPOIName(message)
 		isDuplicate := false
@@ -941,7 +941,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 			}
 		}
 
-	case "remove_poi":
+	case types.IntentRemovePOI:
 		sendEvt(types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Removing Point of Interest..."})
 		poiName := extractPOIName(message)
 		var updatedPOIs []types.POIDetail
@@ -961,7 +961,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 			finalResponseMessage = fmt.Sprintf("I couldn't find '%s' in your current itinerary.", poiName)
 		}
 
-	case "ask_question":
+	case types.IntentAskQuestion:
 		sendEvt(types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Answering your question..."})
 		finalResponseMessage = "I’m here to help! For now, I’ll assume you’re asking about your trip. What specifically would you like to know?"
 
@@ -1138,7 +1138,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 				currentPOIIDs = append(currentPOIIDs, p.ID)
 			}
 		}
-		if (intentStr == "add_poi" || intentStr == "modify_itinerary") && userLocation != nil && userLocation.UserLat != 0 && userLocation.UserLon != 0 {
+		if (intent == types.IntentAddPOI || intent == types.IntentModifyItinerary) && userLocation != nil && userLocation.UserLat != 0 && userLocation.UserLon != 0 {
 			sortedPOIs, err := l.llmInteractionRepo.GetPOIsBySessionSortedByDistance(ctx, sessionID, cityID, *userLocation)
 			if err != nil {
 				l.logger.WarnContext(ctx, "Failed to sort POIs by distance", slog.Any("error", err))
@@ -1179,7 +1179,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 	})
 	sendEvt(types.StreamEvent{Type: types.EventTypeComplete, Data: "Turn completed.", IsFinal: true})
 
-	l.logger.InfoContext(ctx, "Streamed session continued", slog.String("sessionID", sessionID.String()), slog.String("intent", intentStr))
+	l.logger.InfoContext(ctx, "Streamed session continued", slog.String("sessionID", sessionID.String()), slog.String("intent", string(intent)))
 	return nil
 }
 

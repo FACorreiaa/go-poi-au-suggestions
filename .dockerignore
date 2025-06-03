@@ -13,3 +13,4 @@ vendor/
 .gitignore
 *.md
 .env
+docs/Insomnia_2025-06-03.yaml

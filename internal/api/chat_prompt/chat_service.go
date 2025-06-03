@@ -31,16 +31,16 @@ import (
 
 type SimpleIntentClassifier struct{}
 
-func (c *SimpleIntentClassifier) Classify(ctx context.Context, message string) (string, error) {
+func (c *SimpleIntentClassifier) Classify(ctx context.Context, message string) (types.IntentType, error) {
 	message = strings.ToLower(message)
 	if matched, _ := regexp.MatchString(`add|include|visit`, message); matched {
-		return "add_poi", nil
+		return types.IntentAddPOI, nil
 	} else if matched, _ := regexp.MatchString(`remove|delete|skip`, message); matched {
-		return "remove_poi", nil
+		return types.IntentRemovePOI, nil
 	} else if matched, _ := regexp.MatchString(`what|where|how|why|when`, message); matched {
-		return "ask_question", nil
+		return types.IntentAskQuestion, nil
 	}
-	return "modify_itinerary", nil // Default intent
+	return types.IntentModifyItinerary, nil // Default intent
 }
 
 const (
@@ -75,6 +75,7 @@ type LlmInteractiontService interface {
 	GetRestaurantDetailsResponse(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error)
 
 	StartNewSession(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (uuid.UUID, *types.AiCityResponse, error)
+	ContinueSession(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation) (*types.AiCityResponse, error)
 	StartNewSessionStreamed(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (*types.StreamingResponse, error)
 	ContinueSessionStreamed(
 		ctx context.Context,
@@ -83,11 +84,10 @@ type LlmInteractiontService interface {
 		userLocation *types.UserLocation, // For distance sorting context
 		eventCh chan<- types.StreamEvent, // Channel to send events back
 	) error
-	ContinueSession(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation) (*types.AiCityResponse, error)
 }
 
 type IntentClassifier interface {
-	Classify(ctx context.Context, message string) (string, error) // e.g., "start_trip", "modify_itinerary"
+	Classify(ctx context.Context, message string) (types.IntentType, error) // e.g., "start_trip", "modify_itinerary"
 }
 
 // LlmInteractiontServiceImpl provides the implementation for LlmInteractiontService.
@@ -2118,7 +2118,8 @@ func (l *LlmInteractiontServiceImpl) ContinueSession(ctx context.Context, sessio
 
 	l.logger.InfoContext(ctx, "Session continued",
 		slog.String("sessionID", sessionID.String()),
-		slog.String("intent", intent))
+		slog.String("intent", string(intent)))
+
 	span.SetStatus(codes.Ok, "Session continued successfully")
 	return session.CurrentItinerary, nil
 }

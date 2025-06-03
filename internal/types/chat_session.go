@@ -45,6 +45,7 @@ const (
 	TypeModificationRequest MessageType = "modification_request"
 	TypeResponse            MessageType = "response"
 	TypeClarification       MessageType = "clarification"
+	TypeItineraryResponse               = "itinerary_response"
 )
 
 type MessageMetadata struct {

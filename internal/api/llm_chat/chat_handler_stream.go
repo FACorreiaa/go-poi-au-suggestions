@@ -88,6 +88,7 @@ func (h *HandlerImpl) StartChatSessionStream(w http.ResponseWriter, r *http.Requ
 	// Stream events
 	for {
 		select {
+
 		case event, ok := <-streamResp.Stream:
 			if !ok {
 				h.logger.InfoContext(ctx, "Stream closed", slog.String("session_id", streamResp.SessionID.String()))

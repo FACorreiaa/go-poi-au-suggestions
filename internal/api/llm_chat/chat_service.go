@@ -75,6 +75,8 @@ type LlmInteractiontService interface {
 	GetRestaurantDetailsResponse(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error)
 
 	StartNewSession(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (uuid.UUID, *types.AiCityResponse, error)
+	StartNewSessionStreamed(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (*StreamingResponse, error)
+
 	ContinueSession(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation) (*types.AiCityResponse, error)
 }
 
@@ -2196,3 +2198,277 @@ func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiNam
 	)
 	return poiData, nil
 }
+
+// // Stream chat
+// func (l *LlmInteractiontServiceImpl) GeneratePersonalisedPOIStreamWorker(
+// 	wg *sync.WaitGroup, ctx context.Context,
+// 	cityName string, userID, profileID uuid.UUID,
+// 	interestNames []string, tagsPromptPart string, userPrefs string,
+// 	config *genai.GenerateContentConfig,
+// 	eventCh chan<- types.StreamingChatEvent, // For sending text chunks
+// 	resultCh chan<- types.GenAIResponse, // For sending final parsed GenAIResponse or error
+// ) {
+// 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GeneratePersonalisedPOIStreamWorker" /* ... */)
+// 	defer span.End()
+// 	if wg != nil {
+// 		defer wg.Done()
+// 	}
+
+// 	startTime := time.Now()
+// 	prompt := getPersonalizedPOI(interestNames, cityName, tagsPromptPart, userPrefs) // Your existing prompt
+// 	span.SetAttributes(attribute.Int("prompt.length", len(prompt)))
+
+// 	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, config)
+// 	if err != nil {
+// 		err = fmt.Errorf("failed to start streaming personalized itinerary: %w", err)
+// 		span.RecordError(err)
+// 		resultCh <- types.GenAIResponse{Err: err}
+// 		return
+// 	}
+
+// 	var responseTextBuilder strings.Builder
+// 	var lastSentLength int
+// 	for {
+// 		respChunk, iterErr := iter.Next()
+// 		if iterErr == iterator.Done {
+// 			break
+// 		}
+// 		if iterErr != nil {
+// 			err = fmt.Errorf("error in personalized itinerary stream: %w", iterErr)
+// 			span.RecordError(err)
+// 			resultCh <- types.GenAIResponse{Err: err}
+// 			return
+// 		}
+
+// 		chunkText := ""
+// 		for _, cand := range respChunk.Candidates {
+// 			if cand.Content != nil {
+// 				for _, part := range cand.Content.Parts {
+// 					if txtPart, ok := part.(genai.Text); ok {
+// 						chunkText += string(txtPart)
+// 					}
+// 				}
+// 			}
+// 		}
+// 		if chunkText != "" {
+// 			responseTextBuilder.WriteString(chunkText)
+// 			// Send partial text update event
+// 			if eventCh != nil && responseTextBuilder.Len() > lastSentLength+30 { // Send updates frequently
+// 				eventCh <- types.StreamingChatEvent{
+// 					EventType:   "personalized_poi_chunk",
+// 					PartialText: responseTextBuilder.String(), // Send accumulated text so far
+// 				}
+// 				lastSentLength = responseTextBuilder.Len()
+// 			}
+// 		}
+// 	}
+
+// 	fullResponseText := responseTextBuilder.String()
+// 	if fullResponseText == "" {
+// 		err = fmt.Errorf("empty response from personalized POI stream")
+// 		span.RecordError(err)
+// 		resultCh <- types.GenAIResponse{Err: err}
+// 		return
+// 	}
+// 	span.SetAttributes(attribute.Int("response.full_length", len(fullResponseText)))
+
+// 	cleanJSONStr := cleanJSONResponse(fullResponseText) // Your existing cleanJSONResponse
+// 	var itineraryData struct {
+// 		ItineraryName      string            `json:"itinerary_name"`
+// 		OverallDescription string            `json:"overall_description"`
+// 		PointsOfInterest   []types.POIDetail `json:"points_of_interest"`
+// 	}
+// 	if err := json.Unmarshal([]byte(cleanJSONStr), &itineraryData); err != nil {
+// 		err = fmt.Errorf("failed to parse streamed personalized itinerary JSON: %w. JSON: %s", err, cleanJSONStr)
+// 		span.RecordError(err)
+// 		resultCh <- types.GenAIResponse{Err: err}
+// 		return
+// 	}
+
+// 	latencyMs := int(time.Since(startTime).Milliseconds())
+// 	interaction := types.LlmInteraction{
+// 		UserID: userID, Prompt: prompt, ResponseText: fullResponseText, ModelUsed: model, LatencyMs: latencyMs, ProfileID: profileID, // Assuming ProfileID is in LlmInteraction
+// 	}
+// 	savedInteractionID, saveErr := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
+// 	if saveErr != nil {
+// 		l.logger.WarnContext(ctx, "Failed to save LLM interaction for streamed personalized POIs", slog.Any("error", saveErr))
+// 		span.RecordError(saveErr)
+// 		// Continue, but ID will be nil
+// 	}
+
+// 	resultCh <- types.GenAIResponse{
+// 		ItineraryName:        itineraryData.ItineraryName,
+// 		ItineraryDescription: itineraryData.OverallDescription,
+// 		PersonalisedPOI:      itineraryData.PointsOfInterest,
+// 		LlmInteractionID:     savedInteractionID,
+// 	}
+// }
+
+// // StartNewSessionStreamed creates a new chat session and streams results
+// func (l *LlmInteractiontServiceImpl) StartNewSessionStreamed(
+// 	ctx context.Context, userID, profileID uuid.UUID,
+// 	cityName, message string, userLocation *types.UserLocation,
+// 	eventCh chan<- types.StreamingChatEvent,
+// ) error { // Only returns error for catastrophic initial failures
+// 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "StartNewSessionStreamed", trace.WithAttributes(
+// 		attribute.String("city.name", cityName),
+// 		attribute.String("user.id", userID.String()),
+// 	))
+// 	defer span.End()
+// 	// Ensure channel is closed if this function exits early due to error
+// 	// However, the primary goroutine calling this (in handler) will close it.
+
+// 	l.logger.DebugContext(ctx, "Starting new streamed chat session", slog.String("cityName", cityName), slog.String("userID", userID.String()))
+
+// 	if message == "" {
+// 		message = fmt.Sprintf("Plan a trip to %s for me.", cityName)
+// 	}
+// 	span.SetAttributes(attribute.String("initial_message", message))
+
+// 	sessionID := uuid.New()
+// 	eventCh <- types.StreamingChatEvent{EventType: "session_started", SessionID: sessionID}
+
+// 	// --- 1. Fetch UserData (Synchronous) ---
+// 	interests, searchProfile, tags, err := l.FetchUserData(ctx, userID, profileID)
+// 	if err != nil {
+// 		err = fmt.Errorf("failed to fetch user data for stream: %w", err)
+// 		span.RecordError(err)
+// 		eventCh <- types.StreamingChatEvent{EventType: "error", Error: err.Error(), SessionID: sessionID, IsFinal: true}
+// 		return err // Critical failure
+// 	}
+// 	interestNames, tagsPromptPart, userPrefs := l.PreparePromptData(interests, tags, searchProfile)
+// 	// ... (determine effectiveUserLocation from userLocation and searchProfile as in your original StartNewSession)
+// 	var effectiveUserLocation *types.UserLocation = userLocation
+// 	if searchProfile != nil && searchProfile.UserLatitude != nil && searchProfile.UserLongitude != nil {
+// 		if effectiveUserLocation == nil { // Only override if input userLocation was nil
+// 			effectiveUserLocation = &types.UserLocation{UserLat: *searchProfile.UserLatitude, UserLon: *searchProfile.UserLongitude}
+// 		}
+// 	}
+
+// 	// --- 2. Generate City Data & General POIs (Concurrently, then send as events) ---
+// 	var initialItineraryData types.AiCityResponse
+// 	genAIConfig := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)}
+
+// 	// Channels for these two non-streaming sub-tasks
+// 	cityDataResultCh := make(chan types.GenAIResponse, 1)
+// 	generalPOIResultCh := make(chan types.GenAIResponse, 1)
+// 	var cityWg, poiWg sync.WaitGroup
+
+// 	cityWg.Add(1)
+// 	go l.GenerateCityDataWorker(&cityWg, ctx, cityName, cityDataResultCh, genAIConfig)
+// 	go func() { cityWg.Wait(); close(cityDataResultCh) }()
+
+// 	poiWg.Add(1)
+// 	go l.GenerateGeneralPOIWorker(&poiWg, ctx, cityName, generalPOIResultCh, genAIConfig)
+// 	go func() { poiWg.Wait(); close(generalPOIResultCh) }()
+
+// 	// Collect city data
+// 	cityDataRes := <-cityDataResultCh
+// 	if cityDataRes.Err != nil {
+// 		err = fmt.Errorf("failed to generate city data for stream: %w", cityDataRes.Err)
+// 		span.RecordError(err)
+// 		eventCh <- types.StreamingChatEvent{EventType: "error", Error: err.Error(), SessionID: sessionID, IsFinal: true}
+// 		return err
+// 	}
+// 	initialItineraryData.GeneralCityData.City = cityDataRes.City
+// 	initialItineraryData.GeneralCityData.Country = cityDataRes.Country
+// 	initialItineraryData.GeneralCityData.StateProvince = cityDataRes.StateProvince
+// 	initialItineraryData.GeneralCityData.Description = cityDataRes.CityDescription
+// 	initialItineraryData.GeneralCityData.CenterLatitude = cityDataRes.Latitude
+// 	initialItineraryData.GeneralCityData.CenterLongitude = cityDataRes.Longitude
+// 	eventCh <- types.StreamingChatEvent{EventType: "city_info_ready", CityData: &initialItineraryData.GeneralCityData, SessionID: sessionID}
+
+// 	// Collect general POIs
+// 	generalPOIRes := <-generalPOIResultCh
+// 	if generalPOIRes.Err != nil {
+// 		err = fmt.Errorf("failed to generate general POIs for stream: %w", generalPOIRes.Err)
+// 		span.RecordError(err)
+// 		eventCh <- types.StreamingChatEvent{EventType: "error", Error: err.Error(), SessionID: sessionID, IsFinal: true}
+// 		return err
+// 	}
+// 	initialItineraryData.PointsOfInterest = generalPOIRes.GeneralPOI
+// 	eventCh <- types.StreamingChatEvent{EventType: "general_pois_ready", GeneralPOIs: initialItineraryData.PointsOfInterest, SessionID: sessionID}
+
+// 	cityID, err := l.HandleCityData(ctx, initialItineraryData.GeneralCityData)
+// 	if err != nil { /* send error event, return err */
+// 	}
+// 	l.HandleGeneralPOIs(ctx, initialItineraryData.PointsOfInterest, cityID)
+
+// 	// --- 3. Stream Personalized POIs ---
+// 	// This worker will now also send chunks to eventCh, and its final result to personalizedPOIResultCh
+// 	personalizedPOIResultCh := make(chan types.GenAIResponse, 1)
+// 	var personalizedWg sync.WaitGroup
+// 	personalizedWg.Add(1)
+// 	go l.GeneratePersonalisedPOIStreamWorker(&personalizedWg, ctx, cityName, userID, profileID,
+// 		interestNames, tagsPromptPart, userPrefs, genAIConfig, eventCh, personalizedPOIResultCh)
+// 	go func() { personalizedWg.Wait(); close(personalizedPOIResultCh) }()
+
+// 	personalizedRes := <-personalizedPOIResultCh // Wait for the *final* parsed data from this worker
+// 	if personalizedRes.Err != nil {
+// 		err = fmt.Errorf("failed to generate personalized POIs for stream: %w", personalizedRes.Err)
+// 		span.RecordError(err)
+// 		eventCh <- types.StreamingChatEvent{EventType: "error", Error: err.Error(), SessionID: sessionID, IsFinal: true}
+// 		return err
+// 	}
+// 	initialItineraryData.AIItineraryResponse.ItineraryName = personalizedRes.ItineraryName
+// 	initialItineraryData.AIItineraryResponse.OverallDescription = personalizedRes.ItineraryDescription
+// 	initialItineraryData.AIItineraryResponse.PointsOfInterest = personalizedRes.PersonalisedPOI // This is pre-sorted
+// 	llmInteractionIDForSorting := personalizedRes.LlmInteractionID
+
+// 	// --- 4. Handle (Save & Sort) Personalized POIs ---
+// 	// Note: GeneratePersonalisedPOIStreamWorker now handles its own interaction saving.
+// 	// The sorting should happen based on the POIs received.
+// 	sortedPois, err := l.HandlePersonalisedPOIs(ctx, initialItineraryData.AIItineraryResponse.PointsOfInterest, cityID, effectiveUserLocation, llmInteractionIDForSorting, userID, profileID)
+// 	if err != nil {
+// 		err = fmt.Errorf("failed to handle personalized POIs for stream: %w", err)
+// 		span.RecordError(err)
+// 		eventCh <- types.StreamingChatEvent{EventType: "error", Error: err.Error(), SessionID: sessionID, IsFinal: true}
+// 		return err
+// 	}
+// 	initialItineraryData.AIItineraryResponse.PointsOfInterest = sortedPois
+
+// 	// --- 5. Create and Save Application Session ---
+// 	appSession := types.ChatSession{
+// 		ID:               sessionID,
+// 		UserID:           userID,
+// 		ProfileID:        profileID,
+// 		CityName:         cityName,
+// 		CurrentItinerary: &initialItineraryData,
+// 		ConversationHistory: []types.ConversationMessage{
+// 			{ID: uuid.New(), Role: types.RoleUser, Content: message, MessageType: types.TypeInitialRequest, Timestamp: time.Now()},
+// 			// Assistant message can be a summary or the final itinerary description
+// 			{ID: uuid.New(), Role: types.RoleAssistant, Content: fmt.Sprintf("Here is your initial plan for %s: %s", cityName, initialItineraryData.AIItineraryResponse.ItineraryName), MessageType: types.TypeResponse, Timestamp: time.Now()},
+// 		},
+// 		SessionContext: types.SessionContext{
+// 			CityName:            cityName,
+// 			ConversationSummary: fmt.Sprintf("Initial trip plan for %s, named '%s'", cityName, initialItineraryData.AIItineraryResponse.ItineraryName),
+// 			UserPreferences:     searchProfile, // Store the profile used
+// 			ActiveInterests:     interestNames,
+// 			// ActiveTags: // Populate if available
+// 		},
+// 		CreatedAt: time.Now(),
+// 		UpdatedAt: time.Now(),
+// 		ExpiresAt: time.Now().Add(24 * time.Hour), // Example
+// 		Status:    types.StatusActive,
+// 	}
+// 	if err := l.llmInteractionRepo.CreateSession(ctx, appSession); err != nil {
+// 		err = fmt.Errorf("failed to save session for stream: %w", err)
+// 		span.RecordError(err)
+// 		eventCh <- types.StreamingChatEvent{EventType: "error", Error: err.Error(), SessionID: sessionID, IsFinal: true}
+// 		return err
+// 	}
+
+// 	// --- 6. Send Final Itinerary Event ---
+// 	eventCh <- types.StreamingChatEvent{
+// 		EventType: "final_itinerary",
+// 		Itinerary: &initialItineraryData,
+// 		SessionID: sessionID,
+// 		IsFinal:   true,
+// 		Message:   fmt.Sprintf("Here is your complete initial itinerary for %s, '%s'!", cityName, initialItineraryData.AIItineraryResponse.ItineraryName),
+// 		//SuggestedActions: []string{"Review POIs", "Add a specific place", "Change preferences"},
+// 	}
+
+// 	l.logger.InfoContext(ctx, "Streamed session fully processed", slog.String("sessionID", sessionID.String()))
+// 	span.SetStatus(codes.Ok, "Streamed session started successfully")
+// 	return nil
+// }

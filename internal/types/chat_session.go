@@ -112,3 +112,16 @@ type ChatService interface {
 	GetSessionHistory(ctx context.Context, sessionID uuid.UUID) (*ChatSession, error)
 	EndSession(ctx context.Context, sessionID uuid.UUID) error
 }
+
+type StreamingChatEvent struct {
+	EventType        string           `json:"event_type"` // e.g., "session_started", "city_info", "general_pois", "personalized_poi_chunk", "final_itinerary", "error"
+	SessionID        uuid.UUID        `json:"session_id,omitempty"`
+	Message          string           `json:"message,omitempty"` // For general messages or errors
+	CityData         *GeneralCityData `json:"city_data,omitempty"`
+	GeneralPOIs      []POIDetail      `json:"general_pois,omitempty"`
+	PersonalizedPOIs []POIDetail      `json:"personalized_pois,omitempty"` // Could send chunks or final list
+	Itinerary        *AiCityResponse  `json:"itinerary,omitempty"`         // Could be a partial or final one
+	Error            string           `json:"error_message,omitempty"`
+	IsFinal          bool             `json:"is_final,omitempty"` // Indicates the end of a sequence or the whole stream
+	// Add any other relevant data for different event types
+}

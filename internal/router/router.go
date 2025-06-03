@@ -184,6 +184,8 @@ func profilesRoutes(HandlerImpl *profiles.HandlerImpl) http.Handler {
 func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
 	r.Post("/prompt-response/chat/sessions/{profileID}", HandlerImpl.StartChatSession)
+	r.Post("/prompt-response/chat/sessions/stream/{profileID}", HandlerImpl.StartChatSessionStream)
+
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueChatSession)
 
 	// LLM interaction routes

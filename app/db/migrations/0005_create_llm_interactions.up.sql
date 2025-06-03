@@ -23,21 +23,25 @@ CREATE INDEX idx_llm_interactions_created_at ON llm_interactions (created_at);
 -- Consider JSONB indexes if querying payload frequently:
 -- CREATE INDEX idx_llm_interactions_resp_payload_gin ON llm_interactions USING GIN (response_payload);
 
-
 CREATE TABLE llm_suggested_pois (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL, -- The user for whom this was generated
     search_profile_id UUID, -- The specific search profile used (if applicable)
     llm_interaction_id UUID NOT NULL REFERENCES llm_interactions(id) ON DELETE CASCADE, -- Links to the LLM request/response log
     city_id UUID REFERENCES cities(id) ON DELETE SET NULL, -- The city context for this POI
-
+    latitude DOUBLE PRECISION, -- LLM provided latitude
+    longitude DOUBLE PRECISION, -- LLM provided longitude
+    distance DOUBLE PRECISION, -- Distance from the user's current location (if applicable)
+    location GEOMETRY(Point, 4326) NOT NULL, -- PostGIS geometry type for spatial queries
     name TEXT NOT NULL,
     description_poi TEXT, -- LLM-generated description
-    location GEOMETRY(Point, 4326) NOT NULL, -- Store LLM provided lat/lon here
     category TEXT, -- LLM-suggested category
     address TEXT, -- If LLM provides it
     website TEXT, -- If LLM provides it
     opening_hours_suggestion TEXT, -- If LLM provides it
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (city_id) REFERENCES cities(id),
+    FOREIGN KEY (llm_interaction_id) REFERENCES llm_interactions(id) ON DELETE CASCADE,
     -- You can add other fields from types.POIDetail if the LLM commonly provides them
 
 -- Foreign key constraints (if not defined inline above)

@@ -480,51 +480,140 @@ func (r *RepositoryImpl) AddMessageToSession(ctx context.Context, sessionID uuid
 	return r.UpdateSession(ctx, *session)
 }
 
-func (r *RepositoryImpl) SaveSinglePOI(ctx context.Context, poi types.POIDetail, userID, cityID uuid.UUID, llmInteractionID uuid.UUID) (uuid.UUID, error) {
-	poiID := uuid.New()
+func (r *RepositoryImpl) SaveSinglePOI(ctx context.Context, poi types.POIDetail, userID, cityID, llmInteractionID uuid.UUID) (uuid.UUID, error) {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SaveSinglePOI", trace.WithAttributes(
+		attribute.String("poi.name", poi.Name), /* ... */
+	))
+	defer span.End()
+
+	// Validate coordinates before attempting to use them.
+	if poi.Latitude < -90 || poi.Latitude > 90 || poi.Longitude < -180 || poi.Longitude > 180 {
+		// Or if they are exactly 0,0 and that's considered invalid from LLM
+		err := fmt.Errorf("invalid coordinates for POI %s: lat %f, lon %f", poi.Name, poi.Latitude, poi.Longitude)
+		span.RecordError(err)
+		return uuid.Nil, err
+	}
+
+	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// If poi.ID is already set (e.g., from LLM or previous step), use it. Otherwise, generate new.
+	recordID := poi.ID
+	if recordID == uuid.Nil {
+		recordID = uuid.New()
+	}
+
+	// Columns: id, user_id, city_id, llm_interaction_id, name, latitude, longitude, location, category, description_poi (10 columns)
+	// Values: $1, $2, $3, $4, $5, $6, $7, ST_MakePoint($7, $6), $8, $9 (10 value expressions for 9 placeholders + ST_MakePoint)
+	// Corrected: 9 distinct columns from poiData + 1 for location, then id for the record.
+	// Order of columns in INSERT INTO: id, user_id, city_id, llm_interaction_id, name, latitude, longitude, location, category, description_poi
+	// Placeholders:                $1,    $2,      $3,      $4,                 $5,   $6,       $7,        ST_MakePoint($7,$6), $8, $9
 	query := `
         INSERT INTO llm_suggested_pois (
-            id, user_id, city_id, llm_interaction_id, name, latitude, longitude, 
-            category, description_poi, distance
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        RETURNING id;
+            id, user_id, city_id, llm_interaction_id, name, 
+            latitude, longitude, "location", -- Ensure "location" is quoted if it's a reserved keyword or mixed case
+            category, description_poi 
+            -- Removed distance from INSERT list
+        ) VALUES (
+            $1, $2, $3, $4, $5, 
+            $6, $7, ST_SetSRID(ST_MakePoint($7, $6), 4326), -- Longitude ($7) first, then Latitude ($6)
+            $8, $9
+        )
+        RETURNING id
     `
-	_, err := r.pgpool.Exec(ctx, query, poiID, userID, cityID, llmInteractionID,
-		poi.Name, poi.Latitude, poi.Longitude, poi.Category, poi.DescriptionPOI, poi.Distance)
+	// Arguments should be:
+	// $1: recordID (for llm_suggested_pois.id)
+	// $2: userID
+	// $3: cityID
+	// $4: llmInteractionID
+	// $5: poi.Name
+	// $6: poi.Latitude  (for the latitude column)
+	// $7: poi.Longitude (for the longitude column AND for ST_MakePoint's X)
+	// $8: poi.Category
+	// $9: poi.DescriptionPOI
+
+	var returnedID uuid.UUID
+	err = tx.QueryRow(ctx, query,
+		recordID,         // $1: id
+		userID,           // $2: user_id
+		cityID,           // $3: city_id
+		llmInteractionID, // $4: llm_interaction_id
+		poi.Name,         // $5: name
+		poi.Latitude,     // $6: latitude column value
+		poi.Longitude,    // $7: longitude column value (also used as X in ST_MakePoint)
+		// ST_MakePoint will use $7 (poi.Longitude) as X and $6 (poi.Latitude) as Y
+		poi.Category,       // $8: category
+		poi.DescriptionPOI, // $9: description_poi
+	).Scan(&returnedID)
+
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to save POI: %w", err)
+		r.logger.ErrorContext(ctx, "Failed to insert llm_suggested_poi", slog.Any("error", err), slog.String("query", query), slog.String("name", poi.Name))
+		span.RecordError(err)
+		return uuid.Nil, fmt.Errorf("failed to save llm_suggested_poi: %w", err)
 	}
-	return poiID, nil
+
+	if err := tx.Commit(ctx); err != nil {
+		span.RecordError(err)
+		return uuid.Nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	r.logger.Info("LLM Suggested POI saved successfully", slog.String("id", returnedID.String()))
+	return returnedID, nil
 }
 
 func (r *RepositoryImpl) GetPOIsBySessionSortedByDistance(ctx context.Context, sessionID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error) {
+
 	query := `
         SELECT id, name, latitude, longitude, category, description_poi, 
                ST_Distance(
                    ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography,
-                   ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography
+                   location::geography  -- Use the actual geometry column for distance
                ) AS distance
-        FROM llm_suggested_pois
-        WHERE city_id = $1
+        FROM llm_suggested_pois  -- Assuming this is the correct table to query for session POIs
+        WHERE city_id = $1 
+        -- Add AND llm_interaction_id IN (SELECT ...) if POIs are tied to specific interactions of the session
         ORDER BY distance ASC;
     `
 	rows, err := r.pgpool.Query(ctx, query, cityID, userLocation.UserLon, userLocation.UserLat)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query POIs: %w", err)
+		return nil, fmt.Errorf("failed to query POIs for session: %w", err)
 	}
 	defer rows.Close()
 
 	var pois []types.POIDetail
 	for rows.Next() {
-		var poi types.POIDetail
-		err := rows.Scan(&poi.ID, &poi.Name, &poi.Latitude, &poi.Longitude,
-			&poi.Category, &poi.DescriptionPOI, &poi.Distance)
+		var p types.POIDetail
+		var lat, lon, dist sql.NullFloat64 // Use nullable types
+		var cat, desc sql.NullString
+
+		// Adjust scan to match selected columns and their nullability
+		err := rows.Scan(&p.ID, &p.Name, &lat, &lon, &cat, &desc, &dist)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan POI: %w", err)
+			return nil, fmt.Errorf("failed to scan POI for session: %w", err)
 		}
-		pois = append(pois, poi)
+
+		if lat.Valid {
+			p.Latitude = lat.Float64
+		}
+		if lon.Valid {
+			p.Longitude = lon.Float64
+		}
+		if cat.Valid {
+			p.Category = cat.String
+		}
+		if desc.Valid {
+			p.DescriptionPOI = desc.String
+		}
+		if dist.Valid {
+			p.Distance = dist.Float64
+		}
+
+		pois = append(pois, p)
 	}
-	return pois, nil
+	return pois, rows.Err()
 }
 
 // calculateDistancePostGIS computes the distance between two points using PostGIS (in meters)

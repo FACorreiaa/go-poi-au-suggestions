@@ -3,7 +3,8 @@ package types
 import "github.com/google/uuid"
 
 type POIDetail struct {
-	ID uuid.UUID `json:"id"`
+	ID               uuid.UUID `json:"id"`
+	LlmInteractionID uuid.UUID `json:"llm_interaction_id,omitempty"` // ID of the LLM interaction that generated this POI
 	//Description    string    `json:"description"`
 	Name           string  `json:"name"`
 	Latitude       float64 `json:"latitude"`

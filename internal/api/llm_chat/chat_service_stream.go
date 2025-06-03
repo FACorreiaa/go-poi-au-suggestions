@@ -145,7 +145,10 @@ func getPersonalizedPOI(interestNames []string, cityName, tagsPromptPart, userPr
 }
 
 // streamingCityDataWorker generates city data with streaming updates
-func (l *LlmInteractiontServiceImpl) streamingCityDataWorker(wg *sync.WaitGroup, ctx context.Context, cityName string, resultCh chan<- types.GenAIResponse, eventCh chan<- StreamEvent) {
+func (l *LlmInteractiontServiceImpl) streamingCityDataWorker(wg *sync.WaitGroup,
+	ctx context.Context,
+	cityName string, resultCh chan<- types.GenAIResponse,
+	eventCh chan<- StreamEvent, userID uuid.UUID) {
 	ctxWorker, span := otel.Tracer("LlmInteractionService").Start(ctx, "streamingCityDataWorker", trace.WithAttributes(
 		attribute.String("city.name", cityName),
 	))
@@ -247,7 +250,7 @@ func (l *LlmInteractiontServiceImpl) streamingCityDataWorker(wg *sync.WaitGroup,
 	// Save LLM interaction
 	latencyMs := int(time.Since(startTime).Milliseconds())
 	interaction := types.LlmInteraction{
-		UserID:       uuid.Nil, // No specific user for city data
+		UserID:       userID,
 		Prompt:       prompt,
 		ResponseText: fullText,
 		ModelUsed:    model,
@@ -311,7 +314,11 @@ func (l *LlmInteractiontServiceImpl) streamingCityDataWorker(wg *sync.WaitGroup,
 }
 
 // streamingGeneralPOIWorker generates general POIs with streaming updates
-func (l *LlmInteractiontServiceImpl) streamingGeneralPOIWorker(wg *sync.WaitGroup, ctx context.Context, cityName string, resultCh chan<- types.GenAIResponse, eventCh chan<- StreamEvent) {
+func (l *LlmInteractiontServiceImpl) streamingGeneralPOIWorker(wg *sync.WaitGroup,
+	ctx context.Context, cityName string,
+	resultCh chan<- types.GenAIResponse,
+	eventCh chan<- StreamEvent,
+	userID uuid.UUID) {
 	defer wg.Done()
 
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "streamingGeneralPOIWorker", trace.WithAttributes(
@@ -410,7 +417,7 @@ func (l *LlmInteractiontServiceImpl) streamingGeneralPOIWorker(wg *sync.WaitGrou
 	// Save LLM interaction
 	latencyMs := int(time.Since(startTime).Milliseconds())
 	interaction := types.LlmInteraction{
-		UserID:       uuid.Nil, // No specific user for general POIs
+		UserID:       userID, // No specific user for general POIs
 		Prompt:       prompt,
 		ResponseText: fullText,
 		ModelUsed:    model,
@@ -692,8 +699,8 @@ func (l *LlmInteractiontServiceImpl) StartNewSessionStreamed(ctx context.Context
 		var wg sync.WaitGroup
 		wg.Add(3)
 
-		go l.streamingCityDataWorker(&wg, ctx, cityName, cityDataCh, eventCh)
-		go l.streamingGeneralPOIWorker(&wg, ctx, cityName, generalPOICh, eventCh)
+		go l.streamingCityDataWorker(&wg, ctx, cityName, cityDataCh, eventCh, userID)
+		go l.streamingGeneralPOIWorker(&wg, ctx, cityName, generalPOICh, eventCh, userID)
 		go l.streamingPersonalizedPOIWorker(&wg, ctx, cityName, userID, profileID, personalizedPOICh, eventCh, interestNames, tagsPromptPart, userPrefs)
 
 		go func() {

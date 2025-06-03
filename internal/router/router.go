@@ -9,8 +9,8 @@ import (
 	"github.com/go-chi/cors" // Import CORS middleware if needed
 
 	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	llmChat "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/chat_prompt"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests"
-	llmChat "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/llm_chat"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/settings"
@@ -187,6 +187,7 @@ func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	r.Post("/prompt-response/chat/sessions/stream/{profileID}", HandlerImpl.StartChatSessionStream)
 
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueChatSession)
+	r.Post("/prompt-response/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueSessionStreamHandler)
 
 	// LLM interaction routes
 	r.Post("/prompt-response/profile/{profileID}", HandlerImpl.GetPrompResponse)        // GET http://localhost:8000/api/v1/user/interests

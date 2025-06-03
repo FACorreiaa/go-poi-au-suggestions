@@ -17,7 +17,7 @@ CREATE TABLE reviews (
     is_verified BOOLEAN NOT NULL DEFAULT FALSE,
     is_published BOOLEAN NOT NULL DEFAULT TRUE,
     moderated_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -26,7 +26,7 @@ CREATE TABLE review_helpfuls (
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     review_id UUID NOT NULL REFERENCES reviews (id) ON DELETE CASCADE,
     is_helpful BOOLEAN NOT NULL, -- TRUE for helpful, FALSE for unhelpful
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, review_id) -- A user can only mark a review as helpful/unhelpful once
 );
 
@@ -37,7 +37,7 @@ CREATE TABLE review_replies (
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     is_official BOOLEAN NOT NULL DEFAULT FALSE, -- TRUE for POI owner/staff replies
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

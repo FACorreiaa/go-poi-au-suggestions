@@ -426,7 +426,7 @@ func (r *RepositoryImpl) LinkPersonalTagToProfile(ctx context.Context, userID, p
 	ctx, span := otel.Tracer("UserRepo").Start(ctx, "AddTagToProfile", trace.WithAttributes(
 		semconv.DBSystemPostgreSQL,
 		attribute.String("db.operation", "INSERT"),
-		attribute.String("db.sql.table", "user_profile_avoid_tags"),
+		attribute.String("db.sql.table", "user_personal_tags"),
 		attribute.String("db.profile.id", profileID.String()),
 		attribute.String("db.tag.id", tagID.String()),
 	))

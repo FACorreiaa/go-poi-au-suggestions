@@ -7,7 +7,10 @@ CREATE TABLE user_favorite_pois (
     poi_id UUID NOT NULL REFERENCES points_of_interest (id) ON DELETE CASCADE,
     notes TEXT NULL,
     added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT unique_user_favorite_poi UNIQUE (user_id, poi_id)
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (poi_id) REFERENCES points_of_interest (id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT unique_user_poi UNIQUE (user_id, poi_id)
 );
 
 -- Indexes for user_favorite_pois

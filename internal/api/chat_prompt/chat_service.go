@@ -75,8 +75,14 @@ type LlmInteractiontService interface {
 	GetRestaurantDetailsResponse(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error)
 
 	StartNewSession(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (uuid.UUID, *types.AiCityResponse, error)
-	StartNewSessionStreamed(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (*StreamingResponse, error)
-
+	StartNewSessionStreamed(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (*types.StreamingResponse, error)
+	ContinueSessionStreamed(
+		ctx context.Context,
+		sessionID uuid.UUID,
+		message string,
+		userLocation *types.UserLocation, // For distance sorting context
+		eventCh chan<- types.StreamEvent, // Channel to send events back
+	) error
 	ContinueSession(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation) (*types.AiCityResponse, error)
 }
 

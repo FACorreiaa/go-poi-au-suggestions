@@ -5,6 +5,7 @@ import "github.com/google/uuid"
 type POIDetail struct {
 	ID               uuid.UUID `json:"id"`
 	LlmInteractionID uuid.UUID `json:"llm_interaction_id,omitempty"` // ID of the LLM interaction that generated this POI
+	City             string    `json:"city"`                         // City where the POI is located
 	//Description    string    `json:"description"`
 	Name           string  `json:"name"`
 	Latitude       float64 `json:"latitude"`

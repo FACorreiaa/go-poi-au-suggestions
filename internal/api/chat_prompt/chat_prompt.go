@@ -168,7 +168,9 @@ func getRestaurantsNearbyPrompt(city string, userLocation types.UserLocation) st
 
 func generatedContinuedConversationPrompt(poi, city string) string {
 	return fmt.Sprintf(
-		`Provide detailed information about "%s" in %s. 
+		`Provide detailed information about "%s" in %s.
+        If user writes "Restaurant" add "cuisine_type" to final response and hide "description_poi"
+        If user writes "Hotel" add "star_rating" to final response and hide "description_poi"
 		Analise this POI (The user can insert a POI name, a Restaurant name or an Hotel/Hostel name) and return the following JSON structure:
     {
         "name": "string (the POI name)",
@@ -176,61 +178,44 @@ func generatedContinuedConversationPrompt(poi, city string) string {
         "longitude": number (approximate longitude as float),
         "category": "string (e.g., Museum, Park, Historical Site)",
         "description_poi": "string (50-100 words description)"
+        "cuisine_type": "string (for Restaurant)",
+        "star_rating": "number (for Hotel/Hostel)"
     }
     
     If the POI is not found, return: {"name": "", "latitude": 0, "longitude": 0, "category": "", "description_poi": ""}`,
 		poi, city)
 }
 
-// TOOD
-// func getRestaurantDetailsPrompt(city string, lat, lon float64) string {
-// 	return fmt.Sprintf(`
-//         Generate detailed information for the restaurant at coordinates %.2f, %.2f in the city of %s.
-//         The result must be in JSON format:
-//         {
-//             "name": "Restaurant Name",
-//             "description": "Detailed description of the restaurant.",
-//             "address": "Full address",
-//             "website": "Restaurant website URL or null if unavailable",
-//             "phone_number": "Contact number or null if unavailable",
-//             "opening_hours": "Opening hours (e.g., 'Mon-Fri: 9am-10pm')",
-//             "price_level": "Price level (e.g., '$', '$$', '$$$') or null if unavailable",
-//             "cuisine_type": "Type of cuisine (e.g., Italian, Japanese)"
-//         }
-//     `, lat, lon, city)
-// }
+// getCityDescriptionPrompt generates a prompt for city data
+func getCityDescriptionPrompt(cityName string) string {
+	return fmt.Sprintf(`
+        Provide detailed information about the city %s in JSON format with the following structure:
+        {
+            "city_name": "%s",
+            "country": "Country name",
+            "state_province": "State or province, if applicable",
+            "description": "A detailed description of the city",
+            "center_latitude": float64,
+            "center_longitude": float64
+        }
+    `, cityName, cityName)
+}
 
-// GetPOIReviews TODO build the POI reviews method for the user to have reviews of the POI
-// func getPOIReviewsPrompt(city string, lat, lon float64) string {
-// 	return fmt.Sprintf(`
-//         Generate reviews for the following POI on the city of %s with the coordinates %0.2f , %0.2f.
-//         The result should be in the following JSON format:
-//         {
-//             "reviews": [
-//                 {
-//                     "author": "Name of the reviewer",
-//                     "rating": <float, rating from 1 to 5>,
-//                     "comment": "Review comment from the user"
-//                 }
-//             ]
-//         }
-//     `, city, lat, lon)
-// }
-
-// func getPOIRecommendationsPrompt(city string, lat, lon float64) string {
-// 	return fmt.Sprintf(`
-//         Generate personalized recommendations for the following POI on the city of %s with the coordinates %0.2f , %0.2f.
-//         The result should be in the following JSON format:
-//         {
-//             "recommendations": [
-//                 {
-//                     "name": "Name of the recommended Point of Interest",
-//                     "latitude": <float>,
-//                     "longitude": <float>,
-//                     "category": "Primary category (e.g., Museum, Historical Site, Park, Restaurant, Bar)",
-//                     "reason": "A brief reason why this POI is recommended based on user preferences."
-//                 }
-//             ]
-//         }
-//     `, city, lat, lon)
-// }
+// getGeneralPOI generates a prompt for general POIs
+func getGeneralPOIPrompt(cityName string) string {
+	return fmt.Sprintf(`
+        Provide a list of general points of interest for %s in JSON format with the following structure:
+        {
+            "points_of_interest": [
+                {
+                    "name": "POI name",
+                    "category": "Category (e.g., Historical Site, Museum)",
+                    "coordinates": {
+                        "latitude": float64,
+                        "longitude": float64
+                    }
+                }
+            ]
+        }
+    `, cityName)
+}

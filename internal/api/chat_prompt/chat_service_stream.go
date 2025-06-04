@@ -20,8 +20,30 @@ import (
 	"google.golang.org/genai"
 )
 
-func (l *LlmInteractiontServiceImpl) sendEvent(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent) (sent bool) {
-	// Add EventID and Timestamp if not already set
+// TODO For robustness, send unprocessed events to a dead letter queue (e.g., a separate channel or database table) for later analysis:
+// if !l.sendEvent(ctx, eventCh, event) {
+//     l.logger.ErrorContext(ctx, "Sending to dead letter queue", slog.Any("event", event))
+//     // Save to a persistent store
+// }
+
+func (l *LlmInteractiontServiceImpl) sendEventWithRetry(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent, retries int) bool {
+	for i := 0; i < retries; i++ {
+		if l.sendEvent(ctx, ch, event) {
+			return true
+		}
+		time.Sleep(100 * time.Millisecond) // Backoff
+	}
+	return false
+}
+
+func (l *LlmInteractiontServiceImpl) processDeadLetterQueue() {
+	for event := range l.deadLetterCh {
+		l.logger.ErrorContext(context.Background(), "Unprocessed event sent to dead letter queue", slog.Any("event", event))
+		// TODO Save events to DB
+	}
+}
+
+func (l *LlmInteractiontServiceImpl) sendEvent(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent) bool {
 	if event.EventID == "" {
 		event.EventID = uuid.New().String()
 	}
@@ -30,56 +52,24 @@ func (l *LlmInteractiontServiceImpl) sendEvent(ctx context.Context, ch chan<- ty
 	}
 
 	select {
-	case <-ctx.Done(): // Check if the request context is cancelled FIRST
+	case <-ctx.Done():
 		l.logger.WarnContext(ctx, "Context cancelled, not sending stream event", slog.String("eventType", event.Type))
+		l.deadLetterCh <- event // Send to dead letter queue
 		return false
 	default:
-		// Context not done, try to send
 		select {
 		case ch <- event:
-			return true // Successfully sent
-		case <-ctx.Done(): // Check again, in case it was cancelled while trying to send
+			return true
+		case <-ctx.Done():
 			l.logger.WarnContext(ctx, "Context cancelled while trying to send stream event", slog.String("eventType", event.Type))
+			l.deadLetterCh <- event // Send to dead letter queue
 			return false
-		case <-time.After(2 * time.Second): // Timeout for sending
+		case <-time.After(2 * time.Second): // Use a reasonable timeout
 			l.logger.WarnContext(ctx, "Dropped stream event due to slow consumer or blocked channel (timeout)", slog.String("eventType", event.Type))
+			l.deadLetterCh <- event // Send to dead letter queue
 			return false
 		}
 	}
-}
-
-// getCityDescriptionPrompt generates a prompt for city data
-func getCityDescriptionPrompt(cityName string) string {
-	return fmt.Sprintf(`
-        Provide detailed information about the city %s in JSON format with the following structure:
-        {
-            "city_name": "%s",
-            "country": "Country name",
-            "state_province": "State or province, if applicable",
-            "description": "A detailed description of the city",
-            "center_latitude": float64,
-            "center_longitude": float64
-        }
-    `, cityName, cityName)
-}
-
-// getGeneralPOI generates a prompt for general POIs
-func getGeneralPOI(cityName string) string {
-	return fmt.Sprintf(`
-        Provide a list of general points of interest for %s in JSON format with the following structure:
-        {
-            "points_of_interest": [
-                {
-                    "name": "POI name",
-                    "category": "Category (e.g., Historical Site, Museum)",
-                    "coordinates": {
-                        "latitude": float64,
-                        "longitude": float64
-                    }
-                }
-            ]
-        }
-    `, cityName)
 }
 
 // getPersonalizedPOI generates a prompt for personalized POIs
@@ -304,7 +294,7 @@ func (l *LlmInteractiontServiceImpl) streamingGeneralPOIWorker(wg *sync.WaitGrou
 		EventID:   uuid.New().String(),
 	})
 
-	prompt := getGeneralPOI(cityName)
+	prompt := getGeneralPOIPrompt(cityName)
 	startTime := time.Now()
 	var responseText strings.Builder
 
@@ -838,54 +828,33 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 
 	l.logger.DebugContext(ctx, "Continuing streamed chat session", slog.String("sessionID", sessionID.String()), slog.String("message", message))
 
-	// Helper to safely send events on the channel, respecting context cancellation
-	sendEvt := func(event types.StreamEvent) bool { // Returns true if sent, false if context cancelled/timeout
-		if event.EventID == "" {
-			event.EventID = uuid.New().String()
-		}
-		if event.Timestamp.IsZero() {
-			event.Timestamp = time.Now()
-		}
-
-		select {
-		case <-ctx.Done():
-			l.logger.WarnContext(ctx, "Context cancelled, not sending stream event", slog.String("eventType", event.Type))
-			return false
-		case eventCh <- event:
-			return true
-		case <-time.After(3 * time.Second):
-			l.logger.WarnContext(ctx, "Timeout sending event to channel", slog.String("eventType", event.Type))
-			return false
-		}
-	}
-
 	// --- 1. Fetch Session & Basic Validation ---
 	session, err := l.llmInteractionRepo.GetSession(ctx, sessionID)
 	if err != nil {
 		err = fmt.Errorf("failed to get session %s: %w", sessionID, err)
-		sendEvt(types.StreamEvent{Type: types.EventTypeError, Error: err.Error(), IsFinal: true})
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: err.Error(), IsFinal: true})
 		return err
 	}
 	if session.Status != types.StatusActive {
-		err = fmt.Errorf("session %s is not active (status: %s)", sessionID, session.Status)
-		sendEvt(types.StreamEvent{Type: types.EventTypeError, Error: err.Error(), IsFinal: true})
+		err = fmt.Errorf("session %s is not active (status: %s) %w", sessionID, session.Status, err)
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: err.Error(), IsFinal: true})
 		return err
 	}
-	sendEvt(types.StreamEvent{Type: "session_validated", Data: map[string]string{"status": "active"}})
+	l.sendEvent(ctx, eventCh, types.StreamEvent{Type: "session_validated", Data: map[string]string{"status": "active"}})
 
 	// --- 2. Fetch City ID ---
 	cityData, err := l.cityRepo.FindCityByNameAndCountry(ctx, session.SessionContext.CityName, "")
 	if err != nil || cityData == nil {
 		if err == nil {
-			err = fmt.Errorf("city '%s' not found for session %s", session.SessionContext.CityName, sessionID)
+			err = fmt.Errorf("city '%s' not found for session %s %w", session.SessionContext.CityName, sessionID, err)
 		} else {
 			err = fmt.Errorf("failed to find city '%s' for session %s: %w", session.SessionContext.CityName, sessionID, err)
 		}
-		sendEvt(types.StreamEvent{Type: types.EventTypeError, Error: err.Error(), IsFinal: true})
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: err.Error(), IsFinal: true})
 		return err
 	}
 	cityID := cityData.ID
-	sendEvt(types.StreamEvent{Type: types.EventTypeProgress, Data: map[string]interface{}{"status": "context_loaded", "city_id": cityID.String()}})
+	l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: map[string]interface{}{"status": "context_loaded", "city_id": cityID.String()}})
 
 	// --- 3. Add User Message to History ---
 	userMessage := types.ConversationMessage{
@@ -901,11 +870,11 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 	intent, err := l.intentClassifier.Classify(ctx, message)
 	if err != nil {
 		err = fmt.Errorf("failed to classify intent for message '%s': %w", message, err)
-		sendEvt(types.StreamEvent{Type: types.EventTypeError, Error: err.Error(), IsFinal: true})
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: err.Error(), IsFinal: true})
 		return err
 	}
 	l.logger.InfoContext(ctx, "Intent classified", slog.String("intent", string(intent)))
-	sendEvt(types.StreamEvent{Type: "intent_classified", Data: map[string]string{"intent": string(intent)}})
+	l.sendEvent(ctx, eventCh, types.StreamEvent{Type: "intent_classified", Data: map[string]string{"intent": string(intent)}})
 
 	// --- 5. Handle Intent and Generate Response ---
 	var finalResponseMessage string
@@ -914,7 +883,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 
 	switch intent { // Align with ContinueSession's string-based intents
 	case types.IntentAddPOI:
-		sendEvt(types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Adding Point of Interest..."})
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Adding Point of Interest..."})
 		poiName := extractPOIName(message)
 		isDuplicate := false
 		for _, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
@@ -942,7 +911,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 		}
 
 	case types.IntentRemovePOI:
-		sendEvt(types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Removing Point of Interest..."})
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Removing Point of Interest..."})
 		poiName := extractPOIName(message)
 		var updatedPOIs []types.POIDetail
 		found := false
@@ -962,7 +931,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 		}
 
 	case types.IntentAskQuestion:
-		sendEvt(types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Answering your question..."})
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Answering your question..."})
 		finalResponseMessage = "I’m here to help! For now, I’ll assume you’re asking about your trip. What specifically would you like to know?"
 
 		// questionPrompt := fmt.Sprintf(
@@ -975,7 +944,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 		// if err != nil {
 		// 	finalResponseMessage = "I'm sorry, I had trouble processing your question right now."
 		// 	assistantMessageType = types.TypeError
-		// 	sendEvt(types.StreamEvent{Type: types.EventTypeError, Error: err.Error()})
+		// 	l.sendEvent(types.StreamEvent{Type: types.EventTypeError, Error: err.Error()})
 		// } else {
 		// 	var answerBuilder strings.Builder
 		// 	iterErr := iter(func(chunk *genai.GenerateContentResponse) bool {
@@ -996,13 +965,13 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 		// 		}
 		// 		if chunkContent != "" {
 		// 			answerBuilder.WriteString(chunkContent)
-		// 			sendEvt(types.StreamEvent{Type: EventTypeMessage, Data: chunkContent})
+		// 			l.sendEvent(types.StreamEvent{Type: EventTypeMessage, Data: chunkContent})
 		// 		}
 		// 		return true
 		// 	})
 		// 	if iterErr != nil && iterErr != iterator.Done {
 		// 		l.logger.WarnContext(ctx, "Error streaming question response", slog.Any("error", iterErr))
-		// 		sendEvt(types.StreamEvent{Type: types.EventTypeError, Error: iterErr.Error()})
+		// 		l.sendEvent(types.StreamEvent{Type: types.EventTypeError, Error: iterErr.Error()})
 		// 	}
 		// 	finalResponseMessage = answerBuilder.String()
 		// 	if finalResponseMessage == "" {
@@ -1012,7 +981,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 		//}
 
 	case "replace_poi":
-		sendEvt(types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Replacing Point of Interest..."})
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Replacing Point of Interest..."})
 		if matches := regexp.MustCompile(`replace\s+(.+?)\s+with\s+(.+?)(?:\s+in\s+my\s+itinerary)?`).FindStringSubmatch(strings.ToLower(message)); len(matches) == 3 {
 			oldPOI := matches[1]
 			newPOIName := matches[2]
@@ -1039,7 +1008,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 		}
 
 	default: // modify_itinerary
-		sendEvt(types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Updating itinerary..."})
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Updating itinerary..."})
 		if matches := regexp.MustCompile(`replace\s+(.+?)\s+with\s+(.+?)(?:\s+in\s+my\s+itinerary)?`).FindStringSubmatch(strings.ToLower(message)); len(matches) == 3 {
 			oldPOI := matches[1]
 			newPOIName := matches[2]
@@ -1072,7 +1041,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 	// 	if err != nil {
 	// 		finalResponseMessage = "I had trouble processing that itinerary update."
 	// 		assistantMessageType = types.TypeError
-	// 		sendEvt(types.StreamEvent{Type: types.EventTypeError, Error: err.Error()})
+	// 		l.sendEvent(types.StreamEvent{Type: types.EventTypeError, Error: err.Error()})
 	// 	} else {
 	// 		var fullResponseBuilder strings.Builder
 	// 		iterErr := iter(func(chunk *genai.GenerateContentResponse) bool {
@@ -1093,13 +1062,13 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 	// 			}
 	// 			if chunkContent != "" {
 	// 				fullResponseBuilder.WriteString(chunkContent)
-	// 				sendEvt(types.StreamEvent{Type: EventTypeMessage, Data: chunkContent})
+	// 				l.sendEvent(types.StreamEvent{Type: EventTypeMessage, Data: chunkContent})
 	// 			}
 	// 			return true
 	// 		})
 	// 		if iterErr != nil && iterErr != iterator.Done {
 	// 			l.logger.WarnContext(ctx, "Error streaming itinerary update", slog.Any("error", iterErr))
-	// 			sendEvt(types.StreamEvent{Type: types.EventTypeError, Error: iterErr.Error()})
+	// 			l.sendEvent(types.StreamEvent{Type: types.EventTypeError, Error: iterErr.Error()})
 	// 		}
 	// 		if ctx.Err() != nil {
 	// 			return ctx.Err()
@@ -1119,7 +1088,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 
 	// --- 6. Post-Modification Processing (Sorting, Saving Session) ---
 	if itineraryModifiedByThisTurn && userLocation != nil && userLocation.UserLat != 0 && userLocation.UserLon != 0 && session.CurrentItinerary != nil {
-		sendEvt(types.StreamEvent{Type: types.EventTypeProgress, Data: "Sorting updated POIs by distance..."})
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Sorting updated POIs by distance..."})
 		// Save new POIs to DB to ensure they have valid IDs
 		for i, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
 			if poi.ID == uuid.Nil {
@@ -1166,18 +1135,18 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 	session.ExpiresAt = time.Now().Add(24 * time.Hour)
 	if err := l.llmInteractionRepo.UpdateSession(ctx, *session); err != nil {
 		err = fmt.Errorf("failed to update session %s: %w", sessionID, err)
-		sendEvt(types.StreamEvent{Type: types.EventTypeError, Error: err.Error(), IsFinal: true})
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: err.Error(), IsFinal: true})
 		return err
 	}
 
 	// --- 7. Send Final Itinerary and Completion Event ---
-	sendEvt(types.StreamEvent{
+	l.sendEvent(ctx, eventCh, types.StreamEvent{
 		Type:      types.EventTypeItinerary,
 		Data:      session.CurrentItinerary,
 		Message:   finalResponseMessage,
 		Timestamp: time.Now(),
 	})
-	sendEvt(types.StreamEvent{Type: types.EventTypeComplete, Data: "Turn completed.", IsFinal: true})
+	l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeComplete, Data: "Turn completed.", IsFinal: true})
 
 	l.logger.InfoContext(ctx, "Streamed session continued", slog.String("sessionID", sessionID.String()), slog.String("intent", string(intent)))
 	return nil
@@ -1297,4 +1266,14 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 
 	l.sendEvent(ctx, eventCh, types.StreamEvent{Type: "poi_detail_complete", Data: poiData})
 	return poiData, nil
+}
+
+// streamingCityDataWorker ContinueSessionStreamed
+
+func (l *LlmInteractiontServiceImpl) generateCityData(ctx context.Context, cityName string) (string, error) {
+	return "", nil // Placeholder for actual city data generation logic
+}
+
+func (l *LlmInteractiontServiceImpl) saveCityInteraction(ctx context.Context, interaction types.LlmInteraction) error {
+	return nil
 }

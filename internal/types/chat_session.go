@@ -7,6 +7,11 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	SendEventTimeout     = 2 * time.Second
+	ContinueEventTimeout = 3 * time.Second
+)
+
 type ChatSession struct {
 	ID                  uuid.UUID             `json:"id"`
 	UserID              uuid.UUID             `json:"user_id"`

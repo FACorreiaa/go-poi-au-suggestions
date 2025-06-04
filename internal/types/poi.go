@@ -33,7 +33,9 @@ type POIDetail struct {
 	// LocationPhone        string    `json:"location_phone"`
 	// LocationWebsite      string    `json:"location_website"`
 	// LocationOpeningHours string    `json:"location_opening_hours"`
-	Err error `json:"-"`
+	CuisineType string `json:"cuisine_type,omitempty"` // For restaurants
+	StarRating  string `json:"star_rating,omitempty"`  // For hotels
+	Err         error  `json:"-"`
 }
 
 type POIDetailedInfo struct {

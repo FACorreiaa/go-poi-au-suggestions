@@ -101,7 +101,10 @@ type LlmInteractiontServiceImpl struct {
 	cityRepo           city.Repository
 	poiRepo            poi.Repository
 	cache              *cache.Cache
-	intentClassifier   IntentClassifier
+
+	// events
+	deadLetterCh     chan types.StreamEvent
+	intentClassifier IntentClassifier
 }
 
 // NewLlmInteractiontService creates a new user service instance.
@@ -119,7 +122,7 @@ func NewLlmInteractiontService(interestRepo interests.Repository,
 	}
 
 	cache := cache.New(24*time.Hour, 1*time.Hour) // Cache for 24 hours with cleanup every hour
-	return &LlmInteractiontServiceImpl{
+	service := &LlmInteractiontServiceImpl{
 		logger:             logger,
 		tagsRepo:           tagsRepo,
 		interestRepo:       interestRepo,
@@ -129,8 +132,11 @@ func NewLlmInteractiontService(interestRepo interests.Repository,
 		cityRepo:           cityRepo,
 		poiRepo:            poiRepo,
 		cache:              cache,
+		deadLetterCh:       make(chan types.StreamEvent, 100),
 		intentClassifier:   &SimpleIntentClassifier{},
 	}
+	go service.processDeadLetterQueue()
+	return service
 }
 
 func (l *LlmInteractiontServiceImpl) GenerateCityDataWorker(wg *sync.WaitGroup,
@@ -225,7 +231,7 @@ func (l *LlmInteractiontServiceImpl) GenerateGeneralPOIWorker(wg *sync.WaitGroup
 	defer span.End()
 	defer wg.Done()
 
-	prompt := getGeneralPOI(cityName)
+	prompt := getGeneralPOIPrompt(cityName)
 	span.SetAttributes(attribute.Int("prompt.length", len(prompt)))
 
 	startTime := time.Now()

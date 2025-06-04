@@ -107,8 +107,7 @@ func getPersonalizedPOI(interestNames []string, cityName, tagsPromptPart, userPr
 
 // streamingCityDataWorker generates city data with streaming updates
 func (l *LlmInteractiontServiceImpl) streamingCityDataWorker(wg *sync.WaitGroup,
-	ctx context.Context,
-	cityName string, resultCh chan<- types.GenAIResponse,
+	ctx context.Context, cityName string, resultCh chan<- types.GenAIResponse,
 	eventCh chan<- types.StreamEvent, userID uuid.UUID) {
 	ctxWorker, span := otel.Tracer("LlmInteractionService").Start(ctx, "streamingCityDataWorker", trace.WithAttributes(
 		attribute.String("city.name", cityName),
@@ -118,135 +117,77 @@ func (l *LlmInteractiontServiceImpl) streamingCityDataWorker(wg *sync.WaitGroup,
 		defer wg.Done()
 	}
 
-	if !l.sendEvent(ctxWorker, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: map[string]interface{}{"status": "generating_city_data", "progress": 10}}) {
-		resultCh <- types.GenAIResponse{Err: fmt.Errorf("context cancelled before sending initial progress for city data")} // Send to resultCh
+	if !l.sendEventWithRetry(ctxWorker, eventCh, types.StreamEvent{
+		Type: types.EventTypeProgress,
+		Data: map[string]interface{}{"status": "generating_city_data", "progress": 10},
+	}, 3) {
+		resultCh <- types.GenAIResponse{Err: fmt.Errorf("context cancelled before sending initial progress for city data")}
 		return
 	}
 
-	prompt := getCityDescriptionPrompt(cityName)
 	startTime := time.Now()
-	var responseText strings.Builder
+	prompt := getCityDescriptionPrompt(cityName)
 
-	// Try streaming
-	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
-	if err == nil {
-		for resp, err := range iter {
-			if err != nil {
-				span.RecordError(err)
-				l.sendEvent(ctx, eventCh, types.StreamEvent{
-					Type:      types.EventTypeError,
-					Error:     fmt.Sprintf("streaming city data error: %v", err),
-					Timestamp: time.Now(),
-					EventID:   uuid.New().String(),
-				})
-				resultCh <- types.GenAIResponse{Err: err}
-				return
-			}
-			for _, cand := range resp.Candidates {
-				if cand.Content != nil {
-					for _, part := range cand.Content.Parts {
-						if part.Text != "" {
-							responseText.WriteString(string(part.Text))
-							l.sendEvent(ctx, eventCh, types.StreamEvent{
-								Type:      types.EventTypeCityData,
-								Data:      map[string]string{"partial_city_data": responseText.String()},
-								Timestamp: time.Now(),
-								EventID:   uuid.New().String(),
-							})
-						}
-					}
-				}
-			}
-		}
-	} else {
-		// Fallback to non-streaming
-		l.logger.WarnContext(ctx, "Streaming city data failed, falling back to non-streaming", slog.Any("error", err))
-		response, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
-		if err != nil {
-			span.RecordError(err)
-			l.sendEvent(ctx, eventCh, types.StreamEvent{
-				Type:      types.EventTypeError,
-				Error:     fmt.Sprintf("failed to generate city data: %v", err),
-				Timestamp: time.Now(),
-				EventID:   uuid.New().String(),
-			})
-			resultCh <- types.GenAIResponse{Err: err}
-			return
-		}
-		for _, cand := range response.Candidates {
-			if cand.Content != nil {
-				for _, part := range cand.Content.Parts {
-					if part.Text != "" {
-						responseText.WriteString(string(part.Text))
-					}
-				}
-			}
-		}
-		l.sendEvent(ctx, eventCh, types.StreamEvent{
-			Type:      types.EventTypeCityData,
-			Data:      map[string]string{"partial_city_data": responseText.String()},
-			Timestamp: time.Now(),
-			EventID:   uuid.New().String(),
-		})
-	}
-	if ctxWorker.Err() != nil {
-		resultCh <- types.GenAIResponse{Err: fmt.Errorf("context cancelled during city data generation: %w", ctxWorker.Err())}
-		return
-	}
-
-	fullText := responseText.String()
-	if fullText == "" {
-		err := fmt.Errorf("empty city data response")
+	// Generate city data
+	cleanTxt, err := l.generateCityData(ctxWorker, cityName)
+	if err != nil {
 		span.RecordError(err)
-		l.sendEvent(ctx, eventCh, types.StreamEvent{
+		l.sendEventWithRetry(ctxWorker, eventCh, types.StreamEvent{
 			Type:      types.EventTypeError,
 			Error:     err.Error(),
 			Timestamp: time.Now(),
 			EventID:   uuid.New().String(),
-		})
+		}, 3)
 		resultCh <- types.GenAIResponse{Err: err}
 		return
 	}
 
+	// Send partial data event (for consistency with original)
+	l.sendEventWithRetry(ctxWorker, eventCh, types.StreamEvent{
+		Type:      types.EventTypeCityData,
+		Data:      map[string]string{"partial_city_data": cleanTxt},
+		Timestamp: time.Now(),
+		EventID:   uuid.New().String(),
+	}, 3)
+
 	// Save LLM interaction
-	latencyMs := int(time.Since(startTime).Milliseconds())
 	interaction := types.LlmInteraction{
 		UserID:       userID,
 		Prompt:       prompt,
-		ResponseText: fullText,
-		ModelUsed:    model,
-		LatencyMs:    latencyMs,
+		ResponseText: cleanTxt,
+		Timestamp:    startTime,
+		LatencyMs:    int(time.Since(startTime).Milliseconds()),
 	}
-	_, err = l.llmInteractionRepo.SaveInteraction(ctx, interaction)
+	_, err = l.saveCityInteraction(ctxWorker, interaction)
 	if err != nil {
 		span.RecordError(err)
-		l.sendEvent(ctx, eventCh, types.StreamEvent{
+		l.sendEventWithRetry(ctxWorker, eventCh, types.StreamEvent{
 			Type:      types.EventTypeError,
 			Error:     fmt.Sprintf("failed to save city data interaction: %v", err),
 			Timestamp: time.Now(),
 			EventID:   uuid.New().String(),
-		})
+		}, 3)
 		resultCh <- types.GenAIResponse{Err: err}
 		return
 	}
 
-	cleanTxt := cleanJSONResponse(fullText)
+	// Parse JSON response
 	var cityData struct {
 		CityName        string  `json:"city_name"`
-		StateProvince   *string `json:"state_province"`
+		StateProvince   *string `json:"state_province,omitempty"`
 		Country         string  `json:"country"`
 		CenterLatitude  float64 `json:"center_latitude"`
-		CenterLongitude float64 `json:"center_longitude"`
-		Description     string  `json:"description"`
+		CenterLongitude float64
+		Description     string `json:"description"`
 	}
 	if err := json.Unmarshal([]byte(cleanTxt), &cityData); err != nil {
 		span.RecordError(err)
-		l.sendEvent(ctx, eventCh, types.StreamEvent{
+		l.sendEventWithRetry(ctxWorker, eventCh, types.StreamEvent{
 			Type:      types.EventTypeError,
 			Error:     fmt.Sprintf("failed to parse city data JSON: %v", err),
 			Timestamp: time.Now(),
 			EventID:   uuid.New().String(),
-		})
+		}, 3)
 		resultCh <- types.GenAIResponse{Err: err}
 		return
 	}
@@ -265,12 +206,12 @@ func (l *LlmInteractiontServiceImpl) streamingCityDataWorker(wg *sync.WaitGroup,
 		Longitude:       cityData.CenterLongitude,
 	}
 
-	l.sendEvent(ctx, eventCh, types.StreamEvent{
+	l.sendEventWithRetry(ctxWorker, eventCh, types.StreamEvent{
 		Type:      types.EventTypeCityData,
 		Data:      result,
 		Timestamp: time.Now(),
 		EventID:   uuid.New().String(),
-	})
+	}, 3)
 	resultCh <- result
 }
 
@@ -1162,54 +1103,74 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 		trace.WithAttributes(attribute.String("poi.name", poiName), attribute.String("city.name", cityName)))
 	defer span.End()
 
-	// Use the same prompt structure as ContinueSession
 	prompt := generatedContinuedConversationPrompt(poiName, cityName)
-	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.2)} // Lower temp for factual data
+	config := &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.2)}
+	startTime := time.Now()
 
-	_, err := l.aiClient.GenerateContentStream(ctx, prompt, config)
+	var responseTextBuilder strings.Builder
+	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, config)
 	if err != nil {
-		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: fmt.Sprintf("Failed to generate POI data for '%s': %v", poiName, err)})
+		l.sendEventWithRetry(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     fmt.Sprintf("Failed to generate POI data for '%s': %v", poiName, err),
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		}, 3)
 		return types.POIDetail{}, fmt.Errorf("AI stream init failed for POI '%s': %w", poiName, err)
 	}
 
-	var responseTextBuilder strings.Builder
-	l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: map[string]string{"status": fmt.Sprintf("Getting details for %s...", poiName)}})
+	l.sendEventWithRetry(ctx, eventCh, types.StreamEvent{
+		Type:      types.EventTypeProgress,
+		Data:      map[string]string{"status": fmt.Sprintf("Getting details for %s...", poiName)},
+		Timestamp: time.Now(),
+		EventID:   uuid.New().String(),
+	}, 3)
 
-	// iterErr := iter(func(chunk *genai.GenerateContentResponse) bool {
-	// 	select {
-	// 	case <-ctx.Done():
-	// 		return false
-	// 	default:
-	// 	}
-	// 	chunkContent := ""
-	// 	for _, cand := range chunk.Candidates {
-	// 		if cand.Content != nil {
-	// 			for _, part := range cand.Content.Parts {
-	// 				if txtPart, ok := part.(genai.Text); ok {
-	// 					chunkContent += string(txtPart)
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-	// 	if chunkContent != "" {
-	// 		responseTextBuilder.WriteString(chunkContent)
-	// 		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: "poi_detail_chunk", Data: map[string]string{"poi_name": poiName, "chunk": chunkContent}})
-	// 	}
-	// 	return true
-	// })
+	for resp, err := range iter {
+		if err != nil {
+			l.sendEventWithRetry(ctx, eventCh, types.StreamEvent{
+				Type:      types.EventTypeError,
+				Error:     fmt.Sprintf("Streaming failed for POI '%s': %v", poiName, err),
+				Timestamp: time.Now(),
+				EventID:   uuid.New().String(),
+			}, 3)
+			return types.POIDetail{}, fmt.Errorf("streaming POI details for '%s' failed: %w", poiName, err)
+		}
+		for _, cand := range resp.Candidates {
+			if cand.Content != nil {
+				for _, part := range cand.Content.Parts {
+					if part.Text != "" {
+						responseTextBuilder.WriteString(string(part.Text))
+						l.sendEventWithRetry(ctx, eventCh, types.StreamEvent{
+							Type:      "poi_detail_chunk",
+							Data:      map[string]string{"poi_name": poiName, "chunk": string(part.Text)},
+							Timestamp: time.Now(),
+							EventID:   uuid.New().String(),
+						}, 3)
+					}
+				}
+			}
+		}
+	}
 
-	// if err != nil && err != iter.Done {
-	// 	l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: fmt.Sprintf("Streaming failed for POI '%s': %v", poiName, iterErr)})
-	// 	return types.POIDetail{}, fmt.Errorf("streaming POI details for '%s' failed: %w", poiName, iterErr)
-	// }
 	if ctx.Err() != nil {
-		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: ctx.Err().Error()})
+		l.sendEventWithRetry(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     ctx.Err().Error(),
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		}, 3)
 		return types.POIDetail{}, fmt.Errorf("context cancelled during POI detail generation: %w", ctx.Err())
 	}
 
 	fullText := responseTextBuilder.String()
 	if fullText == "" {
-		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: fmt.Sprintf("Empty response for POI '%s'", poiName)})
+		l.sendEventWithRetry(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     fmt.Sprintf("Empty response for POI '%s'", poiName),
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		}, 3)
 		return types.POIDetail{Name: poiName, DescriptionPOI: "Details not found."}, fmt.Errorf("empty response for POI details '%s'", poiName)
 	}
 
@@ -1218,12 +1179,17 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 		UserID:       userID,
 		Prompt:       prompt,
 		ResponseText: fullText,
-		ModelUsed:    model,
+		Timestamp:    startTime,
 	}
-	llmInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
+	llmInteractionID, err := l.saveCityInteraction(ctx, interaction)
 	if err != nil {
-		l.logger.WarnContext(ctx, "Failed to save LLM interaction", slog.Any("error", err))
-		span.RecordError(err)
+		l.sendEventWithRetry(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     fmt.Sprintf("Failed to save LLM interaction for POI '%s': %v", poiName, err),
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		}, 3)
+		return types.POIDetail{}, fmt.Errorf("failed to save LLM interaction: %w", err)
 	}
 
 	// Parse response
@@ -1249,9 +1215,15 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 	if err != nil {
 		l.logger.WarnContext(ctx, "Failed to save POI to database", slog.Any("error", err))
 		span.RecordError(err)
-	} else {
-		poiData.ID = dbPoiID
+		l.sendEventWithRetry(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     fmt.Sprintf("Failed to save POI '%s' to database: %v", poiName, err),
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		}, 3)
+		return types.POIDetail{}, fmt.Errorf("failed to save POI to database: %w", err)
 	}
+	poiData.ID = dbPoiID
 
 	// Calculate distance
 	if userLocation != nil && userLocation.UserLat != 0 && userLocation.UserLon != 0 && poiData.Latitude != 0 && poiData.Longitude != 0 {
@@ -1264,16 +1236,92 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 		}
 	}
 
-	l.sendEvent(ctx, eventCh, types.StreamEvent{Type: "poi_detail_complete", Data: poiData})
+	l.sendEventWithRetry(ctx, eventCh, types.StreamEvent{
+		Type:      "poi_detail_complete",
+		Data:      poiData,
+		Timestamp: time.Now(),
+		EventID:   uuid.New().String(),
+	}, 3)
 	return poiData, nil
 }
 
 // streamingCityDataWorker ContinueSessionStreamed
 
 func (l *LlmInteractiontServiceImpl) generateCityData(ctx context.Context, cityName string) (string, error) {
-	return "", nil // Placeholder for actual city data generation logic
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "generateCityData", trace.WithAttributes(
+		attribute.String("city.name", cityName),
+	))
+	defer span.End()
+
+	prompt := getCityDescriptionPrompt(cityName)
+	var responseText strings.Builder
+
+	// Try streaming
+	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	if err == nil {
+		for resp, err := range iter {
+			if err != nil {
+				span.RecordError(err)
+				return "", fmt.Errorf("streaming city data error: %w", err)
+			}
+			for _, cand := range resp.Candidates {
+				if cand.Content != nil {
+					for _, part := range cand.Content.Parts {
+						if part.Text != "" {
+							responseText.WriteString(string(part.Text))
+						}
+					}
+				}
+			}
+		}
+	} else {
+		// Fallback to non-streaming
+		l.logger.WarnContext(ctx, "Streaming city data failed, falling back to non-streaming", slog.Any("error", err))
+		response, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+		if err != nil {
+			span.RecordError(err)
+			return "", fmt.Errorf("failed to generate city data: %w", err)
+		}
+		for _, cand := range response.Candidates {
+			if cand.Content != nil {
+				for _, part := range cand.Content.Parts {
+					if part.Text != "" {
+						responseText.WriteString(string(part.Text))
+					}
+				}
+			}
+		}
+	}
+
+	fullText := responseText.String()
+	if fullText == "" {
+		err := fmt.Errorf("empty city data response")
+		span.RecordError(err)
+		return "", err
+	}
+
+	return cleanJSONResponse(fullText), nil
 }
 
-func (l *LlmInteractiontServiceImpl) saveCityInteraction(ctx context.Context, interaction types.LlmInteraction) error {
-	return nil
+func (l *LlmInteractiontServiceImpl) saveCityInteraction(ctx context.Context, interaction types.LlmInteraction) (uuid.UUID, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "saveCityInteraction")
+	defer span.End()
+
+	if interaction.LatencyMs == 0 {
+		// Ensure latency is set if not provided
+		interaction.LatencyMs = int(time.Since(interaction.Timestamp).Milliseconds())
+	}
+	if interaction.ModelUsed == "" {
+		interaction.ModelUsed = model // Default model
+	}
+
+	interactionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
+	if err != nil {
+		span.RecordError(err)
+		l.logger.WarnContext(ctx, "Failed to save LLM interaction", slog.Any("error", err))
+		return uuid.Nil, fmt.Errorf("failed to save interaction: %w", err)
+	}
+
+	span.SetAttributes(attribute.String("interaction.id", interactionID.String()))
+	return interactionID, nil
 }

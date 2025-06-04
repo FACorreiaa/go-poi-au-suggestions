@@ -23,6 +23,7 @@ type LlmInteraction struct {
 	CompletionTokens int             `json:"completion_tokens"`
 	TotalTokens      int             `json:"total_tokens"`
 	LatencyMs        int             `json:"latency_ms"`
+	Timestamp        time.Time       `json:"timestamp"`
 }
 
 type AIItineraryResponse struct {

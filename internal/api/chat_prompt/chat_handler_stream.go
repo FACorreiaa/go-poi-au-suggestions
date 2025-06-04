@@ -47,12 +47,12 @@ func (h *HandlerImpl) StartChatSessionStream(w http.ResponseWriter, r *http.Requ
 	// Authentication
 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userIDStr == "" {
-		h.writeSSEError(w, "Authentication required")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		h.writeSSEError(w, "Invalid user ID format")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
 		return
 	}
 

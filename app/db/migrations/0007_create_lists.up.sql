@@ -6,6 +6,7 @@ CREATE TABLE lists (
     name TEXT NOT NULL,
     description TEXT,
     image_url TEXT,
+    item_count INTEGER NOT NULL DEFAULT 0,
     is_public BOOLEAN NOT NULL DEFAULT FALSE,
     is_itinerary BOOLEAN NOT NULL DEFAULT FALSE,
     parent_list_id UUID REFERENCES lists (id) ON DELETE SET NULL, -- New: For nesting itineraries within a list
@@ -40,7 +41,7 @@ CREATE TABLE saved_lists (
 
 -- Indexes for efficient querying
 
-CREATE INDEX idx_lists_parent_list_id ON lists (parent _list_id);
+CREATE INDEX idx_lists_parent_list_id ON lists (parent_list_id);
 
 CREATE INDEX idx_lists_user_id ON lists (user_id);
 

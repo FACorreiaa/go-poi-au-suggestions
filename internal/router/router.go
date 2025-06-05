@@ -89,7 +89,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			r.Mount("/user/tags", tagsRoutes(cfg.TagsHandler))
 			r.Mount("/llm", LLMInteractionRoutes(cfg.LLMInteractionHandler))
 			r.Mount("/pois", POIRoutes(cfg.PointsOfInterestHandler)) // Points of Interest routes
-			r.Mount("/itineraries/list", ItineraryListRoutes(cfg.ItineraryListHandler))
+			r.Mount("/itineraries", ItineraryListRoutes(cfg.ItineraryListHandler))
 			// r.Mount("/pois", POIRoutes(cfg.HandlerImpl))   // Example for POI routes
 		})
 
@@ -226,15 +226,15 @@ func POIRoutes(HandlerImpl *poi.HandlerImpl) http.Handler {
 func ItineraryListRoutes(h *itineraryList.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
 
-	r.Post("/lists", h.CreateTopLevelListHandler)                                    // Create a new top-level list
-	r.Get("/lists", h.GetUserListsHandler)                                           // Get all top-level lists for a user
-	r.Get("/lists/{listID}", h.GetListDetailsHandler)                                // Get details of a specific list
-	r.Put("/lists/{listID}", h.UpdateListDetailsHandler)                             // Update a specific list
-	r.Delete("/lists/{listID}", h.DeleteListHandler)                                 // Delete a specific list
-	r.Post("/lists/{parentListID}/itineraries", h.CreateItineraryForListHandler)     // Create an itinerary within a parent list
-	r.Post("/itineraries/{itineraryID}/items", h.AddPOIListItemHandler)              // Add a POI to an itinerary
-	r.Put("/itineraries/{itineraryID}/items/{poiID}", h.UpdatePOIListItemHandler)    // Update a POI in an itinerary
-	r.Delete("/itineraries/{itineraryID}/items/{poiID}", h.RemovePOIListItemHandler) // Remove a POI from an itinerary
+	r.Post("/lists", h.CreateTopLevelListHandler)                                // Create a new top-level list
+	r.Get("/lists", h.GetUserListsHandler)                                       // Get all top-level lists for a user
+	r.Get("/lists/{listID}", h.GetListDetailsHandler)                            // Get details of a specific list
+	r.Put("/lists/{listID}", h.UpdateListDetailsHandler)                         // Update a specific list
+	r.Delete("/lists/{listID}", h.DeleteListHandler)                             // Delete a specific list
+	r.Post("/lists/{parentListID}/itineraries", h.CreateItineraryForListHandler) // Create an itinerary within a parent list
+	r.Post("/{itineraryID}/items", h.AddPOIListItemHandler)                      // Add a POI to an itinerary
+	r.Put("/{itineraryID}/items/{poiID}", h.UpdatePOIListItemHandler)            // Update a POI in an itinerary
+	r.Delete("/{itineraryID}/items/{poiID}", h.RemovePOIListItemHandler)         // Remove a POI from an itinerary
 	return r
 }
 

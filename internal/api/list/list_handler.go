@@ -44,20 +44,6 @@ func NewHandler(service Service, logger *slog.Logger /*, llmService *llmChat.Llm
 	}
 }
 
-type CreateListRequest struct {
-	Name        string     `json:"name" validate:"required,min=3,max=100"`
-	Description string     `json:"description,omitempty" validate:"max=500"`
-	CityID      *uuid.UUID `json:"city_id,omitempty"` // Optional: if the list/itinerary is city-specific
-	IsItinerary bool       `json:"is_itinerary"`      // True if this top-level list IS an itinerary itself
-	IsPublic    bool       `json:"is_public"`
-}
-
-type CreateItineraryForListRequest struct {
-	Name        string `json:"name" validate:"required,min=3,max=100"`
-	Description string `json:"description,omitempty" validate:"max=500"`
-	IsPublic    bool   `json:"is_public"`
-}
-
 func (h *HandlerImpl) CreateTopLevelListHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("ItineraryListHandler").Start(r.Context(), "CreateTopLevelList")
 	defer span.End()
@@ -80,7 +66,7 @@ func (h *HandlerImpl) CreateTopLevelListHandler(w http.ResponseWriter, r *http.R
 	}
 	span.SetAttributes(attribute.String("user.id", userID.String()))
 
-	var req CreateListRequest
+	var req types.CreateListRequest
 	if err := api.DecodeJSONBody(w, r, &req); err != nil {
 		l.ErrorContext(ctx, "Failed to decode or validate request", slog.Any("error", err))
 		span.RecordError(err)
@@ -138,7 +124,7 @@ func (h *HandlerImpl) CreateItineraryForListHandler(w http.ResponseWriter, r *ht
 	}
 	span.SetAttributes(attribute.String("parent_list.id", parentListID.String()))
 
-	var req CreateItineraryForListRequest
+	var req types.CreateItineraryForListRequest
 	if err := api.DecodeJSONBody(w, r, &req); err != nil {
 		l.ErrorContext(ctx, "Failed to decode or validate request", slog.Any("error", err))
 		span.RecordError(err)

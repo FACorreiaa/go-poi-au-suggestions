@@ -143,6 +143,7 @@ func main() {
 		TagsHandler:             c.TagsHandler,
 		LLMInteractionHandler:   c.LLMInteractionHandlerImpl,
 		PointsOfInterestHandler: c.POIHandler,
+		ItineraryListHandler:    c.ItineraryListHandler,
 		AuthenticateMiddleware:  authenticateMiddleware,
 		Logger:                  logger,
 	}

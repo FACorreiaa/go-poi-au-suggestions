@@ -98,3 +98,23 @@ type UpdateListItemRequest struct {
 	SourceLlmSuggestedPoiID *uuid.UUID `json:"source_llm_suggested_poi_id,omitempty"`
 	ItemAIDescription       *string    `json:"item_ai_description,omitempty"`
 }
+
+// ListWithItems combines a List with its items
+type ListWithItems struct {
+	List  List
+	Items []*ListItem
+}
+
+type CreateListRequest struct {
+	Name        string     `json:"name" validate:"required,min=3,max=100"`
+	Description string     `json:"description,omitempty" validate:"max=500"`
+	CityID      *uuid.UUID `json:"city_id,omitempty"` // Optional: if the list/itinerary is city-specific
+	IsItinerary bool       `json:"is_itinerary"`      // True if this top-level list IS an itinerary itself
+	IsPublic    bool       `json:"is_public"`
+}
+
+type CreateItineraryForListRequest struct {
+	Name        string `json:"name" validate:"required,min=3,max=100"`
+	Description string `json:"description,omitempty" validate:"max=500"`
+	IsPublic    bool   `json:"is_public"`
+}

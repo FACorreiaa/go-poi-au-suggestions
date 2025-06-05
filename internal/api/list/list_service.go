@@ -515,6 +515,65 @@ func (s *ServiceImpl) GetUserLists(ctx context.Context, userID uuid.UUID, isItin
 	return lists, nil
 }
 
+// todo
+// func (r *RepositoryImpl) SaveItinerary(ctx context.Context, sessionID uuid.UUID, userID uuid.UUID, name, description string, isPublic bool, parentListID *uuid.UUID) (types.List, error) {
+// 	// Fetch session from chat_sessions
+// 	session, err := r.GetSession(ctx, sessionID) // Assume GetSession is available
+// 	if err != nil {
+// 		return types.List{}, fmt.Errorf("failed to get session: %w", err)
+// 	}
+// 	if session.UserID != userID {
+// 		return types.List{}, fmt.Errorf("user does not own session")
+// 	}
+// 	if session.CurrentItinerary == nil {
+// 		return types.List{}, fmt.Errorf("session has no itinerary")
+// 	}
+
+// 	// Get city_id from general_city_data
+// 	city, err := r.cityRepo.FindCityByNameAndCountry(ctx, session.CurrentItinerary.GeneralCityData.City, session.CurrentItinerary.GeneralCityData.Country)
+// 	if err != nil {
+// 		return types.List{}, fmt.Errorf("failed to find city: %w", err)
+// 	}
+
+// 	// Create list
+// 	list := types.List{
+// 		ID:           uuid.New(),
+// 		UserID:       userID,
+// 		Name:         name,
+// 		Description:  description,
+// 		IsPublic:     isPublic,
+// 		IsItinerary:  true,
+// 		CityID:       &city.ID,
+// 		ParentListID: parentListID,
+// 		CreatedAt:    time.Now(),
+// 		UpdatedAt:    time.Now(),
+// 	}
+// 	if err := r.CreateList(ctx, list); err != nil {
+// 		return types.List{}, fmt.Errorf("failed to create itinerary list: %w", err)
+// 	}
+
+// 	// Save POIs
+// 	for i, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
+// 		poiID, err := r.SaveSinglePOI(ctx, poi, userID, city.ID, poi.LlmInteractionID)
+// 		if err != nil {
+// 			return types.List{}, fmt.Errorf("failed to save POI %s: %w", poi.Name, err)
+// 		}
+// 		listItem := types.ListItem{
+// 			ListID:    list.ID,
+// 			PoiID:     poiID,
+// 			Position:  i + 1,
+// 			Notes:     poi.DescriptionPOI,
+// 			CreatedAt: time.Now(),
+// 			UpdatedAt: time.Now(),
+// 		}
+// 		if err := r.AddListItem(ctx, listItem); err != nil {
+// 			return types.List{}, fmt.Errorf("failed to add POI to itinerary: %w", err)
+// 		}
+// 	}
+
+// 	return list, nil
+// }
+
 // TODO AI LIST OPTIMISATION
 // func (s *ItineraryListService) OptimizeItineraryList(ctx context.Context, listID uuid.UUID) error {
 // 	// Fetch the list

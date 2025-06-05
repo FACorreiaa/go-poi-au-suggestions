@@ -1,0 +1,2240 @@
+type: collection.insomnia.rest/5.0
+name: WanderWise-AI
+meta:
+  id: wrk_1eafea56d29b4a868391fcdcee66178f
+  created: 1745196060571
+  modified: 1745196060571
+collection:
+  - name: Auth
+    meta:
+      id: fld_265f3f7904c44ee1a3313c3bd06c2ae6
+      created: 1745480533317
+      modified: 1745480533317
+      sortKey: -1745480533317
+    children:
+      - url: http://localhost:8000/api/v1/auth/register
+        name: Register
+        meta:
+          id: req_802193a1a83d4688af5a51c23a07f45c
+          created: 1745479401188
+          modified: 1748943557676
+          isPrivate: false
+          sortKey: -1745480536059
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"username": "user1sssss",
+            	"email": "tesssssst@test.com",
+            	"password": "abcdef"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/auth/login
+        name: Login
+        meta:
+          id: req_da474712d12d45809ca7e309cc1939a8
+          created: 1745480509904
+          modified: 1745529138749
+          isPrivate: false
+          sortKey: -1745480536159
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"email": "tesssssst@test.com",
+            	"password": "abcdef"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/auth/logout
+        name: Logout
+        meta:
+          id: req_ca36aeb458a04aeb9ca9871a3b92f506
+          created: 1745526773088
+          modified: 1745529401791
+          isPrivate: false
+          sortKey: -1745480536109
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"username": "user1sssss",
+            	"email": "tesssssst@test.com",
+            	"password": "abcdef"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_dc07dcd6fcc647eaa08fdf9698f4ee5f
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_f7fbf7322827476881ae316d1cb2ad87
+          - id: pair_4ffed6a874c6468f8042b07e695eb862
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/auth/google
+        name: GoogleAuth
+        meta:
+          id: req_e5a8e7fcb8364de0bd5f0155bdbf5d5c
+          created: 1748775453320
+          modified: 1748778402657
+          isPrivate: false
+          sortKey: -1742377749650
+        method: GET
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"username": "user1sssss",
+            	"email": "tesssssst@test.com",
+            	"password": "abcdef"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: User
+    meta:
+      id: fld_ec6a5ccb220e48baa8235bf42e151011
+      created: 1745624175352
+      modified: 1745624175352
+      sortKey: -1745624175353
+    children:
+      - url: http://localhost:8000/api/v1/user/profile
+        name: GetUserProfile
+        meta:
+          id: req_f8ede6fc3da84adfa88203a4ad2eaea2
+          created: 1745624324452
+          modified: 1745664470130
+          isPrivate: false
+          sortKey: -1745625290413
+        method: GET
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/profile
+        name: UpdateUserProfile
+        meta:
+          id: req_d6ee837669774cf89f447fee9ba15aa8
+          created: 1745664036644
+          modified: 1745693527884
+          isPrivate: false
+          sortKey: -1745625290513
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"age": 28,
+            	"about_you": "We try we try we try"
+            }
+        parameters:
+          - id: pair_83096b9852124677a0722b4cf69448d6
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: UserInterests
+    meta:
+      id: fld_a32d5bb800284ec2a6901d08e0c74520
+      created: 1745692265438
+      modified: 1745692265438
+      sortKey: -1745692265438
+    children:
+      - url: http://localhost:8000/api/v1/user/interests/9e9ac936-1a9f-4615-a675-caddf226275f
+        name: RemoveUserInterest
+        meta:
+          id: req_8d10ae7a8c6541f0b9defef0b472233a
+          created: 1745666110898
+          modified: 1745692394053
+          isPrivate: false
+          sortKey: -1745692386548
+        method: DELETE
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_45b4540902724774b8ea2749818e3a67
+            disabled: false
+          - id: pair_6472df637fb54896a09c47273b4b6054
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/interests/create
+        name: CreateUserInterest
+        meta:
+          id: req_d692c51a4bd14b0693f664df4a4e6e5e
+          created: 1745668700682
+          modified: 1746746401575
+          isPrivate: false
+          sortKey: -1745692386348
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"name": "Lazy day againdddd",
+            	"description": "Cozy place to read a book",
+            	"active": true
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/interests
+        name: GetAllInterests
+        meta:
+          id: req_8bb0bda7c76e49d98de9e438d5dc5a95
+          created: 1745670816329
+          modified: 1745692398345
+          isPrivate: false
+          sortKey: -1745692386648
+        method: GET
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/interests/a7afa2d3-4d5c-417e-a88d-2650d2743a9b
+        name: UpdateUserInterest
+        meta:
+          id: req_97d4ad66cad844df9055ba4fd09f8162
+          created: 1745671602877
+          modified: 1745788610126
+          isPrivate: false
+          sortKey: -1745692386748
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"name": "Just one afternoon"
+            }
+        parameters:
+          - id: pair_45b4540902724774b8ea2749818e3a67
+            disabled: false
+          - id: pair_6472df637fb54896a09c47273b4b6054
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: UserTags
+    meta:
+      id: fld_69ebc2774b964501ae626622c4154b24
+      created: 1745692284168
+      modified: 1745874878764
+      sortKey: -1745692284168
+    children:
+      - url: http://localhost:8000/api/v1/user/tags
+        name: GetTags
+        meta:
+          id: req_8b274836e91e4fa9a61aa2613f61e3a7
+          created: 1746275646794
+          modified: 1746277504495
+          isPrivate: false
+          sortKey: -1746275648940
+        method: GET
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/tags
+        name: CreateTag
+        meta:
+          id: req_af49d66861d24ee6a31d9ff559c673d1
+          created: 1746280713780
+          modified: 1746746427848
+          isPrivate: false
+          sortKey: -1746275517555.5
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"name": "#ddddddddd",
+            	"tag_type": "summer",
+            	"description": "summer activities"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/tags/fd43c300-8193-4729-878f-ed3e540d9b27
+        name: GetTag
+        meta:
+          id: req_c7cc81fbb5b8484cbfeeab8f10b7e318
+          created: 1746283029736
+          modified: 1746298771546
+          isPrivate: false
+          sortKey: -1746275583247.75
+        method: GET
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/tags/e7bbb7b1-40c7-4f43-82f4-5453844a3382
+        name: DeleteTag
+        meta:
+          id: req_05237fbc1c4b41abae021f1e3ed856e0
+          created: 1746283866673
+          modified: 1746283871031
+          isPrivate: false
+          sortKey: -1746275550401.625
+        method: DELETE
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/tags/0649f63b-8249-4075-a2e0-7aef727f9d7f
+        name: UpdateTag
+        meta:
+          id: req_549a379673d4430cacefb1a896ed581d
+          created: 1746283901640
+          modified: 1746284457634
+          isPrivate: false
+          sortKey: -1746275533978.5625
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"name": "#summer",
+            	"tag_type": "summerr"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: UserPreferences
+    meta:
+      id: fld_2febe431ddc24dc3861ee177d9dfa5a8
+      created: 1745869757937
+      modified: 1745869757937
+      sortKey: -1745869757938
+    children:
+      - url: http://localhost:8000/api/v1/user/preferences
+        name: GetUserPreferences
+        meta:
+          id: req_bd2f37e3d525455089f78c91a5cb2681
+          created: 1745869745445
+          modified: 1745872284070
+          isPrivate: false
+          sortKey: -1745869767142
+        method: GET
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/preferences/3ee5564e-e05a-4168-90cb-8e07d9d4b5b7
+        name: UpdateUserPreferences
+        meta:
+          id: req_2ca8556157504bafaafb3a96a522878b
+          created: 1746212070895
+          modified: 1746268378871
+          isPrivate: false
+          sortKey: -1745736731846.5
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"prefer_dog_friendly": true
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: UserSearchProfiles
+    meta:
+      id: fld_42a0d28765bc411f867136372b69e65e
+      created: 1746388739442
+      modified: 1746388739442
+      sortKey: -1745692449547.5
+    children:
+      - url: http://localhost:8000/api/v1/user/search-profile/cbb7d6d8-7795-4034-a2b8-f8a195e5244e
+        name: GetSearchProfile
+        meta:
+          id: req_574b8df333f84388811c4d3908ba0efc
+          created: 1746388739443
+          modified: 1746791231854
+          isPrivate: false
+          sortKey: -1746275386171
+        method: GET
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/search-profile
+        name: CreateSearchProfile
+        meta:
+          id: req_9fc421ff05444c4bab3dbcd1914fa020
+          created: 1746388739443
+          modified: 1746791222649
+          isPrivate: false
+          sortKey: -1746072576656.5
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"profile_name": "lulllllllll",
+            	"is_default": false,
+            	"tags": ["cd528065-4e28-4e9c-9f04-1d7e4bb99596"],
+            	"interests": ["f7255baf-77d3-4e21-8dea-6a3f3535d26b"],
+            	"preferred_transport":"public"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/search-profile
+        name: GetSearchProfiles
+        meta:
+          id: req_c5548c0378fb466ba00c0b71a598b79b
+          created: 1746791240629
+          modified: 1746791245375
+          isPrivate: false
+          sortKey: -1746173981413.75
+        method: GET
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/search-profile/default
+        name: GetDefaultSearchProfile
+        meta:
+          id: req_eb67e4661aab4227828c67e380be67c3
+          created: 1746794302150
+          modified: 1746794307696
+          isPrivate: false
+          sortKey: -1746123279035.125
+        method: GET
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/search-profile/3f2b7713-4c1e-4f1b-82e4-35ca3a5a750e
+        name: UpdateSearchProfile
+        meta:
+          id: req_a5a88abb36604095b7c5250641e6ddb8
+          created: 1746795034629
+          modified: 1747086814461
+          isPrivate: false
+          sortKey: -1746224683792.375
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"profile_name": "My main profile",
+            	"is_default": true,
+            	"search_radius_km": 10,
+            	"preferred_time": "any",
+            	"budget_level": 0,
+            	"preferred_pace": "any",
+            	"prefer_accessible_pois": false,
+            	"prefer_outdoor_seating": false,
+            	"prefer_dog_friendly": true,
+            	"preferred_vibes": ["summer"],
+            	"preferred_transport": "public",
+            	"dietary_needs": [],
+            	"interests": ["art, museums"],
+            	"tags": ["summer"]
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/search-profile/5e4e1a18-a76a-41aa-a360-15e030786f61
+        name: DeleteSearchProfile
+        meta:
+          id: req_8a5efcafa8794698a5fa639c6fcc625c
+          created: 1746797051395
+          modified: 1746797244723
+          isPrivate: false
+          sortKey: -1746199332603.0625
+        method: DELETE
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/user/search-profile/default/3f2b7713-4c1e-4f1b-82e4-35ca3a5a750e
+        name: SetDefaultSearchProfile
+        meta:
+          id: req_20d82d13f997424fb51e1062395307c7
+          created: 1746797720649
+          modified: 1746797741939
+          isPrivate: false
+          sortKey: -1746097927845.8125
+        method: PUT
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: LLM_INTERACTIONS
+    meta:
+      id: fld_a25e6c65378d41ce86d66dc8a36c25a2
+      created: 1747085783143
+      modified: 1747085783143
+      sortKey: -1747085783143
+    children:
+      - url: http://localhost:8000/api/v1/llm/prompt-response/profile/54ff304c-95b2-4fd4-bfc8-7f6ef58e230d
+        name: GetItenerary
+        meta:
+          id: req_d1015642ec6f4357839064ebec85daf3
+          created: 1747085824539
+          modified: 1748862233047
+          isPrivate: false
+          sortKey: -1748294674145
+        method: POST
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/poi/details
+        name: GetIteneraryDetails
+        meta:
+          id: req_b2b43f39ccb64856be23edb5d33ca2f6
+          created: 1748471959381
+          modified: 1748472150574
+          isPrivate: false
+          sortKey: -1748294666023
+        method: GET
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"city": "Barcelona",
+            	"lat": 41.3847,
+            	"lon":2.1735
+            }
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/city/hotel/preferences
+        name: GetHotelByPreferences
+        meta:
+          id: req_6ac6550fdca74692a5183879d04dd1f7
+          created: 1748527145736
+          modified: 1748529013245
+          isPrivate: false
+          sortKey: -1748294661962
+        method: GET
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"city": "Barcelona",
+            	"lat": 41.3851,
+            	"lon": 2.1734,
+            	"preferences": {
+            		"number_of_guests": 2,
+            		"preferred_category": "budget"
+            	}
+            }
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/city/hotel/nearby
+        name: GetHotelNearby
+        meta:
+          id: req_eadcc47b7c7c475a9f34511a6ec23e9b
+          created: 1748531725254
+          modified: 1748532273457
+          isPrivate: false
+          sortKey: -1748294659931.5
+        method: GET
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"city": "Barcelona",
+            	"lat": 41.3851,
+            	"lon": 2.1734,
+            	"distance": 15.0
+            }
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "http://localhost:8000/api/v1/llm/prompt-response/city/hotel/96a44485-e661\
+          -47f5-ba1c-e2580baaf685\t"
+        name: GetHotelByID
+        meta:
+          id: req_1c2a4393008440229ef9b2f5b9a81670
+          created: 1748533744446
+          modified: 1748533783255
+          isPrivate: false
+          sortKey: -1748294658916.25
+        method: GET
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/city/restaurants/preferences
+        name: GetRestaurantByPreferences
+        meta:
+          id: req_db4baba35ec04c1b94071351e6e72215
+          created: 1748536360842
+          modified: 1748536374024
+          isPrivate: false
+          sortKey: -1748294660946.75
+        method: GET
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"city": "Barcelona",
+            	"lat": 41.3851,
+            	"lon": 2.1734,
+            	"preferences": {
+            		"number_of_guests": 2,
+            		"preferred_category": "budget"
+            	}
+            }
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/city/restaurants/nearby
+        name: GetRestaurantsNearby
+        meta:
+          id: req_4b63ba2706ec47788b0dad0de27f8fe3
+          created: 1748537741890
+          modified: 1748537938923
+          isPrivate: false
+          sortKey: -1748294659423.875
+        method: GET
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+          - id: pair_d2dcec1a18714bacae3d1076e4a56f32
+            name: lat
+            value: "41.3851"
+            disabled: false
+          - id: pair_42024ea69281416f90108d6914daed53
+            name: lon
+            value: "2.1734"
+            disabled: false
+          - id: pair_43907a3bbb194aaf82be68775b8d5ffb
+            name: distance
+            value: "15.0"
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "http://localhost:8000/api/v1/llm/prompt-response/city/restaurants/e8208cc\
+          f-a600-46e1-a9e3-107ba5fe139d\t"
+        name: GetRestaurantByID
+        meta:
+          id: req_b3e546ebca3b4f4f9d330d0129dc83ac
+          created: 1748537959904
+          modified: 1748540024906
+          isPrivate: false
+          sortKey: -1748294658408.625
+        method: GET
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/poi/nearby
+        name: GetPOINearby
+        meta:
+          id: req_40cf4e90267f45e3b62ec4f0db960256
+          created: 1748558956009
+          modified: 1748559568604
+          isPrivate: false
+          sortKey: -1748294659170.0625
+        method: GET
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+          - id: pair_d2dcec1a18714bacae3d1076e4a56f32
+            name: lat
+            value: "41.3851"
+            disabled: false
+          - id: pair_42024ea69281416f90108d6914daed53
+            name: lon
+            value: "2.1734"
+            disabled: false
+          - id: pair_43907a3bbb194aaf82be68775b8d5ffb
+            name: distance
+            value: "100.0"
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/chat/sessions/1240345f-83b6-4f12-84d2-7e3ef11dbb02
+        name: StartChatSession
+        meta:
+          id: req_68b38e565f204aeab755244a93eedd58
+          created: 1748856226821
+          modified: 1749163755588
+          isPrivate: false
+          sortKey: -1748294674245
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"city_name":"Porto"
+            }
+        parameters:
+          - id: pair_8505f41900c44f5b834db94f1b5786d6
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/chat/sessions/425bb41b-8c30-4237-8c0e-08eb076b7cf1/messages
+        name: ContinueChatSession
+        meta:
+          id: req_ecc66cfbb80b4a5abf2ac25d289a4abf
+          created: 1748857076683
+          modified: 1749043582319
+          isPrivate: false
+          sortKey: -1748294674195
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "message": "Add Ibis Hotel"
+            }
+        parameters:
+          - id: pair_8505f41900c44f5b834db94f1b5786d6
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/chat/sessions/stream/c2168549-892c-4ca2-bab4-a173669e0d7d
+        name: StartChatStreamSession
+        meta:
+          id: req_3724e3b9e2be45d89ad3f884b96f8344
+          created: 1748938978094
+          modified: 1749160011168
+          isPrivate: false
+          sortKey: -1748294674220
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"city_name":"Porto"
+            }
+        parameters:
+          - id: pair_8505f41900c44f5b834db94f1b5786d6
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: Bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+          - id: pair_dcb08eb2791f4ce7ada24d43191c08bc
+            name: Accept
+            value: text/event-stream
+            disabled: true
+          - id: pair_5a3d8d0e6bc44894ac9308b9332cb22b
+            name: Cache-Control
+            value: no-cache
+            disabled: true
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/chat/sessions/052aefa8-9710-46d2-af2c-5df16efe2c1f/messages/stream
+        name: ContinueChatSessionStream
+        meta:
+          id: req_85741e4b4edc4ec5b82010690003867c
+          created: 1748950533445
+          modified: 1749048863896
+          isPrivate: false
+          sortKey: -1748294674170
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "message": "Add Monkey Bar"
+            }
+        parameters:
+          - id: pair_8505f41900c44f5b834db94f1b5786d6
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/chat/sessions/stream/3fea851c-6c55-4274-85b7-9bbf36edc5f8
+        name: StartChatSessionStream
+        meta:
+          id: req_2ee2d882aac6446e89d52c6bb6518387
+          created: 1749069682067
+          modified: 1749133541198
+          isPrivate: false
+          sortKey: -1748294674182.5
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "message": "Add Monkey Bar"
+            }
+        parameters:
+          - id: pair_8505f41900c44f5b834db94f1b5786d6
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: Favourites
+    meta:
+      id: fld_e8091ae4e29e4cdf86ebfd03f6108380
+      created: 1748294652161
+      modified: 1748294652161
+      sortKey: -1748294652161
+    children:
+      - url: http://localhost:8000/api/v1/llm/prompt-response/bookmark
+        name: SaveItenerary
+        meta:
+          id: req_f6278648204d4ccb9cc99dd2e538d221
+          created: 1748289445582
+          modified: 1748786779049
+          isPrivate: false
+          sortKey: -1748294657901
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"llm_interaction_id":"9cc2c20d-23bb-4688-9f78-a72a779d842f",
+            	"title": "lalalalala"
+            }
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/prompt-response/bookmark/8f76ffe2-a982-4230-ae4c-410c4bbaf62e
+        name: RemoveItenerary
+        meta:
+          id: req_6dc03546058a4c59be00831f9634c838
+          created: 1748291720389
+          modified: 1748294663123
+          isPrivate: false
+          sortKey: -1748294657801
+        method: DELETE
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"llm_interaction_id":"89564a8d-e4ce-48f7-ac1e-14625c64990a",
+            	"title": "lalalalala"
+            }
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/pois/favourites
+        name: AddPoiToFavourites
+        meta:
+          id: req_c68b301379d8482a9d172684987ad803
+          created: 1748295310825
+          modified: 1748295598821
+          isPrivate: false
+          sortKey: -1748294657701
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"poi_id":"e4863e84-be7e-4bbb-bbbf-e893c04ea515"
+            }
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/pois/favourites
+        name: RemovePoiFromFavs
+        meta:
+          id: req_3c5ffeeaf4fe4bc781ee2ba9c7be7782
+          created: 1748296031894
+          modified: 1748296035067
+          isPrivate: false
+          sortKey: -1747285153320.5
+        method: DELETE
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"poi_id":"e4863e84-be7e-4bbb-bbbf-e893c04ea515"
+            }
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/pois/favourites
+        name: GetFavouritePOIsByUserID
+        meta:
+          id: req_320cd15c77d9467f9922f89933cf1b92
+          created: 1748296416474
+          modified: 1748296422179
+          isPrivate: false
+          sortKey: -1746780401130.25
+        method: GET
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/pois/city/7f212c77-0dfe-4654-9451-e1504f41eb4d
+        name: GetPOIsByCityID
+        meta:
+          id: req_31cdd4d9f97342ba8285de0a25fb628c
+          created: 1748296505545
+          modified: 1748296689777
+          isPrivate: false
+          sortKey: -1746528025035.125
+        method: GET
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/pois/search
+        name: GetPOIs
+        meta:
+          id: req_b220b8e8b6b642b0a96c349436345a6e
+          created: 1748782739285
+          modified: 1748782864125
+          isPrivate: false
+          sortKey: -1746401836987.5625
+        method: GET
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: lat
+            value: "41.403629"
+            disabled: false
+          - id: pair_16fd2f4642db419dbaf88ff469c202a4
+            name: lon
+            value: "2.174356"
+            disabled: false
+          - id: pair_c9b5a7730494441b8ecf57ee44e55c34
+            name: radius
+            value: "5.0"
+            disabled: false
+          - id: pair_7d6723b650644f0a82a40fe14fa4eaca
+            name: category
+            value: bar
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/poi/search
+        name: GetItineraries
+        meta:
+          id: req_9301320c4b5c4596a8b783f79a69f331
+          created: 1748786625395
+          modified: 1748851872711
+          isPrivate: false
+          sortKey: -1746401836887.5625
+        method: GET
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/poi/itineraries/itinerary/310b1ae3-ff2a-43f6-bd54-3b439ceac7df
+        name: GetItinerary
+        meta:
+          id: req_33d78ca780334c61ba5d56211ffa6355
+          created: 1748786633422
+          modified: 1748851853433
+          isPrivate: false
+          sortKey: -1746401836962.5625
+        method: GET
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/llm/poi//itineraries/itinerary/310b1ae3-ff2a-43f6-bd54-3b439ceac7df
+        name: UpdateItinerary
+        meta:
+          id: req_004fc9aa6a994ad39145570879cfb3a9
+          created: 1748787430340
+          modified: 1748851888295
+          isPrivate: false
+          sortKey: -1746401836937.5625
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"title": "badumts"
+            }
+        parameters:
+          - id: pair_18e079e42d96435a93ce306a7a7abdff
+            name: city
+            value: Barcelona
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: ItineraryList
+    meta:
+      id: fld_ff4e305385dc4d50b9256f375a558687
+      created: 1749157947903
+      modified: 1749157947903
+      sortKey: -1749157947903
+    children:
+      - url: http://localhost:8000/api/v1/itineraries/lists
+        name: CreateTopLevelList
+        meta:
+          id: req_249b167202f14c6eabea9f1d1e0cafb8
+          created: 1749157976371
+          modified: 1749163791598
+          isPrivate: false
+          sortKey: -1749157985282
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"name":"Porto",
+            	"description": "Porto Trip",
+            	"city_id": "81faffda-797d-4da7-b731-9c36d71092c5",
+            	"is_itinerary": true,
+            	"is_public": true
+            }
+        parameters:
+          - id: pair_8505f41900c44f5b834db94f1b5786d6
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/itineraries/lists
+        name: GetUserList
+        meta:
+          id: req_a94b27d2336e462691da7eaceca62e2e
+          created: 1749161359891
+          modified: 1749161403188
+          isPrivate: false
+          sortKey: -1748726329763.5
+        method: GET
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_8505f41900c44f5b834db94f1b5786d6
+            name: type
+            value: itinerary
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/itineraries/lists/3e1214f0-29f9-4040-b1c3-32cb8bf65f47
+        name: GetListDetail
+        meta:
+          id: req_53738db0b0d64eeb87e8b0a93ddf7ef1
+          created: 1749161436806
+          modified: 1749161443717
+          isPrivate: false
+          sortKey: -1748510502004.25
+        method: GET
+        body:
+          mimeType: application/json
+        parameters:
+          - id: pair_8505f41900c44f5b834db94f1b5786d6
+            name: type
+            value: itinerary
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/itineraries/lists/3e1214f0-29f9-4040-b1c3-32cb8bf65f47
+        name: UpdateListDetail
+        meta:
+          id: req_055507d8f91c47668bc0aad2ddd149c9
+          created: 1749161470863
+          modified: 1749161510058
+          isPrivate: false
+          sortKey: -1748402588124.625
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"name":"Summer list"
+            }
+        parameters:
+          - id: pair_8505f41900c44f5b834db94f1b5786d6
+            name: type
+            value: itinerary
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/itineraries/lists/3e1214f0-29f9-4040-b1c3-32cb8bf65f47
+        name: DeleteListDetail
+        meta:
+          id: req_26f91dcaab7e4feabe19c69d9d153f9a
+          created: 1749161535118
+          modified: 1749161539455
+          isPrivate: false
+          sortKey: -1748348631184.8125
+        method: DELETE
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"name":"Summer list"
+            }
+        parameters:
+          - id: pair_8505f41900c44f5b834db94f1b5786d6
+            name: type
+            value: itinerary
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/itineraries/lists/3e1214f0-29f9-4040-b1c3-32cb8bf65f47/itineraries
+        name: CreateItineraryForlist
+        meta:
+          id: req_41d1cc9ed0a84739830d55665b3d8faf
+          created: 1749161566731
+          modified: 1749161661910
+          isPrivate: false
+          sortKey: -1748321652714.9062
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"name":"Summer list"
+            }
+        parameters:
+          - id: pair_8505f41900c44f5b834db94f1b5786d6
+            name: type
+            value: itinerary
+            disabled: false
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/itineraries/4999abd9-52ad-4b8e-82ae-c96984717080/items
+        name: AddPOI
+        meta:
+          id: req_65a30334374e4ef5be80ee419a6316a7
+          created: 1749161634247
+          modified: 1749164473927
+          isPrivate: false
+          sortKey: -1748308163479.9531
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"notes":"NEEDS GO BE FIXED!",
+            	"poi_id":"34a10161-7236-4940-96a5-79537275e3b1"
+            }
+        parameters:
+          - id: pair_29de384c85e14152b1a58633c18cd1d8
+            disabled: true
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/itineraries/4999abd9-52ad-4b8e-82ae-c96984717080/items
+        name: UpdatePOIList
+        meta:
+          id: req_42d9abb75f8b454cbb12d1431ad2ff5f
+          created: 1749163873293
+          modified: 1749164477474
+          isPrivate: false
+          sortKey: -1748301418862.4766
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"notes":"NEEDS GO BE FIXED!",
+            	"poi_id":"34a10161-7236-4940-96a5-79537275e3b1"
+            }
+        parameters:
+          - id: pair_29de384c85e14152b1a58633c18cd1d8
+            disabled: true
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:8000/api/v1/itineraries/4999abd9-52ad-4b8e-82ae-c96984717080/items/39a538d4-1319-4066-ab96-1a1c89dbb6a8
+        name: DeletePOIList
+        meta:
+          id: req_f8178a605e6c46c381075312397a00fe
+          created: 1749163889506
+          modified: 1749164499142
+          isPrivate: false
+          sortKey: -1748298046553.7383
+        method: DELETE
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"notes":"NEEDS GO BE FIXED!",
+            	"poi_id":"39a538d4-1319-4066-ab96-1a1c89dbb6a8"
+            }
+        parameters:
+          - id: pair_29de384c85e14152b1a58633c18cd1d8
+            disabled: true
+        headers:
+          - name: Content-Type
+            value: application/json
+            id: pair_56830f70dc0c4b91ba92f3eda0602a56
+          - name: User-Agent
+            value: insomnia/11.0.2
+            id: pair_82761fcfe6f64518ba082f8c458ed070
+          - id: pair_a855056b0cfe499f8d3c88186741ba54
+            name: authorization
+            value: bearer {% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+              'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}
+            disabled: false
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+cookieJar:
+  name: Default Jar
+  meta:
+    id: jar_3f7e70f808abdd78b7a3e9bbf2e87b5df285c79d
+    created: 1745196060581
+    modified: 1749164500090
+  cookies:
+    - key: refreshToken
+      value: 01f49898-0cff-4830-9013-b85e65cb33ad
+      maxAge: 604800
+      domain: localhost
+      path: /
+      secure: true
+      httpOnly: true
+      hostOnly: true
+      creation: 2025-04-24T20:35:05.158Z
+      lastAccessed: 2025-06-05T23:01:40.090Z
+      sameSite: strict
+      id: f6e772b0-f941-4a9f-9334-30e6d31e554c
+environments:
+  name: WanderWise AI Environment
+  meta:
+    id: env_3f7e70f808abdd78b7a3e9bbf2e87b5df285c79d
+    created: 1745196060574
+    modified: 1749069364021
+    isPrivate: false
+  data:
+    debug_token:
+      debug_token: "{% response 'body', 'req_da474712d12d45809ca7e309cc1939a8',
+        'b64::JC5hY2Nlc3NfdG9rZW4=::46b', 'always', 60 %}"

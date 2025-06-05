@@ -8,8 +8,8 @@ CREATE TABLE lists (
     image_url TEXT,
     is_public BOOLEAN NOT NULL DEFAULT FALSE,
     is_itinerary BOOLEAN NOT NULL DEFAULT FALSE,
+    parent_list_id UUID REFERENCES lists (id) ON DELETE SET NULL, -- New: For nesting itineraries within a list
     city_id UUID REFERENCES cities (id) ON DELETE SET NULL,
-    item_count INTEGER NOT NULL DEFAULT 0,
     view_count INTEGER NOT NULL DEFAULT 0,
     save_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -21,10 +21,10 @@ CREATE TABLE list_items (
     list_id UUID NOT NULL REFERENCES lists (id) ON DELETE CASCADE,
     poi_id UUID NOT NULL REFERENCES points_of_interest (id) ON DELETE CASCADE,
     position INTEGER NOT NULL,
-    notes TEXT,
-    day_number INTEGER, -- For itineraries (optional)
-    time_slot TIMESTAMPTZ, -- For itineraries (optional)
-    duration INTEGER, -- Duration in minutes (optional)
+    notes TEXT, -- Used for AI-generated descriptions or user notes
+    day_number INTEGER CHECK (day_number > 0), -- For itineraries
+    time_slot TIMESTAMPTZ, -- For itineraries
+    duration INTEGER CHECK (duration >= 0), -- Duration in minutes
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (list_id, poi_id)
@@ -39,6 +39,9 @@ CREATE TABLE saved_lists (
 );
 
 -- Indexes for efficient querying
+
+CREATE INDEX idx_lists_parent_list_id ON lists (parent _list_id);
+
 CREATE INDEX idx_lists_user_id ON lists (user_id);
 
 CREATE INDEX idx_lists_city_id ON lists (city_id);

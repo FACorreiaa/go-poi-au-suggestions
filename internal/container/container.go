@@ -12,6 +12,7 @@ import (
 	llmChat "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/chat_prompt"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests"
+	itineraryList "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/list"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/settings"
@@ -32,6 +33,7 @@ type Container struct {
 	SearchProfileHandler      *profiles.HandlerImpl
 	LLMInteractionHandlerImpl *llmChat.HandlerImpl
 	POIHandler                *poi.HandlerImpl
+	ItineraryListHandler      *itineraryList.HandlerImpl
 	// Add other HandlerImpls, services, and repositories as needed
 }
 
@@ -99,6 +101,10 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	poiRepository := poi.NewRepository(pool, logger)
 	poiService := poi.NewServiceImpl(poiRepository, logger)
 	poiHandler := poi.NewHandlerImpl(poiService, logger)
+
+	itineraryListRepository := itineraryList.NewRepository(pool, logger)
+	itineraryLisrService := itineraryList.NewServiceImpl(itineraryListRepository, logger)
+	itineraryListHandler := itineraryList.NewHandler(itineraryLisrService, logger)
 	return &Container{
 		Config:                    cfg,
 		Logger:                    logger,
@@ -111,6 +117,7 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 		SearchProfileHandler:      profilessHandlerImpl,
 		LLMInteractionHandlerImpl: llmInteractionHandlerImpl,
 		POIHandler:                poiHandler,
+		ItineraryListHandler:      itineraryListHandler,
 		// Add other HandlerImpls, services, and repositories as needed
 	}, nil
 }

@@ -106,6 +106,21 @@ func (m *MockinterestsRepo) GetAllInterests(ctx context.Context) ([]*types.Inter
 	}
 	return args.Get(0).([]*types.Interest), args.Error(1)
 }
+func (m *MockinterestsRepo) CreateInterest(ctx context.Context, name string, description *string, isActive bool, userID string) (*types.Interest, error) {
+	args := m.Called(ctx, name, description, isActive, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.Interest), args.Error(1)
+}
+func (m *MockinterestsRepo) Removeinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID) error {
+	args := m.Called(ctx, userID, interestID)
+	return args.Error(0)
+}
+func (m *MockinterestsRepo) Updateinterests(ctx context.Context, userID uuid.UUID, interestID uuid.UUID, params types.UpdateinterestsParams) error {
+	args := m.Called(ctx, userID, interestID, params)
+	return args.Error(0)
+}
 
 // --- Mock tagsRepo ---
 type MocktagsRepo struct {
@@ -137,6 +152,28 @@ func (m *MocktagsRepo) GetAll(ctx context.Context, userID uuid.UUID) ([]*types.T
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*types.Tags), args.Error(1)
+}
+func (m *MocktagsRepo) Create(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error) {
+	args := m.Called(ctx, userID, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.PersonalTag), args.Error(1)
+}
+func (m *MocktagsRepo) Delete(ctx context.Context, userID uuid.UUID, tagID uuid.UUID) error {
+	args := m.Called(ctx, userID, tagID)
+	return args.Error(0)
+}
+func (m *MocktagsRepo) Update(ctx context.Context, userID uuid.UUID, tagsID uuid.UUID, params types.UpdatePersonalTagParams) error {
+	args := m.Called(ctx, userID, tagsID, params)
+	return args.Error(0)
+}
+func (m *MocktagsRepo) GetTagByName(ctx context.Context, name string) (*types.Tags, error) {
+	args := m.Called(ctx, name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.Tags), args.Error(1)
 }
 
 // Helper
@@ -177,12 +214,151 @@ func TestprofilessServiceImpl_GetSearchProfile(t *testing.T) {
 	})
 }
 
-// Add similar unit tests for:
-// - GetSearchProfiles
-// - GetDefaultSearchProfile
-// - UpdateSearchProfile
-// - DeleteSearchProfile
-// - SetDefaultSearchProfile
+// Unit test for GetSearchProfiles
+func TestprofilessServiceImpl_GetSearchProfiles(t *testing.T) {
+	service, mockPrefRepo, _, _ := setupprofilessServiceTest()
+	ctx := context.Background()
+	userID := uuid.New()
+
+	t.Run("success", func(t *testing.T) {
+		expectedProfiles := []types.UserPreferenceProfileResponse{
+			{ID: uuid.New(), UserID: userID, ProfileName: "Profile 1"},
+			{ID: uuid.New(), UserID: userID, ProfileName: "Profile 2"},
+		}
+		mockPrefRepo.On("GetSearchProfiles", ctx, userID).Return(expectedProfiles, nil).Once()
+
+		profiles, err := service.GetSearchProfiles(ctx, userID)
+		require.NoError(t, err)
+		assert.Equal(t, expectedProfiles, profiles)
+		mockPrefRepo.AssertExpectations(t)
+	})
+
+	t.Run("repository error", func(t *testing.T) {
+		repoErr := errors.New("db error fetching profiles")
+		mockPrefRepo.On("GetSearchProfiles", ctx, userID).Return(nil, repoErr).Once()
+
+		_, err := service.GetSearchProfiles(ctx, userID)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, repoErr))
+		assert.Contains(t, err.Error(), "error fetching user preference profiles:")
+		mockPrefRepo.AssertExpectations(t)
+	})
+}
+
+// Unit test for GetDefaultSearchProfile
+func TestprofilessServiceImpl_GetDefaultSearchProfile(t *testing.T) {
+	service, mockPrefRepo, _, _ := setupprofilessServiceTest()
+	ctx := context.Background()
+	userID := uuid.New()
+
+	t.Run("success", func(t *testing.T) {
+		expectedProfile := &types.UserPreferenceProfileResponse{ID: uuid.New(), UserID: userID, ProfileName: "Default Profile", IsDefault: true}
+		mockPrefRepo.On("GetDefaultSearchProfile", ctx, userID).Return(expectedProfile, nil).Once()
+
+		profile, err := service.GetDefaultSearchProfile(ctx, userID)
+		require.NoError(t, err)
+		assert.Equal(t, expectedProfile, profile)
+		mockPrefRepo.AssertExpectations(t)
+	})
+
+	t.Run("repository error", func(t *testing.T) {
+		repoErr := errors.New("db error fetching default profile")
+		mockPrefRepo.On("GetDefaultSearchProfile", ctx, userID).Return(nil, repoErr).Once()
+
+		_, err := service.GetDefaultSearchProfile(ctx, userID)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, repoErr))
+		assert.Contains(t, err.Error(), "error fetching default user preference profile:")
+		mockPrefRepo.AssertExpectations(t)
+	})
+}
+
+// Unit test for UpdateSearchProfile
+func TestprofilessServiceImpl_UpdateSearchProfile(t *testing.T) {
+	service, mockPrefRepo, _, _ := setupprofilessServiceTest()
+	ctx := context.Background()
+	userID := uuid.New()
+	profileID := uuid.New()
+
+	t.Run("success", func(t *testing.T) {
+		params := types.UpdateSearchProfileParams{
+			ProfileName: "Updated Profile",
+		}
+		mockPrefRepo.On("UpdateSearchProfile", ctx, userID, profileID, params).Return(nil).Once()
+
+		err := service.UpdateSearchProfile(ctx, userID, profileID, params)
+		require.NoError(t, err)
+		mockPrefRepo.AssertExpectations(t)
+	})
+
+	t.Run("repository error", func(t *testing.T) {
+		params := types.UpdateSearchProfileParams{
+			ProfileName: "Updated Profile",
+		}
+		repoErr := errors.New("db error updating profile")
+		mockPrefRepo.On("UpdateSearchProfile", ctx, userID, profileID, params).Return(repoErr).Once()
+
+		err := service.UpdateSearchProfile(ctx, userID, profileID, params)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, repoErr))
+		assert.Contains(t, err.Error(), "error updating user preference profile:")
+		mockPrefRepo.AssertExpectations(t)
+	})
+}
+
+// Unit test for DeleteSearchProfile
+func TestprofilessServiceImpl_DeleteSearchProfile(t *testing.T) {
+	service, mockPrefRepo, _, _ := setupprofilessServiceTest()
+	ctx := context.Background()
+	userID := uuid.New()
+	profileID := uuid.New()
+
+	t.Run("success", func(t *testing.T) {
+		mockPrefRepo.On("DeleteSearchProfile", ctx, userID, profileID).Return(nil).Once()
+
+		err := service.DeleteSearchProfile(ctx, userID, profileID)
+		require.NoError(t, err)
+		mockPrefRepo.AssertExpectations(t)
+	})
+
+	t.Run("repository error", func(t *testing.T) {
+		repoErr := errors.New("db error deleting profile")
+		mockPrefRepo.On("DeleteSearchProfile", ctx, userID, profileID).Return(repoErr).Once()
+
+		err := service.DeleteSearchProfile(ctx, userID, profileID)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, repoErr))
+		assert.Contains(t, err.Error(), "error deleting user preference profile:")
+		mockPrefRepo.AssertExpectations(t)
+	})
+}
+
+// Unit test for SetDefaultSearchProfile
+func TestprofilessServiceImpl_SetDefaultSearchProfile(t *testing.T) {
+	service, mockPrefRepo, _, _ := setupprofilessServiceTest()
+	ctx := context.Background()
+	userID := uuid.New()
+	profileID := uuid.New()
+
+	t.Run("success", func(t *testing.T) {
+		mockPrefRepo.On("SetDefaultSearchProfile", ctx, userID, profileID).Return(nil).Once()
+
+		err := service.SetDefaultSearchProfile(ctx, userID, profileID)
+		require.NoError(t, err)
+		mockPrefRepo.AssertExpectations(t)
+	})
+
+	t.Run("repository error", func(t *testing.T) {
+		repoErr := errors.New("db error setting default profile")
+		mockPrefRepo.On("SetDefaultSearchProfile", ctx, userID, profileID).Return(repoErr).Once()
+
+		err := service.SetDefaultSearchProfile(ctx, userID, profileID)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, repoErr))
+		assert.Contains(t, err.Error(), "error setting default user preference profile:")
+		mockPrefRepo.AssertExpectations(t)
+	})
+}
 
 // Unit tests for CreateSearchProfile (the simpler version first)
 func TestprofilessServiceImpl_CreateSearchProfile(t *testing.T) {
@@ -294,4 +470,10 @@ func TestprofilessServiceImpl_CreateSearchProfile(t *testing.T) {
 	// making the service easier to test (service just calls repo.CreateProfileWithAssociations).
 }
 
-// ... other unit tests for Update, Delete, SetDefault ...
+// Unit test for CreateSearchProfileCC (the transactional version)
+// Note: This is a simplified test that doesn't mock the transaction directly
+func TestprofilessServiceImpl_CreateSearchProfileCC(t *testing.T) {
+	// Skip this test for now as it requires more complex mocking of transactions
+	// TODO: Implement proper transaction mocking for this test
+	t.Skip("Skipping test for CreateSearchProfileCC as it requires complex transaction mocking")
+}

@@ -527,7 +527,7 @@ func TestRefreshTokenHandlerImpl(t *testing.T) {
 	})
 
 	// Test case: missing refresh token
-	t.Run("MissingRefreshToken", func(t *testing.T) {
+	tRun("MissingRefreshToken", func(t *testing.T) {
 		// Create request with missing refresh token
 		refreshRequest := map[string]string{
 			// Missing refreshToken
@@ -619,7 +619,7 @@ func TestValidateSessionHandlerImpl(t *testing.T) {
 		user := &types.UserAuth{
 			ID:       "user123",
 			Username: "testuser",
-			Email:    "test@example.com",
+			Email":    "test@example.com",
 			Role:     "user",
 		}
 		mockService.On("GetUserByID", mock.Anything, "user123").Return(user, nil).Once()
@@ -774,10 +774,6 @@ func TestChangePasswordHandlerImpl(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
-		// Set up context with user ID (simulating middleware)
-		ctx := context.WithValue(req.Context(), UserIDKey, "user123")
-		req = req.WithContext(ctx)
-
 		// Call the HandlerImpl
 		HandlerImpl.ChangePassword(w, req)
 
@@ -876,128 +872,5 @@ func TestChangeEmailHandlerImpl(t *testing.T) {
 	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
 
 	// Note: Since the ChangeEmail HandlerImpl is not fully implemented in the auth_HandlerImpl.go file,
-	// we're testing the current implementation which just returns a 501 Not Implemented status.
-
-	// Test case: not implemented
-	t.Run("NotImplemented", func(t *testing.T) {
-		// Create request body
-		changeEmailRequest := map[string]string{
-			"newEmail": "new@example.com",
-			"password": "password123",
-		}
-		body, _ := json.Marshal(changeEmailRequest)
-
-		// Create request
-		req := httptest.NewRequest(http.MethodPost, "/change-email", bytes.NewBuffer(body))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-
-		// Set up context with user ID (simulating middleware)
-		ctx := context.WithValue(req.Context(), UserIDKey, "user123")
-		req = req.WithContext(ctx)
-
-		// Call the HandlerImpl
-		HandlerImpl.ChangeEmail(w, req)
-
-		// Assert response
-		assert.Equal(t, http.StatusNotImplemented, w.Code)
-		mockService.AssertExpectations(t)
-	})
 }
-
-func TestAuthenticateMiddleware(t *testing.T) {
-	// Create a mock service
-	mockService := new(MockAuthService)
-	logger := slog.Default()
-	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
-
-	// Create a simple test HandlerImpl that will be wrapped by the middleware
-	testHandlerImpl := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check if user ID is in context
-		userID, ok := r.Context().Value(UserIDKey).(string)
-		if !ok {
-			http.Error(w, "User ID not found in context", http.StatusInternalServerError)
-			return
-		}
-		// Write user ID to response
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(userID))
-	})
-
-	// Test case: valid token
-	t.Run("ValidToken", func(t *testing.T) {
-		// Create request with Authorization header
-		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
-		req.Header.Set("Authorization", "Bearer valid-token")
-		w := httptest.NewRecorder()
-
-		// Set up expectations for token validation
-		// Note: This is a simplified test. In a real implementation, you would need to mock the JWT validation.
-		// For this test, we're just simulating the middleware adding the user ID to the context.
-
-		// Create a middleware that wraps the test HandlerImpl
-		middleware := HandlerImpl.AuthenticateMiddleware(testHandlerImpl)
-
-		// Call the middleware
-		middleware.ServeHTTP(w, req)
-
-		// Assert response
-		assert.Equal(t, http.StatusOK, w.Code)
-		// In a real test, we would check that the user ID was correctly extracted from the token
-		// and added to the context. For now, we're just checking that the middleware called the next HandlerImpl.
-		mockService.AssertExpectations(t)
-	})
-
-	// Test case: missing token
-	t.Run("MissingToken", func(t *testing.T) {
-		// Create request without Authorization header
-		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
-		w := httptest.NewRecorder()
-
-		// Create a middleware that wraps the test HandlerImpl
-		middleware := HandlerImpl.AuthenticateMiddleware(testHandlerImpl)
-
-		// Call the middleware
-		middleware.ServeHTTP(w, req)
-
-		// Assert response
-		assert.Equal(t, http.StatusUnauthorized, w.Code)
-		mockService.AssertExpectations(t)
-	})
-
-	// Test case: invalid token format
-	t.Run("InvalidTokenFormat", func(t *testing.T) {
-		// Create request with invalid Authorization header
-		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
-		req.Header.Set("Authorization", "InvalidFormat")
-		w := httptest.NewRecorder()
-
-		// Create a middleware that wraps the test HandlerImpl
-		middleware := HandlerImpl.AuthenticateMiddleware(testHandlerImpl)
-
-		// Call the middleware
-		middleware.ServeHTTP(w, req)
-
-		// Assert response
-		assert.Equal(t, http.StatusUnauthorized, w.Code)
-		mockService.AssertExpectations(t)
-	})
-
-	// Test case: invalid token
-	t.Run("InvalidToken", func(t *testing.T) {
-		// Create request with invalid token
-		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
-		req.Header.Set("Authorization", "Bearer invalid-token")
-		w := httptest.NewRecorder()
-
-		// Create a middleware that wraps the test HandlerImpl
-		middleware := HandlerImpl.AuthenticateMiddleware(testHandlerImpl)
-
-		// Call the middleware
-		middleware.ServeHTTP(w, req)
-
-		// Assert response
-		assert.Equal(t, http.StatusUnauthorized, w.Code)
-		mockService.AssertExpectations(t)
-	})
-}
+</

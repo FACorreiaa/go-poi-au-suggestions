@@ -6,6 +6,7 @@ type POIDetail struct {
 	ID               uuid.UUID `json:"id"`
 	LlmInteractionID uuid.UUID `json:"llm_interaction_id,omitempty"` // ID of the LLM interaction that generated this POI
 	City             string    `json:"city"`                         // City where the POI is located
+	CityID           uuid.UUID `json:"city_id"`
 	//Description    string    `json:"description"`
 	Name           string  `json:"name"`
 	Latitude       float64 `json:"latitude"`

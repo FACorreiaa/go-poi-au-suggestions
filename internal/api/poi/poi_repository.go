@@ -60,6 +60,10 @@ type Repository interface {
 	GetItinerary(ctx context.Context, userID, itineraryID uuid.UUID) (*types.UserSavedItinerary, error)
 	GetItineraries(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]types.UserSavedItinerary, int, error)
 	UpdateItinerary(ctx context.Context, userID uuid.UUID, itineraryID uuid.UUID, updates types.UpdateItineraryRequest) (*types.UserSavedItinerary, error)
+	SaveItinerary(ctx context.Context, userID, cityID uuid.UUID) (uuid.UUID, error)
+	SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetail) error
+	SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error)
+	CityExists(ctx context.Context, cityID uuid.UUID) (bool, error)
 }
 
 type RepositoryImpl struct {
@@ -1138,4 +1142,101 @@ func (r *RepositoryImpl) UpdateItinerary(ctx context.Context, userID uuid.UUID, 
 
 	span.SetStatus(codes.Ok, "Itinerary updated successfully")
 	return &updatedItinerary, nil
+}
+
+func (r *RepositoryImpl) SaveItinerary(ctx context.Context, userID, cityID uuid.UUID) (uuid.UUID, error) {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SaveItinerary")
+	defer span.End()
+
+	query := `
+        INSERT INTO itineraries (user_id, city_id, created_at, updated_at)
+        VALUES ($1, $2, NOW(), NOW())
+        RETURNING id
+    `
+	var itineraryID uuid.UUID
+	err := r.pgpool.QueryRow(ctx, query, userID, cityID).Scan(&itineraryID)
+	if err != nil {
+		span.RecordError(err)
+		return uuid.Nil, fmt.Errorf("failed to save itinerary: %w", err)
+	}
+	span.SetAttributes(attribute.String("itinerary.id", itineraryID.String()))
+	return itineraryID, nil
+}
+
+func (r *RepositoryImpl) SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SavePOItoPointsOfInterest")
+	defer span.End()
+
+	// Check if POI exists
+	queryCheck := `
+        SELECT id FROM points_of_interest
+        WHERE name = $1 AND city_id = $2
+    `
+	var poiID uuid.UUID
+	err := r.pgpool.QueryRow(ctx, queryCheck, poi.Name, cityID).Scan(&poiID)
+	if err == nil {
+		return poiID, nil // POI already exists
+	}
+	if err != pgx.ErrNoRows {
+		span.RecordError(err)
+		return uuid.Nil, fmt.Errorf("failed to check POI existence: %w", err)
+	}
+
+	// Insert new POI
+	queryInsert := `
+        INSERT INTO points_of_interest (id, city_id, name, latitude, longitude, category)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id
+    `
+	poiID = uuid.New()
+	err = r.pgpool.QueryRow(ctx, queryInsert, poiID, cityID, poi.Name, poi.Latitude, poi.Longitude, poi.Category).Scan(&poiID)
+	if err != nil {
+		span.RecordError(err)
+		return uuid.Nil, fmt.Errorf("failed to save POI to points_of_interest: %w", err)
+	}
+	span.SetAttributes(attribute.String("poi.id", poiID.String()))
+	return poiID, nil
+}
+
+func (r *RepositoryImpl) SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetail) error {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SaveItineraryPOIs")
+	defer span.End()
+
+	batch := &pgx.Batch{}
+	query := `
+        INSERT INTO itinerary_pois (itinerary_id, poi_id, order_index, ai_description)
+        VALUES ($1, $2, $3, $4)
+    `
+	for i, poi := range pois {
+		poiID, err := r.SavePOItoPointsOfInterest(ctx, poi, poi.CityID) // Assume CityID is added to POIDetail or passed separately
+		if err != nil {
+			span.RecordError(err)
+			return fmt.Errorf("failed to ensure POI in points_of_interest: %w", err)
+		}
+		aiDescription := poi.DescriptionPOI // Use description from llm_suggested_pois
+		batch.Queue(query, itineraryID, poiID, i, aiDescription)
+	}
+
+	br := r.pgpool.SendBatch(ctx, batch)
+	defer br.Close()
+
+	for i := 0; i < len(pois); i++ {
+		_, err := br.Exec()
+		if err != nil {
+			span.RecordError(err)
+			return fmt.Errorf("failed to save itinerary POI at index %d: %w", i, err)
+		}
+	}
+	span.SetAttributes(attribute.Int("pois.count", len(pois)))
+	return nil
+}
+
+func (r *RepositoryImpl) CityExists(ctx context.Context, cityID uuid.UUID) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM cities WHERE id = $1)`
+	var exists bool
+	err := r.pgpool.QueryRow(ctx, query, cityID).Scan(&exists) // Assuming r.db is your database connection
+	if err != nil {
+		return false, fmt.Errorf("failed to check city existence: %w", err)
+	}
+	return exists, nil
 }

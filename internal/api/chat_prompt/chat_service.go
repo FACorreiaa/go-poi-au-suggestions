@@ -347,6 +347,7 @@ func (l *LlmInteractiontServiceImpl) GeneratePersonalisedPOIWorker(wg *sync.Wait
 		ResponseText: txt,
 		ModelUsed:    model, // Adjust based on your AI client
 		LatencyMs:    latencyMs,
+		CityName:     cityName,
 		// request payload
 		// response payload
 		// Add token counts if available from response (depends on genai API)
@@ -621,73 +622,84 @@ func (l *LlmInteractiontServiceImpl) SaveItenerary(ctx context.Context, userID u
 		slog.String("llmInteractionID", req.LlmInteractionID.String()),
 		slog.String("title", req.Title))
 
+	// Fetch original interaction
 	originalInteraction, err := l.llmInteractionRepo.GetInteractionByID(ctx, req.LlmInteractionID)
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Failed to fetch original LLM interaction for bookmarking", slog.Any("error", err))
+	if err != nil || originalInteraction == nil {
+		l.logger.ErrorContext(ctx, "Failed to fetch original LLM interaction", slog.Any("error", err))
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to fetch original interaction")
 		return uuid.Nil, fmt.Errorf("could not retrieve original interaction: %w", err)
 	}
-	if originalInteraction == nil { // Or however you check for not found
-		l.logger.WarnContext(ctx, "LLM interaction not found for bookmarking", slog.String("llmInteractionID", req.LlmInteractionID.String()))
-		err := fmt.Errorf("original interaction %s not found", req.LlmInteractionID)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Interaction not found")
-		return uuid.Nil, err
-	}
+
+	// Prepare and save to user_saved_itineraries
 	markdownContent := originalInteraction.ResponseText
-
-	//markdownContent := "Placeholder: Content from LLM Interaction " + req.LlmInteractionID.String() + ". This should be fetched from the DB."
-	l.logger.WarnContext(ctx, "Using placeholder markdownContent for bookmark. Implement fetching original interaction text.",
-		slog.String("llmInteractionID", req.LlmInteractionID.String()))
-
 	var description sql.NullString
 	if req.Description != nil {
 		description.String = *req.Description
 		description.Valid = true
-		span.SetAttributes(attribute.String("description", *req.Description))
 	}
-
-	isPublic := false // Default
+	isPublic := false
 	if req.IsPublic != nil {
 		isPublic = *req.IsPublic
-		span.SetAttributes(attribute.Bool("is_public", isPublic))
 	}
-
 	newBookmark := &types.UserSavedItinerary{
 		UserID:                 userID,
-		SourceLlmInteractionID: uuid.NullUUID{UUID: req.LlmInteractionID, Valid: true},
+		SourceLlmInteractionID: req.LlmInteractionID,
+		PrimaryCityID:          req.PrimaryCityID, // Assume this is added to BookmarkRequest
 		Title:                  req.Title,
 		Description:            description,
 		MarkdownContent:        markdownContent,
-		Tags:                   req.Tags, // pgx handles nil []string as NULL for TEXT[]
+		Tags:                   req.Tags,
 		IsPublic:               isPublic,
 	}
-
-	if req.Tags != nil && len(req.Tags) > 0 {
-		span.SetAttributes(attribute.Int("tags.count", len(req.Tags)))
-	}
-
 	savedID, err := l.llmInteractionRepo.AddChatToBookmark(ctx, newBookmark)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to add chat to bookmark")
-		return uuid.Nil, err // Error already logged by repo
+		return uuid.Nil, err
 	}
 
-	l.logger.InfoContext(ctx, "Successfully bookmarked interaction", slog.String("savedItineraryID", savedID.String()))
-	span.SetAttributes(attribute.String("saved_itinerary.id", savedID.String()))
+	// Fetch city ID (assuming PrimaryCityID is available; otherwise, derive from interaction)
+	cityID := newBookmark.PrimaryCityID
+	if cityID == uuid.Nil {
+		// Fallback: Get city from LLM interaction context if possible
+		l.logger.WarnContext(ctx, "PrimaryCityID not provided, deriving from interaction")
+		// This requires additional logic to parse city from interaction or session
+		return savedID, nil // Skip further processing if cityID cannot be determined
+	}
+
+	// Save to itineraries
+	itineraryID, err := l.poiRepo.SaveItinerary(ctx, userID, cityID)
+	if err != nil {
+		l.logger.WarnContext(ctx, "Failed to save to itineraries", slog.Any("error", err))
+		span.RecordError(err)
+		return savedID, nil // Continue even if this fails
+	}
+
+	// Fetch POIs from llm_suggested_pois
+	pois, err := l.llmInteractionRepo.GetLlmSuggestedPOIsByInteractionSortedByDistance(ctx, req.LlmInteractionID, cityID, types.UserLocation{})
+	if err != nil {
+		l.logger.WarnContext(ctx, "Failed to fetch suggested POIs", slog.Any("error", err))
+		span.RecordError(err)
+		return savedID, nil
+	}
+
+	// Add CityID to POIs (if not already present)
+	for i := range pois {
+		pois[i].CityID = cityID // Ensure POIDetail has CityID field
+	}
+
+	// Save to itinerary_pois
+	if err := l.poiRepo.SaveItineraryPOIs(ctx, itineraryID, pois); err != nil {
+		l.logger.WarnContext(ctx, "Failed to save to itinerary_pois", slog.Any("error", err))
+		span.RecordError(err)
+		return savedID, nil
+	}
+
+	l.logger.InfoContext(ctx, "Successfully saved itinerary",
+		slog.String("savedItineraryID", savedID.String()),
+		slog.String("itineraryID", itineraryID.String()))
+	span.SetAttributes(attribute.String("itinerary.id", itineraryID.String()))
 	span.SetStatus(codes.Ok, "Itinerary saved successfully")
 	return savedID, nil
-
-	// Save the itinerary using the repository
-	// itineraryID, err := l.llmInteractionRepo.SaveItinerary(ctx, itinerary)
-	// if err != nil {
-	// 	return uuid.Nil, fmt.Errorf("failed to save itinerary: %w", err)
-	// }
-
-	// l.logger.InfoContext(ctx, "Itinerary saved successfully", slog.String("itinerary_id", itineraryID.String()))
-	// return itineraryID, nil
 }
 
 func (l *LlmInteractiontServiceImpl) RemoveItenerary(ctx context.Context, userID, itineraryID uuid.UUID) error {
@@ -773,6 +785,7 @@ func (l *LlmInteractiontServiceImpl) getPOIdetails(wg *sync.WaitGroup, ctx conte
 		ResponseText: txt,
 		ModelUsed:    model, // Adjust based on your AI client
 		LatencyMs:    latencyMs,
+		CityName:     city,
 		// request payload
 		// response payload
 		// Add token counts if available from response (depends on genai API)
@@ -993,6 +1006,7 @@ func (l *LlmInteractiontServiceImpl) getHotelsByPreferenceDetails(wg *sync.WaitG
 		ResponseText: txt,
 		ModelUsed:    model, // Adjust based on AI client
 		LatencyMs:    latencyMs,
+		CityName:     city,
 	}
 	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
 	if err != nil {
@@ -1200,6 +1214,7 @@ func (l *LlmInteractiontServiceImpl) getHotelsNearby(wg *sync.WaitGroup, ctx con
 		ResponseText: txt,
 		ModelUsed:    model, // Adjust based on AI client
 		LatencyMs:    latencyMs,
+		CityName:     city,
 	}
 	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
 	if err != nil {
@@ -1394,6 +1409,7 @@ func (l *LlmInteractiontServiceImpl) getRestaurantsByPreferences(wg *sync.WaitGr
 		ResponseText: txt,
 		ModelUsed:    "model_name", // Adjust as needed
 		LatencyMs:    int(time.Since(startTime).Milliseconds()),
+		CityName:     city,
 	}
 	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
 	if err != nil {
@@ -1549,6 +1565,7 @@ func (l *LlmInteractiontServiceImpl) getRestaurantsNearby(wg *sync.WaitGroup, ct
 		ResponseText: txt,
 		ModelUsed:    "default-model", // Replace with actual model name from your AI client
 		LatencyMs:    latencyMs,
+		CityName:     city,
 	}
 	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
 	if err != nil {
@@ -2155,6 +2172,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiNam
 		Prompt:       prompt,
 		ResponseText: response,
 		ModelUsed:    model,
+		CityName:     cityName,
 	}
 	savedLlmInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
 	if err != nil {

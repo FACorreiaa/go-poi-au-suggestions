@@ -14,6 +14,7 @@ type LlmInteraction struct {
 	SessionID        uuid.UUID       `json:"session_id"`
 	UserID           uuid.UUID       `json:"user_id"`
 	ProfileID        uuid.UUID       `json:"profile_id"`
+	CityName         string          `json:"city_name,omitempty"` // The city context for this interaction
 	Prompt           string          `json:"prompt"`
 	RequestPayload   json.RawMessage `json:"request_payload"`
 	ResponseText     string          `json:"response_text"`
@@ -95,8 +96,8 @@ type UserLocation struct {
 type UserSavedItinerary struct {
 	ID                     uuid.UUID      `json:"id"`
 	UserID                 uuid.UUID      `json:"user_id"`
-	SourceLlmInteractionID uuid.NullUUID  `json:"source_llm_interaction_id,omitempty"` // Nullable UUID for the source LLM interaction
-	PrimaryCityID          uuid.NullUUID  `json:"primary_city_id,omitempty"`           // Nullable UUID for the primary city
+	SourceLlmInteractionID uuid.UUID      `json:"source_llm_interaction_id,omitempty"` // Nullable UUID for the source LLM interaction
+	PrimaryCityID          uuid.UUID      `json:"primary_city_id,omitempty"`           // Nullable UUID for the primary city
 	Title                  string         `json:"title"`
 	Description            sql.NullString `json:"description"`             // Use sql.NullString for nullable text fields
 	MarkdownContent        string         `json:"markdown_content"`        // Markdown content for the itinerary
@@ -127,6 +128,7 @@ type PaginatedUserItinerariesResponse struct {
 
 type BookmarkRequest struct {
 	LlmInteractionID uuid.UUID `json:"llm_interaction_id"`
+	PrimaryCityID    uuid.UUID `json:"primary_city_id"`
 	Title            string    `json:"title"`
 	Description      *string   `json:"description"` // Optional
 	Tags             []string  `json:"tags"`        // Optional

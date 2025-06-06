@@ -157,6 +157,7 @@ func (l *LlmInteractiontServiceImpl) streamingCityDataWorker(wg *sync.WaitGroup,
 		ResponseText: cleanTxt,
 		Timestamp:    startTime,
 		LatencyMs:    int(time.Since(startTime).Milliseconds()),
+		CityName:     cityName,
 	}
 	_, err = l.saveCityInteraction(ctxWorker, interaction)
 	if err != nil {
@@ -324,6 +325,7 @@ func (l *LlmInteractiontServiceImpl) streamingGeneralPOIWorker(wg *sync.WaitGrou
 		ResponseText: fullText,
 		ModelUsed:    model,
 		LatencyMs:    latencyMs,
+		CityName:     cityName,
 	}
 	_, err = l.llmInteractionRepo.SaveInteraction(ctx, interaction)
 	if err != nil {
@@ -474,6 +476,7 @@ func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorker(wg *sync.Wai
 		ResponseText: fullText,
 		ModelUsed:    model,
 		LatencyMs:    latencyMs,
+		CityName:     cityName,
 	}
 	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
 	if err != nil {
@@ -1180,6 +1183,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 		Prompt:       prompt,
 		ResponseText: fullText,
 		Timestamp:    startTime,
+		CityName:     cityName,
 	}
 	llmInteractionID, err := l.saveCityInteraction(ctx, interaction)
 	if err != nil {

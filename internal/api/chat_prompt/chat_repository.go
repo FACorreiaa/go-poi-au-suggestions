@@ -40,6 +40,7 @@ type Repository interface {
 	SaveSinglePOI(ctx context.Context, poi types.POIDetail, userID, cityID uuid.UUID, llmInteractionID uuid.UUID) (uuid.UUID, error)
 	GetPOIsBySessionSortedByDistance(ctx context.Context, sessionID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error)
 	CalculateDistancePostGIS(ctx context.Context, userLat, userLon, poiLat, poiLon float64) (float64, error)
+	GetOrCreatePOI(ctx context.Context, tx pgx.Tx, poiDetail types.POIDetail, cityID uuid.UUID, sourceInteractionID uuid.UUID) (uuid.UUID, error)
 }
 
 type RepositoryImpl struct {
@@ -56,59 +57,172 @@ func NewRepositoryImpl(pgxpool *pgxpool.Pool, logger *slog.Logger) *RepositoryIm
 
 func (r *RepositoryImpl) SaveInteraction(ctx context.Context, interaction types.LlmInteraction) (uuid.UUID, error) {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SaveInteraction", trace.WithAttributes(
-		semconv.DBSystemPostgreSQL,
-		attribute.String("db.operation", "INSERT"),
-		attribute.String("db.sql.table", "llm_interactions"),
+		semconv.DBSystemKey.String(semconv.DBSystemPostgreSQL.Value.AsString()),
+		attribute.String("db.operation", "INSERT_COMPLEX"),
+		attribute.String("db.sql.table", "llm_interactions,itineraries,itinerary_pois"),
 		attribute.String("user.id", interaction.UserID.String()),
 		attribute.String("model.used", interaction.ModelUsed),
 		attribute.Int("latency.ms", interaction.LatencyMs),
+		attribute.String("city.name_from_interaction", interaction.CityName),
 	))
 	defer span.End()
 
+	var err error
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to start transaction")
 		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback(ctx)
+			panic(p)
+		}
+		if err != nil {
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				r.logger.ErrorContext(ctx, "Transaction rollback failed after error", "original_error", err, "rollback_error", rbErr)
+				span.RecordError(fmt.Errorf("transaction rollback failed: %v (original error: %w)", rbErr, err))
+			}
+		}
+	}()
 
-	query := `
+	interactionQuery := `
         INSERT INTO llm_interactions (
-            user_id, prompt, response_text, model_used, latency_ms
-        ) VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
+            user_id, prompt, response_text, model_used, latency_ms, city_name
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id
     `
-
 	var interactionID uuid.UUID
-	err = r.pgpool.QueryRow(ctx, query,
+	err = tx.QueryRow(ctx, interactionQuery,
 		interaction.UserID,
-		//interaction.ProfileID, // Assuming you added ProfileID to types.LlmInteraction
 		interaction.Prompt,
 		interaction.ResponseText,
 		interaction.ModelUsed,
 		interaction.LatencyMs,
-		//interaction.PromptTokens,     // Handle nil if these are pointers or use sql.NullInt64
-		//interaction.CompletionTokens, // Handle nil
-		//interaction.TotalTokens,      // Handle nil
-		//interaction.RequestPayload,   // Handle nil
-		//interaction.ResponsePayload,  // Handle nil
+		interaction.CityName,
 	).Scan(&interactionID)
-
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to insert interaction")
-		return uuid.Nil, fmt.Errorf("failed to insert interaction: %w", err)
+		span.SetStatus(codes.Error, "Failed to insert llm_interaction")
+		return uuid.Nil, fmt.Errorf("failed to insert llm_interaction: %w", err)
+	}
+	span.SetAttributes(attribute.String("llm_interaction.id", interactionID.String()))
+
+	var cityID uuid.UUID
+	if interaction.CityName != "" {
+		cityQuery := `SELECT id FROM cities WHERE name = $1 LIMIT 1`
+		err = tx.QueryRow(ctx, cityQuery, interaction.CityName).Scan(&cityID)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				r.logger.WarnContext(ctx, "City not found in database, itinerary creation will be skipped", "city_name", interaction.CityName, "interaction_id", interactionID.String())
+				span.AddEvent("City not found in database", trace.WithAttributes(attribute.String("city.name", interaction.CityName)))
+				// err is pgx.ErrNoRows, so cityID remains uuid.Nil, processing continues correctly. Clear err.
+				err = nil
+			} else {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "Failed to get city_id")
+				return interactionID, fmt.Errorf("failed to get city_id for city '%s': %w", interaction.CityName, err)
+			}
+		} else {
+			span.SetAttributes(attribute.String("city.id", cityID.String()))
+		}
+	} else {
+		r.logger.InfoContext(ctx, "interaction.CityName is empty, cannot determine city_id. Itinerary creation will be skipped.", "interaction_id", interactionID.String())
+		span.AddEvent("interaction.CityName is empty")
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	var itineraryID uuid.UUID
+	if cityID != uuid.Nil {
+		itineraryQuery := `
+	        INSERT INTO itineraries (user_id, city_id, source_llm_interaction_id)
+	        VALUES ($1, $2, $3)
+	        ON CONFLICT (user_id, city_id) DO UPDATE SET
+	            updated_at = NOW(),
+	            source_llm_interaction_id = EXCLUDED.source_llm_interaction_id
+	        RETURNING id
+	    `
+		err = tx.QueryRow(ctx, itineraryQuery, interaction.UserID, cityID, interactionID).Scan(&itineraryID)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to insert or update itinerary")
+			return interactionID, fmt.Errorf("failed to insert or update itinerary: %w", err)
+		}
+		span.SetAttributes(attribute.String("itinerary.id", itineraryID.String()))
+	}
+
+	if itineraryID != uuid.Nil {
+		var pois []types.POIDetail
+		pois, err = parsePOIsFromResponse(interaction.ResponseText, r.logger)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to parse POIs from response")
+			return interactionID, fmt.Errorf("failed to parse POIs from response: %w", err)
+		}
+		span.SetAttributes(attribute.Int("parsed_pois.count", len(pois)))
+
+		if len(pois) > 0 {
+			poiBatch := &pgx.Batch{}
+			itineraryPoiInsertQuery := `
+	            INSERT INTO itinerary_pois (itinerary_id, poi_id, order_index, ai_description)
+	            VALUES ($1, $2, $3, $4)
+	            ON CONFLICT (itinerary_id, poi_id) DO UPDATE SET
+	                order_index = EXCLUDED.order_index,
+	                ai_description = EXCLUDED.ai_description,
+	                updated_at = NOW()
+	        `
+			for i, poiDetailFromLlm := range pois {
+				var poiDBID uuid.UUID
+				poiDBID, err = r.GetOrCreatePOI(ctx, tx, poiDetailFromLlm, cityID, interactionID)
+				if err != nil {
+					span.RecordError(err)
+					span.SetStatus(codes.Error, "Failed to get or create POI")
+					return interactionID, fmt.Errorf("failed to get or create POI '%s': %w", poiDetailFromLlm.Name, err)
+				}
+				poiBatch.Queue(itineraryPoiInsertQuery, itineraryID, poiDBID, i, poiDetailFromLlm.DescriptionPOI) // Assumes types.POIDetail has DescriptionPOI
+			}
+
+			if poiBatch.Len() > 0 {
+				br := tx.SendBatch(ctx, poiBatch)
+				for i := 0; i < poiBatch.Len(); i++ {
+					_, execErr := br.Exec()
+					if execErr != nil {
+						err = fmt.Errorf("failed to insert itinerary_poi in batch (operation %d of %d for itinerary %s): %w", i+1, poiBatch.Len(), itineraryID.String(), execErr)
+						if closeErr := br.Close(); closeErr != nil {
+							r.logger.ErrorContext(ctx, "Failed to close batch for itinerary_pois after an exec error", "close_error", closeErr, "original_batch_error", err)
+						}
+						span.RecordError(err)
+						span.SetStatus(codes.Error, "Failed to insert itinerary_poi in batch")
+						return interactionID, err
+					}
+				}
+				err = br.Close()
+				if err != nil {
+					span.RecordError(err)
+					span.SetStatus(codes.Error, "Failed to close batch for itinerary_pois")
+					return interactionID, fmt.Errorf("failed to close batch for itinerary_pois: %w", err)
+				}
+				span.SetAttributes(attribute.Int("itinerary_pois.inserted_or_updated.count", poiBatch.Len()))
+			}
+		}
+	} else {
+		if cityID != uuid.Nil {
+			r.logger.WarnContext(ctx, "ItineraryID is Nil despite valid CityID, indicating itinerary insert/update issue.", "city_id", cityID.String(), "interaction_id", interactionID.String())
+			span.AddEvent("ItineraryID is Nil despite valid CityID.")
+		} else {
+			r.logger.InfoContext(ctx, "Skipping itinerary_pois: itineraryID is Nil (likely city not found or CityName empty).", "interaction_id", interactionID.String())
+			span.AddEvent("Skipping itinerary_pois: itineraryID is Nil.")
+		}
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to commit transaction")
 		return uuid.Nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	span.SetAttributes(attribute.String("interaction.id", interactionID.String()))
-	span.SetStatus(codes.Ok, "Interaction saved successfully")
+	span.SetStatus(codes.Ok, "Interaction and related entities saved successfully")
 	return interactionID, nil
 }
 
@@ -630,6 +744,94 @@ func (l *RepositoryImpl) CalculateDistancePostGIS(ctx context.Context, userLat, 
 		return 0, fmt.Errorf("failed to calculate distance with PostGIS: %w", err)
 	}
 	return distance, nil
+}
+
+// type POIDetail struct {
+// 	Name        string  `json:"name"`
+// 	Latitude    float64 `json:"latitude"`
+// 	Longitude   float64 `json:"longitude"`
+// 	Category    string  `json:"category"`
+// 	Description string  `json:"description"`
+// }
+
+// type LlmApiResponseData struct {
+// 	GeneralCityData struct {
+// 		City            string  `json:"city"`
+// 		Country         string  `json:"country"`
+// 		Description     string  `json:"description"`
+// 		CenterLatitude  float64 `json:"center_latitude"`
+// 		CenterLongitude float64 `json:"center_longitude"`
+// 		// Add other fields from general_city_data if you need them
+// 		// Population       string  `json:"population,omitempty"`
+// 		// Area             string  `json:"area,omitempty"`
+// 		// Timezone         string  `json:"timezone,omitempty"`
+// 		// Language         string  `json:"language,omitempty"`
+// 		// Weather          string  `json:"weather,omitempty"`
+// 		// Attractions      string  `json:"attractions,omitempty"`
+// 		// History          string  `json:"history,omitempty"`
+// 	} `json:"general_city_data"`
+
+// 	PointsOfInterest []types.POIDetail `json:"points_of_interest"` // <--- ADD THIS FIELD for general POIs
+
+// 	ItineraryResponse struct {
+// 		ItineraryName      string            `json:"itinerary_name"`
+// 		OverallDescription string            `json:"overall_description"`
+// 		PointsOfInterest   []types.POIDetail `json:"points_of_interest"` // This is for itinerary_response.points_of_interest
+// 	} `json:"itinerary_response"`
+// }
+
+// type LlmApiResponse struct {
+// 	SessionID string             `json:"session_id"` // Capture the top-level session_id
+// 	Data      LlmApiResponseData `json:"data"`
+// 	// Note: The JSON also has a "session_id" inside "data".
+// 	// If you need that too, you'd add it to LlmApiResponseData:
+// 	// SessionIDInsideData string `json:"session_id,omitempty"`
+// }
+
+func parsePOIsFromResponse(responseText string, logger *slog.Logger) ([]types.POIDetail, error) {
+	cleanedResponse := cleanJSONResponse(responseText)
+
+	var parsedResponse types.AiCityResponse
+	err := json.Unmarshal([]byte(cleanedResponse), &parsedResponse)
+	if err != nil {
+		logger.Error("parsePOIsFromResponse: Failed to unmarshal LLM response", "error", err, "cleanedResponseLength", len(cleanedResponse))
+		return nil, fmt.Errorf("parsePOIsFromResponse: failed to unmarshal LLM response: %w", err)
+	}
+
+	if parsedResponse.PointsOfInterest == nil {
+		logger.Warn("parsePOIsFromResponse: No points_of_interest found in itinerary_response", "responseStructure", fmt.Sprintf("%+v", parsedResponse))
+		return []types.POIDetail{}, nil
+	}
+
+	return parsedResponse.PointsOfInterest, nil
+}
+
+func (r *RepositoryImpl) GetOrCreatePOI(ctx context.Context, tx pgx.Tx, poiDetail types.POIDetail, cityID uuid.UUID, sourceInteractionID uuid.UUID) (uuid.UUID, error) {
+	var poiDBID uuid.UUID
+	findPoiQuery := `SELECT id FROM points_of_interest WHERE name = $1 AND city_id = $2 LIMIT 1`
+	err := tx.QueryRow(ctx, findPoiQuery, poiDetail.Name, cityID).Scan(&poiDBID)
+
+	if err == pgx.ErrNoRows {
+		createPoiQuery := `
+            INSERT INTO points_of_interest (name, city_id, location, category, description)
+            VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5, $6) RETURNING id`
+		err = tx.QueryRow(ctx, createPoiQuery,
+			poiDetail.Name,
+			cityID,
+			poiDetail.Latitude,
+			poiDetail.Longitude,
+			poiDetail.Category,
+			poiDetail.DescriptionPOI, // Assumes types.POIDetail has DescriptionPOI from JSON
+		).Scan(&poiDBID)
+		if err != nil {
+			r.logger.ErrorContext(ctx, "GetOrCreatePOI: Failed to insert new POI", "error", err, "poi_name", poiDetail.Name)
+			return uuid.Nil, fmt.Errorf("GetOrCreatePOI: failed to insert new POI '%s': %w", poiDetail.Name, err)
+		}
+	} else if err != nil {
+		r.logger.ErrorContext(ctx, "GetOrCreatePOI: Failed to query existing POI", "error", err, "poi_name", poiDetail.Name)
+		return uuid.Nil, fmt.Errorf("GetOrCreatePOI: failed to query existing POI '%s': %w", poiDetail.Name, err)
+	}
+	return poiDBID, nil
 }
 
 // func (r *RepositoryImpl) CalculateDistancePostGIS(ctx context.Context, poi types.POIDetail, userLocation types.UserLocation) (float64, error) {

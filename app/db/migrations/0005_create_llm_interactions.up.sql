@@ -4,6 +4,8 @@ CREATE TABLE llm_interactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     user_id UUID REFERENCES users (id) ON DELETE SET NULL, -- Link to user if applicable
     session_id TEXT, -- Optional: Group related interactions
+    city_name TEXT,
+    city_id UUID REFERENCES cities (id) ON DELETE SET NULL,
     prompt TEXT NOT NULL, -- The final prompt sent
     request_payload JSONB, -- Full request body sent to Gemini API (optional)
     response_text TEXT, -- The final generated text response

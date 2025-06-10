@@ -1,7 +1,7 @@
 FROM golang:1.24 AS builder
 
 LABEL maintainer="a11199"
-LABEL description="Base image wanderwise dev"
+LABEL description="Base image loci dev"
 
 WORKDIR /app
 
@@ -16,8 +16,8 @@ RUN echo "Contents of /app after COPY:" && ls -al /app && sleep 1
 RUN echo "Listing contents of /app after COPY:" && ls -al /app && sleep 1
 RUN echo "Contents of /app/config:" && ls -al /app/config || echo "/app/config does not exist" && sleep 1
 RUN ls -al /app/internal || echo "No /app/internal found" && sleep 1
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /app/wanderwise -ldflags="-w -s" ./*.go
-ENTRYPOINT ["/app/wanderwise"]
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /app/loci -ldflags="-w -s" ./*.go
+ENTRYPOINT ["/app/loci"]
 
 # Development stage with hot reload
 FROM golang:1.24 AS dev
@@ -53,7 +53,7 @@ FROM alpine:latest AS prod
 WORKDIR /app
 
 RUN apk add --no-cache bash
-COPY --from=builder /app/wanderwise /usr/bin/wanderwise
+COPY --from=builder /app/loci /usr/bin/loci
 COPY --from=builder /app/config ./config
 
 RUN echo "Contents of /app after COPY:" && ls -al /app && sleep 1
@@ -63,4 +63,4 @@ RUN ls -al /app/internal || echo "No /app/internal found" && sleep 1
 
 EXPOSE 8000
 EXPOSE 8001
-CMD ["wanderwise", "start"]
+CMD ["loci", "start"]

@@ -1,6 +1,6 @@
 You've got a fantastic foundation for your MVP! The core loop of fetching user context, feeding it to the AI, and getting a structured response for a city is in place.
 
-For an MVP, the goal is to deliver core value quickly and get user feedback. Let's look at what "core value" means for WanderWiseAI and what small additions would significantly enhance that.
+For an MVP, the goal is to deliver core value quickly and get user feedback. Let's look at what "core value" means for Loci and what small additions would significantly enhance that.
 
 **Current MVP Strengths (Based on your code and description):**
 

@@ -1,5 +1,5 @@
 type: collection.insomnia.rest/5.0
-name: WanderWise-AI
+name: loci-AI
 meta:
   id: wrk_1eafea56d29b4a868391fcdcee66178f
   created: 1745196060571
@@ -2450,7 +2450,7 @@ cookieJar:
       sameSite: strict
       id: 0d96a477-931c-4795-b66b-8b1a9c9db660
 environments:
-  name: WanderWise AI Environment
+  name: loci AI Environment
   meta:
     id: env_3f7e70f808abdd78b7a3e9bbf2e87b5df285c79d
     created: 1745196060574

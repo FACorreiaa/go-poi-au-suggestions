@@ -33,12 +33,12 @@ services:
 repositories:
   postgres:
     # port: "5432"
-    # host: "postgres-wanderwise"
+    # host: "postgres-loci"
     password: "postgres"
     port: "5454"
     host: "localhost"
     username: "postgres"
-    db: "wanderwise-ai-dev"
+    db: "loci-ai-dev"
     SSLMODE: "verify-full"
     MAXCONWAITINGTIME: 10
 jwt:

@@ -1,14 +1,14 @@
-Okay, here's a more concise version of your README, aiming to reduce repetition while retaining the essential information for WanderWiseAI.
+Okay, here's a more concise version of your README, aiming to reduce repetition while retaining the essential information for Loci.
 
 ---
 
-# **WanderWiseAI** – Personalized City Discovery 🗺️✨
+# **Loci** – Personalized City Discovery 🗺️✨
 
-WanderWiseAI is a smart, mobile-first web application delivering hyper-personalized city exploration recommendations based on user interests, time, location, and an evolving AI engine. It starts with an HTTP/REST API, utilizing WebSockets/SSE for real-time features.
+Loci is a smart, mobile-first web application delivering hyper-personalized city exploration recommendations based on user interests, time, location, and an evolving AI engine. It starts with an HTTP/REST API, utilizing WebSockets/SSE for real-time features.
 
 ## 🚀 Elevator Pitch & Core Features
 
-Tired of generic city guides? WanderWise learns your preferences (history, food, art, etc.) and combines them with your available time and location to suggest the perfect spots.
+Tired of generic city guides? loci learns your preferences (history, food, art, etc.) and combines them with your available time and location to suggest the perfect spots.
 
 *   **🧠 AI-Powered Personalization:** Recommendations adapt to explicit preferences and learned behavior.
 *   **🔍 Contextual Filtering:** Filter by distance, time, opening hours, interests, and soon, budget.
@@ -18,7 +18,7 @@ Tired of generic city guides? WanderWise learns your preferences (history, food,
 
 ## 💰 Business Model & Monetization
 
-WanderWiseAI uses a **Freemium Model**:
+Loci uses a **Freemium Model**:
 
 
 

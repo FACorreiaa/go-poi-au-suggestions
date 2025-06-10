@@ -8,9 +8,9 @@ import (
 
 // Base contains common fields used across multiple models
 type Base struct {
-	ID        uuid.UUID  `json:"id" db:"id"`
-	CreatedAt time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+	ID        uuid.UUID `json:"id" db:"id"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // SubscriptionPlanType represents the type of subscription plan
@@ -40,7 +40,7 @@ type POISource string
 
 // POI sources
 const (
-	POISourceWanderwiseAI POISource = "wanderwise_ai"
+	POISourceLoci          POISource = "loci_ai"
 	POISourceOpenStreetMap POISource = "openstreetmap"
 	POISourceUserSubmitted POISource = "user_submitted"
 	POISourcePartner       POISource = "partner"

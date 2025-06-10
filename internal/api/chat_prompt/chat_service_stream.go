@@ -79,6 +79,7 @@ func getPersonalizedPOI(interestNames []string, cityName, tagsPromptPart, userPr
         1. An itinerary name.
         2. An overall description.
         3. A list of points of interest with name, category, coordinates, and detailed description.
+		Max points of interest allowed by tokens. 
         Format the response in JSON with the following structure:
         {
             "itinerary_name": "Name of the itinerary",

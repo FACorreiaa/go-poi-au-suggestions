@@ -29,7 +29,7 @@ import (
 	"log/slog"
 
 	// Assuming your POI struct is defined here or in a domain package
-	"github.com/FACorreiaa/WanderWiseAI/internal/poi" // Adjust path
+	"github.com/FACorreiaa/Loci/internal/poi" // Adjust path
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go" // Import pgvector library
@@ -134,8 +134,8 @@ import (
 	"google.golang.org/api/iterator"
 	// Import genai client, POI repo interface, POI struct
 	"github.com/google/generative-ai-go/genai"
-	"github.com/FACorreiaa/WanderWiseAI/internal/poi" // Adjust path
-	"github.com/FACorreiaa/WanderWiseAI/internal/platform/persistence/postgres" // Adjust path
+	"github.com/FACorreiaa/Loci/internal/poi" // Adjust path
+	"github.com/FACorreiaa/Loci/internal/platform/persistence/postgres" // Adjust path
 )
 
 // RecommendationService handles generating recommendations.
@@ -214,7 +214,7 @@ func (s *RecommendationService) GenerateRecommendationText(ctx context.Context, 
     }
 
     // --- Construct the prompt for Gemini ---
-    prompt := fmt.Sprintf("You are WanderWiseAI, a helpful travel assistant. A user asked for recommendations related to: '%s'.\n\nBased on their query, here are some potentially relevant points of interest:\n\n", originalQuery)
+    prompt := fmt.Sprintf("You are Loci, a helpful travel assistant. A user asked for recommendations related to: '%s'.\n\nBased on their query, here are some potentially relevant points of interest:\n\n", originalQuery)
     for i, p := range similarPOIs {
 		prompt += fmt.Sprintf("%d. %s", i+1, p.Name)
 		if p.Description != nil && *p.Description != "" {
@@ -279,8 +279,8 @@ import (
     "strconv"
     "log/slog"
 	// Import service, helpers, etc.
-    "github.com/FACorreiaa/WanderWiseAI/internal/recommendation"
-    "github.com/FACorreiaa/WanderWiseAI/internal/api/utils"
+    "github.com/FACorreiaa/Loci/internal/recommendation"
+    "github.com/FACorreiaa/Loci/internal/api/utils"
 )
 
 type RecommendationHandlerImpl struct {
@@ -537,7 +537,7 @@ CREATE TABLE points_of_interest (
     price_level INTEGER CHECK (price_level >= 1 AND price_level <= 4),
     average_rating NUMERIC(3, 2),
     rating_count INTEGER DEFAULT 0,
-    source poi_source NOT NULL DEFAULT 'wanderwise_ai',
+    source poi_source NOT NULL DEFAULT 'loci_ai',
     source_id TEXT,
     is_verified BOOLEAN NOT NULL DEFAULT FALSE,
     is_sponsored BOOLEAN NOT NULL DEFAULT FALSE,
@@ -550,7 +550,7 @@ CREATE TABLE points_of_interest (
 );
 
 -- Assuming 'poi_source' is an enum; create it if needed
-CREATE TYPE poi_source AS ENUM ('wanderwise_ai', 'osm', 'google', 'manual');
+CREATE TYPE poi_source AS ENUM ('loci_ai', 'osm', 'google', 'manual');
 ```
 
 ### 1.3 Insert Sample Data
@@ -863,7 +863,7 @@ On GCP, you have a few options:
 
 Google Cloud Run (with Containers): Push your custom PostGIS+pgvector image to Container Registry or Artifact Registry, then deploy a Cloud Run service using that image. You’ll need to configure a private VPC connector so your application can reach it.
 
-Google Kubernetes Engine (GKE): Use your Docker Compose definitions as Kubernetes Deployments/StatefulSets via Kompose or manually convert them. Store postgres-wanderwise as a StatefulSet with a PersistentVolumeClaim and initContainer for your SQL scripts.
+Google Kubernetes Engine (GKE): Use your Docker Compose definitions as Kubernetes Deployments/StatefulSets via Kompose or manually convert them. Store postgres-loci as a StatefulSet with a PersistentVolumeClaim and initContainer for your SQL scripts.
 
 Cloud SQL for PostgreSQL: If you’d rather use managed Postgres, Cloud SQL doesn’t support custom extensions like pgvector out of the box. You’d need a self-managed instance (GCE VM or GKE) to retain the pgvector and PostGIS extensions.
 
@@ -888,7 +888,7 @@ Here's a high-level overview of how that works:
 ### ✅ What You’ll Do
 
 1. **Build and push your custom Docker image**  
-   Push your `postgres-wanderwise` image (with PostGIS + pgvector) to:
+   Push your `postgres-loci` image (with PostGIS + pgvector) to:
   - Google Artifact Registry **or**
   - Docker Hub (if public/private repo with credentials)
 
@@ -927,12 +927,12 @@ spec:
     spec:
       containers:
       - name: postgres
-        image: gcr.io/YOUR_PROJECT/postgres-wanderwise:latest
+        image: gcr.io/YOUR_PROJECT/postgres-loci:latest
         ports:
         - containerPort: 5432
         env:
         - name: POSTGRES_DB
-          value: wanderwise
+          value: loci
         - name: POSTGRES_USER
           valueFrom:
             secretKeyRef:

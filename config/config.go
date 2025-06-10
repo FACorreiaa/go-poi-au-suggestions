@@ -18,11 +18,11 @@ type JWTConfig struct {
 	SecretKey string `mapstructure:"secret"` // e.g., JWT_SECRET_KEY env var
 
 	// Issuer identifies the principal that issued the JWT. Recommended.
-	Issuer string `mapstructure:"issuer"` // e.g., "wanderwiseai" or your domain
+	Issuer string `mapstructure:"issuer"` // e.g., "Loci" or your domain
 
 	// Audience identifies the recipients that the JWT is intended for. Recommended.
 	// Often the frontend URL or API identifier.
-	Audience string `mapstructure:"audience"` // e.g., "wanderwiseai-app"
+	Audience string `mapstructure:"audience"` // e.g., "Loci-app"
 
 	// AccessTokenTTL defines the duration for which access tokens are valid. REQUIRED.
 	AccessTokenTTL time.Duration `mapstructure:"accessTokenTTL"` // e.g., "15m", "1h"

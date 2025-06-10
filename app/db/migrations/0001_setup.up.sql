@@ -1,10 +1,16 @@
 -- +migrate Up
 CREATE EXTENSION IF NOT EXISTS postgis;
+
 CREATE EXTENSION IF NOT EXISTS postgis_topology;
+
 CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
+
 CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder;
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE EXTENSION IF NOT EXISTS citext;
+
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE OR REPLACE FUNCTION set_updated_at()
@@ -31,7 +37,7 @@ CREATE TYPE subscription_status AS ENUM (
 );
 
 CREATE TYPE poi_source AS ENUM (
-    'wanderwise_ai', -- Added by our system/AI
+    'loci_ai', -- Added by our system/AI
     'openstreetmap', -- Imported from OSM
     'user_submitted',-- Submitted by a user (maybe requires verification)
     'partner'        -- From a paying partner/featured listing

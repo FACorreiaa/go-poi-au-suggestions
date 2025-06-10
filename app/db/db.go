@@ -79,7 +79,7 @@ func RunMigrations(databaseURL string, logger *slog.Logger) error {
 	if !strings.HasPrefix(databaseURL, "postgres://") && !strings.HasPrefix(databaseURL, "postgresql://") {
 		errMsg := "invalid database URL scheme for migrate, ensure it starts with postgresql://"
 		logger.Error(errMsg, slog.String("url", databaseURL))
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	m, err := migrate.NewWithSourceInstance("iofs", sourceDriver, databaseURL)
@@ -122,7 +122,7 @@ func NewDatabaseConfig(cfg *config.Config, logger *slog.Logger) (*DatabaseConfig
 	if cfg == nil || cfg.Repositories.Postgres.Host == "" {
 		errMsg := "Postgres configuration is missing or invalid"
 		logger.Error(errMsg)
-		return nil, fmt.Errorf(errMsg)
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	// schema := os.Getenv("POSTGRES_SCHEMA") // Get schema if needed, maybe from cfg instead?

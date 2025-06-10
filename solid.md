@@ -1,15 +1,15 @@
 Okay, here's the text you provided, formatted as Markdown.
 
-It seems you were asking for confirmation and guidance on using **SolidStart** (the meta-framework for SolidJS) with your Go backend for the WanderWiseAI project, and I previously provided a detailed explanation. This Markdown output is that explanation.
+It seems you were asking for confirmation and guidance on using **SolidStart** (the meta-framework for SolidJS) with your Go backend for the Loci project, and I previously provided a detailed explanation. This Markdown output is that explanation.
 
 ```markdown
-I’m assuming you meant SolidStart (the meta-framework for SolidJS), as "Solid Star" doesn’t appear to be a known term in the context of web development or related to your WanderWiseAI project. SolidStart is a framework for building web applications with SolidJS, offering features like server-side rendering (SSR), static site generation (SSG), and API routes, making it a suitable frontend for communicating with a backend like your Go-based REST API for WanderWiseAI.
+I’m assuming you meant SolidStart (the meta-framework for SolidJS), as "Solid Star" doesn’t appear to be a known term in the context of web development or related to your Loci project. SolidStart is a framework for building web applications with SolidJS, offering features like server-side rendering (SSR), static site generation (SSG), and API routes, making it a suitable frontend for communicating with a backend like your Go-based REST API for Loci.
 
-Yes, SolidStart can absolutely be used to communicate with your Go backend. Below, I’ll explain how to set this up, focusing on your v1.0 WanderWiseAI project with its REST API, and provide guidance on integrating SolidStart with your Go backend. I’ll keep it concise yet comprehensive, covering key aspects like HTTP requests, WebSockets for real-time features, and considerations for your project’s architecture.
+Yes, SolidStart can absolutely be used to communicate with your Go backend. Below, I’ll explain how to set this up, focusing on your v1.0 Loci project with its REST API, and provide guidance on integrating SolidStart with your Go backend. I’ll keep it concise yet comprehensive, covering key aspects like HTTP requests, WebSockets for real-time features, and considerations for your project’s architecture.
 
 ## How SolidStart Can Communicate with Your Go Backend
 
-SolidStart, built on SolidJS, is designed to handle both frontend rendering and server-side logic, including API routes. It can communicate with your Go backend via HTTP/REST (your current architecture) or WebSockets/Server-Sent Events (SSE) for real-time features like live suggestions or social feeds, as outlined in your WanderWiseAI project.
+SolidStart, built on SolidJS, is designed to handle both frontend rendering and server-side logic, including API routes. It can communicate with your Go backend via HTTP/REST (your current architecture) or WebSockets/Server-Sent Events (SSE) for real-time features like live suggestions or social feeds, as outlined in your Loci project.
 
 ### 1. Communicating via REST API
 
@@ -96,7 +96,7 @@ Your Go backend uses a REST API (built with Chi or Gin), so SolidStart can inter
 
 ### 2. Real-Time Features with WebSockets or SSE
 
-Your WanderWiseAI project mentions using WebSockets or Server-Sent Events (SSE) for real-time features like live suggestions or social feeds. SolidStart can handle these by connecting to your Go backend’s WebSocket/SSE endpoints.
+Your Loci project mentions using WebSockets or Server-Sent Events (SSE) for real-time features like live suggestions or social feeds. SolidStart can handle these by connecting to your Go backend’s WebSocket/SSE endpoints.
 
 *   **WebSockets:**
     *   **Go Backend Setup:**
@@ -211,7 +211,7 @@ Your WanderWiseAI project mentions using WebSockets or Server-Sent Events (SSE) 
             }
             ```
 
-### 3. Integration with WanderWiseAI Features
+### 3. Integration with Loci Features
 
 *   **AI-Powered Recommendations:**
     Your Go backend uses the Google Gemini API (`google/generative-ai-go`) for personalized recommendations. SolidStart can trigger these via REST API calls (e.g., `GET /api/v1/recommendations?query=Berlin&interests=art,coffee`).
@@ -273,7 +273,7 @@ Your WanderWiseAI project mentions using WebSockets or Server-Sent Events (SSE) 
     *   Use `@tanstack/solid-query` for caching to reduce backend load.
 *   **Scalability:**
     *   Deploy SolidStart on a platform like Vercel or Netlify, which supports SSR and scales easily.
-    *   Ensure your Go backend runs on Kubernetes (as per your WanderWiseAI stack) for scalability.
+    *   Ensure your Go backend runs on Kubernetes (as per your Loci stack) for scalability.
 *   **Security:**
     *   Secure API calls with JWT authentication.
     *   Use HTTPS and configure CORS properly.
@@ -291,21 +291,21 @@ Your WanderWiseAI project mentions using WebSockets or Server-Sent Events (SSE) 
 ### Should You Switch to GraphQL or Add gRPC?
 
 *   **GraphQL:**
-    *   Switching your backend to GraphQL (e.g., using `gqlgen` in Go) could simplify complex queries for WanderWiseAI’s recommendation engine, as clients can request exactly the data they need.
+    *   Switching your backend to GraphQL (e.g., using `gqlgen` in Go) could simplify complex queries for Loci’s recommendation engine, as clients can request exactly the data they need.
     *   However, it adds complexity to your backend (schema management, resolvers) and may not be necessary for v1.0, given REST’s simplicity and SolidStart’s ability to handle it efficiently.
     *   If you want to experiment, you could incrementally introduce GraphQL for specific endpoints while keeping REST.
 *   **gRPC:**
-    *   You mentioned wanting to use gRPC in an event-driven architecture. For WanderWiseAI, gRPC could be used for **internal microservices communication** (e.g., between User Service and Recommendation Service) rather than frontend-to-backend.
+    *   You mentioned wanting to use gRPC in an event-driven architecture. For Loci, gRPC could be used for **internal microservices communication** (e.g., between User Service and Recommendation Service) rather than frontend-to-backend.
     *   SolidStart can’t directly call gRPC endpoints from the browser due to gRPC’s HTTP/2 and binary protocol requirements. You’d need a gRPC-Web proxy (e.g., Envoy) or a REST-to-gRPC gateway in your Go backend.
-    *   For your interest in gRPC with Kafka, consider the itinerary planner project I suggested earlier, where gRPC handles inter-service communication and Kafka manages events. For WanderWiseAI, stick with REST for frontend-backend communication in v1.0, and explore gRPC for backend microservices in a future phase.
+    *   For your interest in gRPC with Kafka, consider the itinerary planner project I suggested earlier, where gRPC handles inter-service communication and Kafka manages events. For Loci, stick with REST for frontend-backend communication in v1.0, and explore gRPC for backend microservices in a future phase.
 
 ## Getting Started
 
 1.  **Set Up SolidStart:**
     *   Create a new SolidStart project:
         ```bash
-        npx degit solidjs/solid-start/examples/basic my-wanderwise-frontend
-        cd my-wanderwise-frontend
+        npx degit solidjs/solid-start/examples/basic my-loci-frontend
+        cd my-loci-frontend
         npm install # or yarn or pnpm
         npm run dev # or yarn dev or pnpm dev
         ```
@@ -330,7 +330,7 @@ Your WanderWiseAI project mentions using WebSockets or Server-Sent Events (SSE) 
 
 ## Example Integration
 
-Here’s a minimal example combining REST and WebSockets for WanderWiseAI:
+Here’s a minimal example combining REST and WebSockets for Loci:
 
 **Go Backend (REST + WebSocket):**
 *(Note: Ensure `cors` is correctly imported and used if needed)*
@@ -463,7 +463,7 @@ function App() {
 
   return (
     <div>
-      <h1>WanderWiseAI (SolidStart Frontend)</h1>
+      <h1>Loci (SolidStart Frontend)</h1>
 
       <h2>Recommendations (REST)</h2>
       <Show when={recommendationsQuery.isLoading}>
@@ -496,7 +496,7 @@ export default App;
 
 1.  **Test the Integration:** Start with a simple REST endpoint call and verify data flows from your Go backend to SolidStart.
 2.  **Add Real-Time Features:** Implement WebSockets or SSE for live suggestions, using the examples above.
-3.  **Explore gRPC Internally:** If you expand WanderWiseAI to a microservices architecture, use gRPC for backend services (e.g., Recommendation Service calling User Service) while keeping REST for SolidStart.
+3.  **Explore gRPC Internally:** If you expand Loci to a microservices architecture, use gRPC for backend services (e.g., Recommendation Service calling User Service) while keeping REST for SolidStart.
 4.  **Monitor Performance:** Use OpenTelemetry (as mentioned in your stack) to trace API calls and WebSocket performance.
 
 If you meant something other than SolidStart by “Solid Star,” or if you want help with specific SolidStart features, gRPC integration, or anything else (like merging main again), let me know! I can also dive into your Go backend setup or provide more code examples. What’s next?

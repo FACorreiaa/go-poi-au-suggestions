@@ -2,7 +2,7 @@
     "swagger": "2.0",
     "info": {
         "description": "API for personalized city discovery and recommendations.",
-        "title": "WanderWiseAI API",
+        "title": "Loci API",
         "termsOfService": "http://swagger.io/terms/",
         "contact": {
             "name": "API Support",

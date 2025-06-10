@@ -4,10 +4,10 @@ global:
 
 scrape_configs:
   # Scrape metrics from your Go application's /metrics endpoint
-  # - job_name: "wanderwise-api"
+  # - job_name: "loci-api"
   #   static_configs:
-  #     - targets: ["wanderwise-api:9090"] # Service name and port defined in docker-compose
-  - job_name: "wanderwise-api"
+  #     - targets: ["loci-api:9090"] # Service name and port defined in docker-compose
+  - job_name: "loci-api"
     static_configs:
       # Use host.docker.internal and the port exposed by Go app on the host
       - targets: ["host.docker.internal:9090"] # <<< CHANGE HERE

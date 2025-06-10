@@ -1,7 +1,7 @@
 services:
   # Your Go Application
-  # wanderwise-api-dev:
-  #   container_name: wanderwise-api-dev
+  # loci-api-dev:
+  #   container_name: loci-api-dev
   #   build:
   #     context: . # Assuming Dockerfile is in the root
   #     dockerfile: Dockerfile # Your Go app's Dockerfile
@@ -16,17 +16,17 @@ services:
   #     - .:/app # Mount current directory to /app in container
   #     - ./scripts:/scripts # Mount scripts directory for init scripts
   #   depends_on:
-  #     - postgres-wanderwise
+  #     - postgres-loci
   #     - otel-collector # Wait for collector to be available
   #   networks:
   #     - observability-net
-  #     - wanderwise-net # Connect to DB network
+  #     - loci-net # Connect to DB network
 
   # PostgreSQL Database (with PostGIS & pgvector)
 
-  postgres-wanderwise:
+  postgres-loci:
     platform: linux/amd64
-    container_name: postgres-wanderwise
+    container_name: postgres-loci
     build:
       context: . 
       dockerfile: postgres.Dockerfile
@@ -42,11 +42,11 @@ services:
       # Be careful exposing DB ports directly
       - "5454:5432" # Map host 5454 -> container 5432
     volumes:
-      - postgres-wanderwise-data:/var/lib/postgresql/data
+      - postgres-loci-data:/var/lib/postgresql/data
       - ./scripts/postgres/init:/docker-entrypoint-initdb.d # Your extensions script
     restart: unless-stopped
     networks:
-      - wanderwise-net # Separate network for DB?
+      - loci-net # Separate network for DB?
 
   # --- Grafana Stack ---
 
@@ -131,13 +131,13 @@ services:
 
 
 volumes:
-  postgres-wanderwise-data:
+  postgres-loci-data:
   #tempo-data:
   #prometheus-data:
   #grafana-data:
 
 networks:
-  wanderwise-net: # Network for App <-> DB
+  loci-net: # Network for App <-> DB
     driver: bridge
   # observability-net: # Network for Observability Stack + App connection
     # driver: bridge

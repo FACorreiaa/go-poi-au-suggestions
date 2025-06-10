@@ -2264,7 +2264,7 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "localhost:8000 // Adjust to your actual host/port",
 	BasePath:         "/api/v1        // Base path for all API routes",
 	Schemes:          []string{},
-	Title:            "WanderWiseAI API",
+	Title:            "Loci API",
 	Description:      "API for personalized city discovery and recommendations.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,

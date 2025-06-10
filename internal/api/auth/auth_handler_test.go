@@ -527,7 +527,7 @@ func TestRefreshTokenHandlerImpl(t *testing.T) {
 	})
 
 	// Test case: missing refresh token
-	tRun("MissingRefreshToken", func(t *testing.T) {
+	t.Run("MissingRefreshToken", func(t *testing.T) {
 		// Create request with missing refresh token
 		refreshRequest := map[string]string{
 			// Missing refreshToken
@@ -619,7 +619,7 @@ func TestValidateSessionHandlerImpl(t *testing.T) {
 		user := &types.UserAuth{
 			ID:       "user123",
 			Username: "testuser",
-			Email":    "test@example.com",
+			Email:    "test@example.com",
 			Role:     "user",
 		}
 		mockService.On("GetUserByID", mock.Anything, "user123").Return(user, nil).Once()
@@ -869,8 +869,8 @@ func TestChangeEmailHandlerImpl(t *testing.T) {
 	// Create a mock service
 	mockService := new(MockAuthService)
 	logger := slog.Default()
-	HandlerImpl := NewAuthHandlerImpl(mockService, logger)
+	_ = NewAuthHandlerImpl(mockService, logger)
 
 	// Note: Since the ChangeEmail HandlerImpl is not fully implemented in the auth_HandlerImpl.go file,
+	// we can add a basic test when it's implemented
 }
-</

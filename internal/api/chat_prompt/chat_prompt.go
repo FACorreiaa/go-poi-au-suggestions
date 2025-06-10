@@ -27,7 +27,7 @@ func getUserPreferencesPrompt(searchProfile *types.UserPreferenceProfileResponse
 
 func getGeneralPOIByDistance(cityName string, lat, lon, distance float64) string {
 	return fmt.Sprintf(`
-            Generate a list of maximum 5 general points of interest that people usually see no matter the taste or preference for this city %s.
+            Generate a list of points of interest that people usually see no matter the taste or preference for this city %s.
             The user location is at latitude %0.2f and longitude %0.2f, and the distance to search is %0.2f km.
             Return the response STRICTLY as a JSON object with:
             {
@@ -204,7 +204,7 @@ func getCityDescriptionPrompt(cityName string) string {
 // getGeneralPOI generates a prompt for general POIs
 func getGeneralPOIPrompt(cityName string) string {
 	return fmt.Sprintf(`
-        Provide a list of general points of interest for %s in JSON format with the following structure:
+        Provide a list of 6 general points of interest for %s in JSON format with the following structure:
         {
             "points_of_interest": [
                 {

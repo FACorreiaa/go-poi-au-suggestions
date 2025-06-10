@@ -104,8 +104,8 @@ func (h *HandlerImpl) StartChatSession(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(attribute.String("app.profile.id", profileID.String()))
 
 	userLocation := &types.UserLocation{
-		UserLat: 41.3851,
-		UserLon: 2.1734,
+		UserLat: 41.4848,
+		UserLon: 8.7641,
 	}
 
 	sessionID, itinerary, err := h.llmInteractionService.StartNewSession(ctx, userID, profileID, req.CityName, "", userLocation)

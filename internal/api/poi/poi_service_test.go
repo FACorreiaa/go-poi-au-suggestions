@@ -180,23 +180,43 @@ func (m *MockPOIRepository) GetItinerary(ctx context.Context, userID, itineraryI
 	return args.Get(0).(*types.UserSavedItinerary), args.Error(1)
 }
 
-func (m *MockPOIRepository) GetItineraries(ctx context.Context, userID uuid.UUID) ([]*types.UserSavedItinerary, error) {
-	args := m.Called(ctx, userID)
+func (m *MockPOIRepository) GetItineraries(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]types.UserSavedItinerary, int, error) {
+	args := m.Called(ctx, userID, page, pageSize)
+	if args.Get(0) == nil {
+		return nil, 0, args.Error(2)
+	}
+	return args.Get(0).([]types.UserSavedItinerary), args.Int(1), args.Error(2)
+}
+func (m *MockPOIRepository) UpdateItinerary(ctx context.Context, userID uuid.UUID, itineraryID uuid.UUID, updates types.UpdateItineraryRequest) (*types.UserSavedItinerary, error) {
+	args := m.Called(ctx, userID, itineraryID, updates)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*types.UserSavedItinerary), args.Error(1)
+	return args.Get(0).(*types.UserSavedItinerary), args.Error(1)
 }
-func (m *MockPOIRepository) UpdateItinerary(ctx context.Context, itinerary types.UserSavedItinerary) error {
-	args := m.Called(ctx, itinerary)
-	if args.Get(0) == nil {
-		return args.Error(0)
-	}
+
+func (m *MockPOIRepository) SaveItinerary(ctx context.Context, userID, cityID uuid.UUID) (uuid.UUID, error) {
+	args := m.Called(ctx, userID, cityID)
+	return args.Get(0).(uuid.UUID), args.Error(1)
+}
+
+func (m *MockPOIRepository) SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetail) error {
+	args := m.Called(ctx, itineraryID, pois)
 	return args.Error(0)
 }
 
+func (m *MockPOIRepository) SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
+	args := m.Called(ctx, poi, cityID)
+	return args.Get(0).(uuid.UUID), args.Error(1)
+}
+
+func (m *MockPOIRepository) CityExists(ctx context.Context, cityID uuid.UUID) (bool, error) {
+	args := m.Called(ctx, cityID)
+	return args.Bool(0), args.Error(1)
+}
+
 // Helper to setup service with mock repository
-func setupPOIServiceTest() (*Service, *MockPOIRepository) {
+func setupPOIServiceTest() (*ServiceImpl, *MockPOIRepository) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})) // or io.Discard
 	mockRepo := new(MockPOIRepository)
 	service := NewServiceImpl(mockRepo, logger)

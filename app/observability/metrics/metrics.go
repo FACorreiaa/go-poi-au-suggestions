@@ -28,7 +28,7 @@ var (
 // It gets the Meter from the globally configured MeterProvider.
 func InitAppMetrics() {
 	once.Do(func() { // Ensure this only runs once
-		meter := otel.GetMeterProvider().Meter("WanderWiseAI") // Get meter from global provider
+		meter := otel.GetMeterProvider().Meter("Loci") // Get meter from global provider
 		var err error
 		m := &AppMetrics{}
 

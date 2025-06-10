@@ -323,13 +323,13 @@ func (s *AuthServiceImpl) getIssuer() string {
 	if s.cfg != nil && s.cfg.JWT.Issuer != "" {
 		return s.cfg.JWT.Issuer
 	}
-	return "wanderwiseai" // Default
+	return "Loci" // Default
 }
 func (s *AuthServiceImpl) getAudience() string {
 	if s.cfg != nil && s.cfg.JWT.Audience != "" {
 		return s.cfg.JWT.Audience
 	}
-	return "wanderwiseai-app" // Default
+	return "Loci-app" // Default
 }
 func (s *AuthServiceImpl) getSecretKey() string {
 	// Already checked for empty in NewAuthService

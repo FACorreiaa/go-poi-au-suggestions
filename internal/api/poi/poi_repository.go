@@ -103,7 +103,7 @@ func (r *RepositoryImpl) SavePoi(ctx context.Context, poi types.POIDetail, cityI
 	var id uuid.UUID
 	if err = tx.QueryRow(ctx, query,
 		poi.Name, poi.DescriptionPOI, poi.Longitude, poi.Latitude, cityID,
-		poi.Category, "wanderwise_ai", poi.DescriptionPOI,
+		poi.Category, "loci_ai", poi.DescriptionPOI,
 	).Scan(&id); err != nil {
 		if err == pgx.ErrNoRows {
 			return uuid.Nil, nil

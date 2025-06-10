@@ -54,6 +54,27 @@ func (m *MocktagsRepo) Update(ctx context.Context, userID uuid.UUID, tagID uuid.
 	return args.Error(0)
 }
 
+func (m *MocktagsRepo) GetTagByName(ctx context.Context, name string) (*types.Tags, error) {
+	args := m.Called(ctx, name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.Tags), args.Error(1)
+}
+
+func (m *MocktagsRepo) LinkPersonalTagToProfile(ctx context.Context, userID, profileID uuid.UUID, tagID uuid.UUID) error {
+	args := m.Called(ctx, userID, profileID, tagID)
+	return args.Error(0)
+}
+
+func (m *MocktagsRepo) GetTagsForProfile(ctx context.Context, profileID uuid.UUID) ([]*types.Tags, error) {
+	args := m.Called(ctx, profileID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*types.Tags), args.Error(1)
+}
+
 // Helper to setup service with mock repository
 func setuptagsServiceTest() (*tagsServiceImpl, *MocktagsRepo) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})) // or io.Discard
@@ -69,8 +90,8 @@ func TesttagsServiceImpl_GetTags(t *testing.T) {
 
 	t.Run("success - tags found", func(t *testing.T) {
 		expectedTags := []*types.Tags{
-			{ID: uuid.New(), Name: "Outdoors", UserID: userID}, // Assuming Tags struct has UserID if they are user-specific "global" tags
-			{ID: uuid.New(), Name: "Foodie", UserID: userID},
+			{ID: uuid.New(), Name: "Outdoors", TagType: "preference"},
+			{ID: uuid.New(), Name: "Foodie", TagType: "preference"},
 		}
 		mockRepo.On("GetAll", ctx, userID).Return(expectedTags, nil).Once()
 
@@ -109,7 +130,7 @@ func TesttagsServiceImpl_GetTag(t *testing.T) {
 	tagID := uuid.New()
 
 	t.Run("success", func(t *testing.T) {
-		expectedTag := &types.Tags{ID: tagID, Name: "Specific Tag", UserID: userID}
+		expectedTag := &types.Tags{ID: tagID, Name: "Specific Tag", TagType: "preference"}
 		mockRepo.On("Get", ctx, userID, tagID).Return(expectedTag, nil).Once()
 
 		tag, err := service.GetTag(ctx, userID, tagID)
@@ -137,13 +158,15 @@ func TesttagsServiceImpl_CreateTag(t *testing.T) {
 	desc := "Loves spicy food"
 	params := types.CreatePersonalTagParams{
 		Name:        "SpicyLover",
-		Description: &desc,
+		Description: desc,
+		TagType:     "preference",
 	}
 	expectedPersonalTag := &types.PersonalTag{
 		ID:          uuid.New(),
 		UserID:      userID,
 		Name:        params.Name,
-		Description: sql.NullString{String: desc, Valid: true},
+		Description: &desc,
+		TagType:     "preference",
 	}
 
 	t.Run("success", func(t *testing.T) {
@@ -201,8 +224,9 @@ func TesttagsServiceImpl_Update(t *testing.T) {
 	newName := "Updated Tag Name"
 	newDesc := "Updated description for tag"
 	params := types.UpdatePersonalTagParams{
-		Name:        &newName,
-		Description: &newDesc,
+		Name:        newName,
+		Description: newDesc,
+		TagType:     "preference",
 	}
 
 	t.Run("success", func(t *testing.T) {

@@ -47,11 +47,17 @@ func TestSettingsServiceImpl_Getsettings(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		expectedSettings := &types.Settings{
-			UserID:               userID,
-			ProfileID:            uuid.New(), // Example
-			ReceiveNotifications: true,
-			Theme:                "dark",
-			Language:             "en",
+			UserID:                userID,
+			DefaultSearchRadiusKm: 10.0,
+			PreferredTime:         types.DayPreference("morning"),
+			DefaultBudgetLevel:    2,
+			PreferredPace:         types.SearchPace("moderate"),
+			PreferAccessiblePOIs:  false,
+			PreferOutdoorSeating:  false,
+			PreferDogFriendly:     false,
+			SearchRadius:          5.0,
+			BudgetLevel:           1,
+			PreferredTransport:    "walking",
 		}
 		mockRepo.On("Get", ctx, userID).Return(expectedSettings, nil).Once()
 
@@ -88,14 +94,10 @@ func TestSettingsServiceImpl_Updatesettings(t *testing.T) {
 	ctx := context.Background()
 	userID := uuid.New()
 	profileID := uuid.New() // Assuming this is a valid ID for an existing settings profile row
-	newTheme := "light"
-	newLang := "es"
-	notificationsFalse := false
-
-	params := types.UserProfile{
-		Theme:    &newTheme,
-		Language: &newLang,
-		//ReceiveNotifications: ¬ificationsFalse,
+	params := types.UpdatesettingsParams{
+		DefaultSearchRadiusKm: &[]float64{15.0}[0],
+		PreferAccessiblePOIs:  &[]bool{true}[0],
+		BudgetLevel:           &[]int{2}[0],
 	}
 
 	t.Run("success", func(t *testing.T) {
@@ -131,7 +133,7 @@ func TestSettingsServiceImpl_Updatesettings(t *testing.T) {
 	t.Run("no actual updates in params (service should still call repo)", func(t *testing.T) {
 		// The service layer currently doesn't check if params is empty, it passes to repo.
 		// The repo's Update method would handle dynamic SQL and do nothing if no fields are set.
-		emptyParams := UpdatesettingsParams{}
+		emptyParams := types.UpdatesettingsParams{}
 		mockRepo.On("Update", ctx, userID, profileID, emptyParams).Return(nil).Once()
 
 		err := service.Updatesettings(ctx, userID, profileID, emptyParams)

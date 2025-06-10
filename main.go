@@ -36,7 +36,7 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/container"
 )
 
-// @title           WanderWiseAI API
+// @title           Loci API
 // @version         1.0
 // @description     API for personalized city discovery and recommendations.
 // @termsOfService  http://swagger.io/terms/
@@ -83,7 +83,7 @@ func main() {
 
 	// --- Initialize Tracing and Metrics ---
 	// change port
-	otelShutdown, err := tracer.InitOtelProviders("WanderWiseAI", ":9090")
+	otelShutdown, err := tracer.InitOtelProviders("Loci", ":9090")
 	if err != nil {
 		logger.Error("Failed to initialize OpenTelemetry providers", slog.Any("error", err))
 		os.Exit(1)

@@ -1819,7 +1819,10 @@ func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceResponse(ctx context
 	resultCh := make(chan types.GenAIResponse, 1)
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go l.getGeneralPOIByDistance(&wg, ctx, userID, city, lat, lon, distance, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.7)})
+	go l.getGeneralPOIByDistance(&wg, ctx, userID, city, lat, lon, distance, resultCh, &genai.GenerateContentConfig{
+		Temperature:     genai.Ptr[float32](0.7),
+		MaxOutputTokens: 16384,
+	})
 	wg.Wait()
 	close(resultCh)
 
@@ -1905,8 +1908,14 @@ func (l *LlmInteractiontServiceImpl) StartNewSession(ctx context.Context, userID
 
 	// Fan-out: Start workers
 	go l.GenerateCityDataWorker(&wg, ctx, cityName, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
-	go l.GenerateGeneralPOIWorker(&wg, ctx, cityName, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
-	go l.GeneratePersonalisedPOIWorker(&wg, ctx, cityName, userID, uuid.Nil, resultCh, interestNames, tagsPromptPart, userPrefs, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	go l.GenerateGeneralPOIWorker(&wg, ctx, cityName, resultCh, &genai.GenerateContentConfig{
+		Temperature:     genai.Ptr[float32](defaultTemperature),
+		MaxOutputTokens: 16384,
+	})
+	go l.GeneratePersonalisedPOIWorker(&wg, ctx, cityName, userID, uuid.Nil, resultCh, interestNames, tagsPromptPart, userPrefs, &genai.GenerateContentConfig{
+		Temperature:     genai.Ptr[float32](defaultTemperature),
+		MaxOutputTokens: 16384,
+	})
 
 	// Close channel after workers complete
 	go func() {

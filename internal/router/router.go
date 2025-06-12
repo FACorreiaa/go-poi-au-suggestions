@@ -82,7 +82,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			//r.Post("/auth/invalidate-tokens", cfg.AuthHandlerImpl.InvalidateAllUserRefreshTokens) // Needs Auth
 
 			// Mount other protected resource routes
-			//r.Mount("/user", UserRoutes(cfg.UserHandlerImpl)) // User routes
+			r.Mount("/user", UserRoutes(cfg.UserHandler)) // User routes
 			r.Mount("/user/interests", interestsRoutes(cfg.InterestHandler))
 			r.Mount("/user/preferences", UserPreferencesRoutes(cfg.SettingsHandler))
 			r.Mount("/user/search-profile", profilesRoutes(cfg.SearchProfileHandler))
@@ -126,16 +126,16 @@ func SetupRouter(cfg *Config) chi.Router {
 }
 
 // UserRoutes creates a router for user-related endpoints
-//func UserRoutes(HandlerImpl *user.HandlerImpl) http.HandlerImpl {
-//	r := chi.NewRouter()
-//
-//	// All user routes require authentication, handled at the parent router level
-//
-//	// User profile routes
-//	r.Get("/profile", HandlerImpl.GetUserProfile)    // GET http://localhost:8000/api/v1/user/profile
-//	r.Put("/profile", HandlerImpl.UpdateUserProfile) // PUT http://localhost:8000/api/v1/user/profile
-//	return r
-//}
+func UserRoutes(HandlerImpl *user.HandlerImpl) http.Handler {
+	r := chi.NewRouter()
+
+	// All user routes require authentication, handled at the parent router level
+
+	// User profile routes
+	r.Get("/profile", HandlerImpl.GetUserProfile)    // GET http://localhost:8000/api/v1/user/profile
+	r.Put("/profile", HandlerImpl.UpdateUserProfile) // PUT http://localhost:8000/api/v1/user/profile
+	return r
+}
 
 func tagsRoutes(HandlerImpl *tags.HandlerImpl) http.Handler {
 	r := chi.NewRouter()

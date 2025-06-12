@@ -38,7 +38,7 @@ repositories:
     port: "5454"
     host: "localhost"
     username: "postgres"
-    db: "loci-ai-dev"
+    db: "loci-dev"
     SSLMODE: "verify-full"
     MAXCONWAITINGTIME: 10
 jwt:

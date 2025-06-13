@@ -1,0 +1,58 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loci-server
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: loci-server
+    app.kubernetes.io/part-of: loci-server-platform
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/your-org/loci-server.git  # Update with your repo URL
+    targetRevision: HEAD
+    path: helm/loci-server
+    helm:
+      releaseName: loci-server
+      valueFiles:
+        - values.yaml
+      values: |
+        image:
+          tag: "latest"
+        ingress:
+          hosts:
+            - host: loci-server.local
+              paths:
+                - path: /
+                  pathType: Prefix
+        postgresql:
+          enabled: true
+        prometheus:
+          enabled: true
+        loki:
+          enabled: true
+        tempo:
+          enabled: true
+        grafana:
+          enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: loci-server
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 3

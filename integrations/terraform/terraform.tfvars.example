@@ -1,0 +1,18 @@
+# Application Configuration
+app_name     = "loci-server"
+app_version  = "latest"
+app_replicas = 2
+
+# Database Configuration
+postgres_user     = "postgres"
+postgres_password = "your-secure-password"
+postgres_db       = "loci-dev"
+
+# JWT Configuration
+jwt_secret   = "your-jwt-secret-key"
+jwt_issuer   = "loci-server"
+jwt_audience = "loci-server-users"
+
+# Ingress Configuration
+domain         = "loci-server.local"
+enable_ingress = true

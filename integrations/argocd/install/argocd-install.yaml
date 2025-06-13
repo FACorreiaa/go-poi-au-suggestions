@@ -1,0 +1,76 @@
+# ArgoCD Installation Configuration
+# This file provides the installation steps and configuration for ArgoCD
+
+# To install ArgoCD, run these commands:
+# kubectl create namespace argocd
+# kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+---
+# ArgoCD Server Service - LoadBalancer for easy access
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-server-lb
+  namespace: argocd
+  labels:
+    app.kubernetes.io/component: server
+    app.kubernetes.io/name: argocd-server
+    app.kubernetes.io/part-of: argocd
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app.kubernetes.io/name: argocd-server
+
+---
+# ArgoCD Ingress for web UI access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server-ingress
+  namespace: argocd
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: argocd.loci-server.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: argocd-server
+            port:
+              number: 80
+
+---
+# ArgoCD ConfigMap for additional configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cmd-params-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cmd-params-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Disable TLS for easier local development
+  server.insecure: "true"
+  
+  # Enable anonymous access (for demo purposes - disable in production)
+  server.anonymous.enabled: "false"
+  
+  # Application in any namespace
+  application.namespaces: "*"

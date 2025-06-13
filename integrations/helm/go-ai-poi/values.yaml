@@ -1,0 +1,183 @@
+# Default values for loci-server
+replicaCount: 2
+
+image:
+  repository: loci-server
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 2000
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: loci-server.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Application specific configuration
+config:
+  port: 8000
+  logLevel: "info"
+  database:
+    host: "postgresql"
+    port: 5432
+    name: "go_ai_poi"
+    username: "postgres"
+    sslMode: "disable"
+  jwt:
+    expiration: "24h"
+  openai:
+    model: "gpt-4"
+
+# Secrets (override in production)
+secrets:
+  database:
+    password: "postgres123"
+  jwt:
+    secret: "your-jwt-secret-key"
+  openai:
+    apiKey: "your-openai-api-key"
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+# PostgreSQL configuration
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "postgres123"
+    database: "go_ai_poi"
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 250m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+
+# Observability stack
+prometheus:
+  enabled: true
+  server:
+    persistentVolume:
+      size: 5Gi
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 250m
+      limits:
+        memory: 1Gi
+        cpu: 500m
+
+loki:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 200m
+
+tempo:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 200m
+
+grafana:
+  enabled: true
+  adminPassword: "admin123"
+  persistence:
+    enabled: true
+    size: 2Gi
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 200m
+  ingress:
+    enabled: true
+    className: "nginx"
+    hosts:
+      - grafana.loci-server.local

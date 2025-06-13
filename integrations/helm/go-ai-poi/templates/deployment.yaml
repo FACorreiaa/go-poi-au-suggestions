@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "loci-server.fullname" . }}
+  labels:
+    {{- include "loci-server.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "loci-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "loci-server.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "loci-server.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.config.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: 8084
+              protocol: TCP
+          {{- if .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: PORT
+              value: "{{ .Values.config.port }}"
+            - name: LOG_LEVEL
+              value: "{{ .Values.config.logLevel }}"
+            - name: DB_HOST
+              value: "{{ .Values.config.database.host }}"
+            - name: DB_PORT
+              value: "{{ .Values.config.database.port }}"
+            - name: DB_NAME
+              value: "{{ .Values.config.database.name }}"
+            - name: DB_USER
+              value: "{{ .Values.config.database.username }}"
+            - name: DB_SSL_MODE
+              value: "{{ .Values.config.database.sslMode }}"
+            - name: JWT_EXPIRATION
+              value: "{{ .Values.config.jwt.expiration }}"
+            - name: OPENAI_MODEL
+              value: "{{ .Values.config.openai.model }}"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "loci-server.fullname" . }}-secrets
+                  key: database-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "loci-server.fullname" . }}-secrets
+                  key: jwt-secret
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "loci-server.fullname" . }}-secrets
+                  key: openai-api-key
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

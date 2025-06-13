@@ -1,0 +1,70 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loci-server-observability
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: loci-server-observability
+    app.kubernetes.io/part-of: loci-server-platform
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/your-org/loci-server.git  # Update with your repo URL
+    targetRevision: HEAD
+    path: helm/loci-server
+    helm:
+      releaseName: loci-server-observability
+      valueFiles:
+        - values.yaml
+      values: |
+        # Disable application deployment for observability-only stack
+        replicaCount: 0
+        
+        # Enable only observability components
+        postgresql:
+          enabled: false
+        prometheus:
+          enabled: true
+          server:
+            ingress:
+              enabled: true
+              className: "nginx"
+              hosts:
+                - prometheus.loci-server.local
+        loki:
+          enabled: true
+          ingress:
+            enabled: true
+            className: "nginx"
+            hosts:
+              - loki.loci-server.local
+        tempo:
+          enabled: true
+        grafana:
+          enabled: true
+          ingress:
+            enabled: true
+            className: "nginx"
+            hosts:
+              - grafana.loci-server.local
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 3

@@ -61,6 +61,73 @@ Direct Google Gemini API integration via `google/generative-ai-go` SDK.**
  reviews/ratings, booking partnerships.
 *   **Phase 3:** Multi-city expansion, curated content, native app exploration.
 
+## 🚀 Elevator Pitch
+
+Tired of generic city guides? **WanderWise** learns what you love—be it history, food, art, nightlife, or hidden gems—and combines it with your available time and location to suggest the perfect spots, activities, and restaurants.
+
+Whether you're a tourist on a tight schedule or a local looking for something new, discover your city like never before with hyper-personalized, intelligent recommendations.
+
+---
+
+## 🌟 Core Features
+
+- **🧠 AI-Powered Personalization**  
+  Recommendations adapt based on explicit user preferences and learned behavior over time.
+
+- **🔍 Contextual Filtering**  
+  Filters results by:
+  - Distance / Location
+  - Available Time (e.g., “things to do in the next 2 hours”)
+  - Opening Hours
+  - User Interests (e.g., "art", "foodie", "outdoors", "history")
+  - Budget (coming soon)
+
+- **🗺 Interactive Map Integration**  
+  Visualize recommendations, your location, and potential routes.
+
+- **📌 Save & Organize**  
+  Bookmark favorites, create custom lists or simple itineraries (enhanced in Premium).
+
+- **📱 Mobile-First Design**  
+  Optimized for on-the-go browsing via web browser.
+
+---
+
+## 💰 Business Model & Monetization
+
+### Freemium Model
+
+- **Free Tier**:
+  - Access to core recommendation engine
+  - Basic preference filters
+  - Limited saves/lists
+  - Non-intrusive contextual ads
+
+- **Premium Tier (Monthly/Annual Subscription)**:
+  - Enhanced AI recommendations
+  - Advanced filters (cuisine, accessibility, niche tags, specific hours)
+  - Unlimited saves & lists
+  - Offline access
+  - Exclusive curated content & themed tours
+  - Ad-free experience
+
+### Partnerships & Commissions
+
+- **Booking Referrals**  
+  Earn commission via integrations with platforms like GetYourGuide, Booking.com, OpenTable, etc.
+
+- **Featured Listings (Transparent)**  
+  Local businesses can pay for premium visibility in relevant results.
+
+- **Exclusive Deals**  
+  Offer users special discounts via business partnerships (potentially Premium-only).
+
+### Future Monetization Options
+
+- One-time in-app purchases (premium guides, city packs)
+- Aggregated anonymized trend data (for tourism boards, researchers)
+
+
 ## 🧪 Getting Started
 
 > 🔧 _Instructions for local setup coming soon._

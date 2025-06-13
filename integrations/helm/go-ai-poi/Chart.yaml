@@ -1,0 +1,39 @@
+apiVersion: v2
+name: loci-server
+description: A Helm chart for Go AI POI application with full observability stack
+type: application
+version: 0.1.0
+appVersion: "latest"
+home: https://github.com/your-org/loci-server
+sources:
+  - https://github.com/your-org/loci-server
+maintainers:
+  - name: Go AI POI Team
+    email: team@loci-server.com
+keywords:
+  - go
+  - ai
+  - poi
+  - travel
+  - recommendations
+dependencies:
+  - name: postgresql
+    version: "12.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+  - name: prometheus
+    version: "23.x.x"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: prometheus.enabled
+  - name: loki
+    version: "5.x.x"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: loki.enabled
+  - name: tempo
+    version: "1.x.x"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: tempo.enabled
+  - name: grafana
+    version: "7.x.x"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: grafana.enabled

@@ -99,14 +99,20 @@ func (r *PostgresUserRepo) ChangePassword(ctx context.Context, email, oldPasswor
 
 func (r *PostgresUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*types.UserProfile, error) {
 	var user types.UserProfile
+	var interests, badges []string
 	query := `
-		SELECT username, firstname, lastname, age, city, 
+		SELECT id, username, firstname, lastname, age, city, 
 		       country, email, display_name, profile_image_url, 
-		       email_verified_at, about_you FROM users WHERE id = $1
+		       email_verified_at, about_you, location, interests, badges,
+		       places_visited, reviews_written, lists_created, followers, following,
+		       is_active, last_login_at, theme, language, created_at, updated_at
+		FROM users WHERE id = $1 AND is_active = TRUE
 	`
-	err := r.pgpool.QueryRow(ctx,
-		query,
-		userID).Scan(&user.Username,
+	
+	stats := &types.UserStats{}
+	err := r.pgpool.QueryRow(ctx, query, userID).Scan(
+		&user.ID,
+		&user.Username,
 		&user.Firstname,
 		&user.Lastname,
 		&user.Age,
@@ -116,10 +122,32 @@ func (r *PostgresUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*
 		&user.DisplayName,
 		&user.ProfileImageURL,
 		&user.EmailVerifiedAt,
-		&user.AboutYou)
+		&user.AboutYou,
+		&user.Location,
+		&interests,
+		&badges,
+		&stats.PlacesVisited,
+		&stats.ReviewsWritten,
+		&stats.ListsCreated,
+		&stats.Followers,
+		&stats.Following,
+		&user.IsActive,
+		&user.LastLoginAt,
+		&user.Theme,
+		&user.Language,
+		&user.CreatedAt,
+		&user.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
+
+	// Set additional fields for frontend compatibility
+	user.Bio = user.AboutYou // Map about_you to bio
+	user.Avatar = user.ProfileImageURL // Map profile_image_url to avatar
+	user.JoinedDate = user.CreatedAt // Map created_at to joinedDate
+	user.Interests = interests
+	user.Badges = badges
+	user.Stats = stats
 
 	return &user, nil
 }
@@ -201,6 +229,24 @@ func (r *PostgresUserRepo) UpdateProfile(ctx context.Context, userID uuid.UUID, 
 		args = append(args, *params.AboutYou)
 		argID++
 		span.SetAttributes(attribute.Bool("update.about_you", true))
+	}
+	if params.Location != nil {
+		setClauses = append(setClauses, fmt.Sprintf("location = $%d", argID))
+		args = append(args, *params.Location)
+		argID++
+		span.SetAttributes(attribute.Bool("update.location", true))
+	}
+	if params.Interests != nil {
+		setClauses = append(setClauses, fmt.Sprintf("interests = $%d", argID))
+		args = append(args, *params.Interests)
+		argID++
+		span.SetAttributes(attribute.Bool("update.interests", true))
+	}
+	if params.Badges != nil {
+		setClauses = append(setClauses, fmt.Sprintf("badges = $%d", argID))
+		args = append(args, *params.Badges)
+		argID++
+		span.SetAttributes(attribute.Bool("update.badges", true))
 	}
 
 	// If no fields were provided to update, return early (or error?)

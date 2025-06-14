@@ -64,7 +64,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			r.Post("/auth/login", cfg.AuthHandler.Login)
 			r.Get("/auth/google", cfg.AuthHandler.LoginWithGoogle)
 			r.Get("/auth/google/callback", cfg.AuthHandler.GoogleCallback)
-			//r.Post("/auth/refresh", cfg.AuthHandlerImpl.RefreshSession) // Assuming RefreshSession exists
+			r.Post("/auth/refresh", cfg.AuthHandler.RefreshToken) // Refresh tokens via HttpOnly cookie
 		})
 
 		// --- Protected Routes ---
@@ -76,7 +76,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			// Mount protected auth routes
 			r.Post("/auth/logout", cfg.AuthHandler.Logout)
 			//r.Get("/auth/session/{sessionID}", cfg.AuthHandlerImpl.GetSession)                    // Needs Auth? Usually yes.
-			r.Get("/auth/validate-session", cfg.AuthHandler.ValidateSession) // Needs Auth
+			r.Post("/auth/validate-session", cfg.AuthHandler.ValidateSession) // Needs Auth
 			//r.Post("/auth/verify-password", cfg.AuthHandlerImpl.VerifyPassword)                   // Needs Auth
 			r.Put("/auth/update-password", cfg.AuthHandler.ChangePassword) // Needs Auth (use PUT for update)
 			//r.Post("/auth/invalidate-tokens", cfg.AuthHandlerImpl.InvalidateAllUserRefreshTokens) // Needs Auth

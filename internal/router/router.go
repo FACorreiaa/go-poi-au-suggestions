@@ -219,7 +219,22 @@ func POIRoutes(HandlerImpl *poi.HandlerImpl) http.Handler {
 	r.Get("/itineraries", HandlerImpl.GetItineraries)                           // GET /api/v1/itineraries?page=1&page_size=20
 	r.Get("/itineraries/itinerary/{itinerary_id}", HandlerImpl.GetItinerary)    // GET /api/v1/itineraries/{uuid}
 	r.Put("/itineraries/itinerary/{itinerary_id}", HandlerImpl.UpdateItinerary) // PUT /api/v1/itineraries/{uuid}
-	r.Get("/search", HandlerImpl.GetPOIs)
+	
+	// Traditional search
+	r.Get("/search", HandlerImpl.GetPOIs) // GET http://localhost:8000/api/v1/pois/search
+	
+	// Semantic search routes
+	r.Route("/search", func(r chi.Router) {
+		r.Get("/semantic", HandlerImpl.SearchPOIsSemantic)           // GET http://localhost:8000/api/v1/pois/search/semantic?query=romantic%20restaurants
+		r.Get("/semantic/city", HandlerImpl.SearchPOIsSemanticByCity) // GET http://localhost:8000/api/v1/pois/search/semantic/city?query=museums&city_id={uuid}
+		r.Get("/hybrid", HandlerImpl.SearchPOIsHybrid)               // GET http://localhost:8000/api/v1/pois/search/hybrid?query=outdoor%20activities&latitude=40.7128&longitude=-74.0060&radius=5.0
+	})
+	
+	// Embedding management routes (for admin/maintenance)
+	r.Route("/embeddings", func(r chi.Router) {
+		r.Post("/generate", HandlerImpl.GenerateEmbeddingsForPOIs) // POST http://localhost:8000/api/v1/pois/embeddings/generate?batch_size=20
+	})
+	
 	return r
 }
 

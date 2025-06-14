@@ -97,6 +97,7 @@ type LlmInteractiontServiceImpl struct {
 	searchProfileRepo  profiles.Repository
 	tagsRepo           tags.Repository
 	aiClient           *generativeAI.AIClient
+	embeddingService   *generativeAI.EmbeddingService
 	llmInteractionRepo Repository
 	cityRepo           city.Repository
 	poiRepo            poi.Repository
@@ -121,6 +122,12 @@ func NewLlmInteractiontService(interestRepo interests.Repository,
 		log.Fatalf("Failed to create AI client: %v", err) // Terminate if initialization fails
 	}
 
+	// Initialize embedding service
+	embeddingService, err := generativeAI.NewEmbeddingService(ctx, logger)
+	if err != nil {
+		log.Fatalf("Failed to create embedding service: %v", err) // Terminate if initialization fails
+	}
+
 	cache := cache.New(24*time.Hour, 1*time.Hour) // Cache for 24 hours with cleanup every hour
 	service := &LlmInteractiontServiceImpl{
 		logger:             logger,
@@ -128,6 +135,7 @@ func NewLlmInteractiontService(interestRepo interests.Repository,
 		interestRepo:       interestRepo,
 		searchProfileRepo:  searchProfileRepo,
 		aiClient:           aiClient,
+		embeddingService:   embeddingService,
 		llmInteractionRepo: llmInteractionRepo,
 		cityRepo:           cityRepo,
 		poiRepo:            poiRepo,
@@ -370,6 +378,158 @@ func (l *LlmInteractiontServiceImpl) GeneratePersonalisedPOIWorker(wg *sync.Wait
 		PersonalisedPOI:      itineraryData.PointsOfInterest,
 		LlmInteractionID:     savedInteractionID,
 	}
+}
+
+// GeneratePersonalisedPOIWorkerWithSemantics generates personalized POIs with semantic search enhancement
+func (l *LlmInteractiontServiceImpl) GeneratePersonalisedPOIWorkerWithSemantics(wg *sync.WaitGroup, ctx context.Context,
+	cityName string, userID, profileID uuid.UUID, resultCh chan<- types.GenAIResponse,
+	interestNames []string, tagsPromptPart string, userPrefs string, semanticPOIs []types.POIDetail,
+	config *genai.GenerateContentConfig) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GeneratePersonalisedPOIWorkerWithSemantics", trace.WithAttributes(
+		attribute.String("city.name", cityName),
+		attribute.String("user.id", userID.String()),
+		attribute.String("profile.id", profileID.String()),
+		attribute.Int("interests.count", len(interestNames)),
+		attribute.Int("semantic_pois.count", len(semanticPOIs)),
+	))
+	defer span.End()
+	defer wg.Done()
+
+	startTime := time.Now()
+
+	// Create enhanced prompt with semantic context
+	prompt := l.getPersonalizedPOIWithSemanticContext(interestNames, cityName, tagsPromptPart, userPrefs, semanticPOIs)
+	span.SetAttributes(attribute.Int("prompt.length", len(prompt)))
+
+	response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to generate semantic-enhanced personalized itinerary")
+		resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to generate semantic-enhanced personalized itinerary: %w", err)}
+		return
+	}
+
+	var txt string
+	for _, candidate := range response.Candidates {
+		if candidate.Content != nil && len(candidate.Content.Parts) > 0 {
+			txt = candidate.Content.Parts[0].Text
+			break
+		}
+	}
+	if txt == "" {
+		err := fmt.Errorf("no valid semantic-enhanced personalized itinerary content from AI")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Empty response from AI")
+		resultCh <- types.GenAIResponse{Err: err}
+		return
+	}
+	span.SetAttributes(attribute.Int("response.length", len(txt)))
+
+	cleanTxt := cleanJSONResponse(txt)
+	var itineraryData struct {
+		ItineraryName      string            `json:"itinerary_name"`
+		OverallDescription string            `json:"overall_description"`
+		PointsOfInterest   []types.POIDetail `json:"points_of_interest"`
+	}
+
+	if err := json.Unmarshal([]byte(cleanTxt), &itineraryData); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to parse semantic-enhanced personalized itinerary JSON")
+		resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to parse semantic-enhanced personalized itinerary JSON: %w", err)}
+		return
+	}
+	span.SetAttributes(
+		attribute.String("itinerary.name", itineraryData.ItineraryName),
+		attribute.Int("personalized_pois.count", len(itineraryData.PointsOfInterest)),
+	)
+
+	latencyMs := int(time.Since(startTime).Milliseconds())
+	span.SetAttributes(attribute.Int("response.latency_ms", latencyMs))
+
+	interaction := types.LlmInteraction{
+		UserID:       userID,
+		Prompt:       prompt,
+		ResponseText: txt,
+		ModelUsed:    model,
+		LatencyMs:    latencyMs,
+		CityName:     cityName,
+	}
+	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to save semantic-enhanced LLM interaction")
+		resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to save semantic-enhanced LLM interaction: %w", err)}
+		return
+	}
+	span.SetAttributes(attribute.String("llm_interaction.id", savedInteractionID.String()))
+	span.SetStatus(codes.Ok, "Semantic-enhanced personalized POIs generated successfully")
+
+	resultCh <- types.GenAIResponse{
+		ItineraryName:        itineraryData.ItineraryName,
+		ItineraryDescription: itineraryData.OverallDescription,
+		PersonalisedPOI:      itineraryData.PointsOfInterest,
+		LlmInteractionID:     savedInteractionID,
+	}
+}
+
+// getPersonalizedPOIWithSemanticContext creates an enhanced prompt with semantic POI context
+func (l *LlmInteractiontServiceImpl) getPersonalizedPOIWithSemanticContext(interestNames []string, cityName, tagsPromptPart, userPrefs string, semanticPOIs []types.POIDetail) string {
+	prompt := fmt.Sprintf(`
+        Generate a personalized trip itinerary for %s, tailored to user interests [%s]. 
+
+        **SEMANTIC CONTEXT - Consider these highly relevant POIs found via semantic search:**
+        `, cityName, strings.Join(interestNames, ", "))
+
+	// Add semantic POI context
+	if len(semanticPOIs) > 0 {
+		prompt += "\n**Contextually Relevant POIs:**\n"
+		for i, poi := range semanticPOIs {
+			if i >= 10 { // Limit context to avoid token overuse
+				break
+			}
+			prompt += fmt.Sprintf("- %s (%s): %s [Lat: %.6f, Lon: %.6f]\n", 
+				poi.Name, poi.Category, poi.DescriptionPOI, poi.Latitude, poi.Longitude)
+		}
+		prompt += "\n**Instructions:** Use these semantic matches as inspiration and context. You may include them directly or use them to find similar places. Ensure variety and avoid exact duplicates.\n\n"
+	}
+
+	prompt += `Include:
+        1. An itinerary name that reflects both user interests and semantic context.
+        2. An overall description highlighting semantic relevance.
+        3. A list of points of interest with name, category, coordinates, and detailed description.
+        Max points of interest allowed by tokens. 
+
+        **PRIORITIZATION:**
+        - Highly weight POIs that align with the semantic context provided
+        - Ensure semantic relevance in descriptions
+        - Balance popular attractions with personalized semantic matches
+        - Include variety across different categories while maintaining semantic coherence
+
+        Format the response in JSON with the following structure:
+        {
+            "itinerary_name": "Name of the itinerary (reflecting semantic context)",
+            "overall_description": "Description emphasizing semantic relevance to user interests",
+            "points_of_interest": [
+                {
+                    "name": "POI name",
+                    "category": "Category",
+                    "coordinates": {
+                        "latitude": float64,
+                        "longitude": float64
+                    },
+                    "description": "Detailed description explaining semantic relevance to user interests and why this matches their preferences"
+                }
+            ]
+        }`
+
+	if tagsPromptPart != "" {
+		prompt += "\n**User Tags Context:** " + tagsPromptPart
+	}
+	if userPrefs != "" {
+		prompt += "\n**User Preferences:** " + userPrefs
+	}
+
+	return prompt
 }
 
 func (l *LlmInteractiontServiceImpl) FetchUserData(ctx context.Context, userID, profileID uuid.UUID) (interests []*types.Interest, searchProfile *types.UserPreferenceProfileResponse, tags []*types.Tags, err error) {
@@ -1901,6 +2061,26 @@ func (l *LlmInteractiontServiceImpl) StartNewSession(ctx context.Context, userID
 		span.AddEvent("User location not available")
 	}
 
+	// Enhance with semantic search context - get contextually relevant POIs
+	var semanticPOIs []types.POIDetail
+	if len(interestNames) > 0 {
+		l.logger.DebugContext(ctx, "Enhancing session with semantic POI recommendations")
+		cityUUID, cityErr := l.cityRepo.GetCityIDByName(ctx, cityName)
+		if cityErr == nil {
+			// Generate semantic recommendations based on user message and interests
+			searchQuery := fmt.Sprintf("%s %s", message, strings.Join(interestNames, " "))
+			semanticPOIs, err = l.enhancePOIRecommendationsWithSemantics(ctx, searchQuery, cityUUID, interestNames, 20)
+			if err != nil {
+				l.logger.WarnContext(ctx, "Failed to get semantic POI recommendations", slog.Any("error", err))
+				span.AddEvent("Semantic POI recommendations failed")
+			} else {
+				l.logger.InfoContext(ctx, "Enhanced session with semantic POI context", 
+					slog.Int("semantic_pois_count", len(semanticPOIs)))
+				span.SetAttributes(attribute.Int("semantic_pois.count", len(semanticPOIs)))
+			}
+		}
+	}
+
 	// Set up channels and wait group for fan-in fan-out
 	resultCh := make(chan types.GenAIResponse, 3)
 	var wg sync.WaitGroup
@@ -1912,7 +2092,7 @@ func (l *LlmInteractiontServiceImpl) StartNewSession(ctx context.Context, userID
 		Temperature:     genai.Ptr[float32](defaultTemperature),
 		MaxOutputTokens: 16384,
 	})
-	go l.GeneratePersonalisedPOIWorker(&wg, ctx, cityName, userID, uuid.Nil, resultCh, interestNames, tagsPromptPart, userPrefs, &genai.GenerateContentConfig{
+	go l.GeneratePersonalisedPOIWorkerWithSemantics(&wg, ctx, cityName, userID, uuid.Nil, resultCh, interestNames, tagsPromptPart, userPrefs, semanticPOIs, &genai.GenerateContentConfig{
 		Temperature:     genai.Ptr[float32](defaultTemperature),
 		MaxOutputTokens: 16384,
 	})
@@ -2045,6 +2225,17 @@ func (l *LlmInteractiontServiceImpl) ContinueSession(ctx context.Context, sessio
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to classify intent")
 		return nil, fmt.Errorf("failed to classify intent: %w", err)
+	}
+
+	// Enhance with semantic POI recommendations for all intents
+	semanticPOIs, err := l.generateSemanticPOIRecommendations(ctx, message, cityID, session.UserID, userLocation, 0.6)
+	if err != nil {
+		l.logger.WarnContext(ctx, "Failed to generate semantic POI recommendations", slog.Any("error", err))
+		span.AddEvent("Semantic POI recommendations failed")
+	} else {
+		l.logger.InfoContext(ctx, "Generated semantic POI recommendations for session", 
+			slog.Int("semantic_recommendations", len(semanticPOIs)))
+		span.SetAttributes(attribute.Int("semantic_recommendations.count", len(semanticPOIs)))
 	}
 
 	var responseText string
@@ -2255,4 +2446,477 @@ func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiNam
 		attribute.String("llm_interaction.id", llmInteractionID.String()),
 	)
 	return poiData, nil
+}
+
+// enhancePOIRecommendationsWithSemantics uses embeddings to find similar POIs and enrich recommendations
+func (l *LlmInteractiontServiceImpl) enhancePOIRecommendationsWithSemantics(ctx context.Context, userMessage string, cityID uuid.UUID, userPreferences []string, limit int) ([]types.POIDetail, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "enhancePOIRecommendationsWithSemantics", trace.WithAttributes(
+		attribute.String("user.message", userMessage),
+		attribute.String("city.id", cityID.String()),
+		attribute.Int("limit", limit),
+	))
+	defer span.End()
+
+	l.logger.DebugContext(ctx, "Enhancing POI recommendations with semantic search", 
+		slog.String("message", userMessage),
+		slog.String("city_id", cityID.String()))
+
+	if l.embeddingService == nil {
+		l.logger.WarnContext(ctx, "Embedding service not available, falling back to traditional search")
+		span.AddEvent("Embedding service not available")
+		return []types.POIDetail{}, nil
+	}
+
+	// Generate embedding for user message combined with preferences
+	searchQuery := userMessage
+	if len(userPreferences) > 0 {
+		searchQuery += " " + strings.Join(userPreferences, " ")
+	}
+
+	queryEmbedding, err := l.embeddingService.GenerateQueryEmbedding(ctx, searchQuery)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to generate query embedding", 
+			slog.Any("error", err),
+			slog.String("query", searchQuery))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to generate query embedding")
+		return []types.POIDetail{}, fmt.Errorf("failed to generate query embedding: %w", err)
+	}
+
+	// Search for similar POIs in the city
+	similarPOIs, err := l.poiRepo.FindSimilarPOIsByCity(ctx, queryEmbedding, cityID, limit)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to find similar POIs", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to find similar POIs")
+		return []types.POIDetail{}, fmt.Errorf("failed to find similar POIs: %w", err)
+	}
+
+	l.logger.InfoContext(ctx, "Found semantically similar POIs", 
+		slog.Int("count", len(similarPOIs)),
+		slog.String("city_id", cityID.String()))
+	span.SetAttributes(
+		attribute.Int("similar_pois.count", len(similarPOIs)),
+		attribute.String("search.query", searchQuery),
+	)
+	span.SetStatus(codes.Ok, "Semantic POI recommendations enhanced")
+
+	return similarPOIs, nil
+}
+
+// enhanceConversationContextWithSemantics adds semantic understanding to chat interactions
+func (l *LlmInteractiontServiceImpl) enhanceConversationContextWithSemantics(ctx context.Context, sessionID uuid.UUID, userMessage string) (string, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "enhanceConversationContextWithSemantics", trace.WithAttributes(
+		attribute.String("session.id", sessionID.String()),
+		attribute.String("user.message", userMessage),
+	))
+	defer span.End()
+
+	l.logger.DebugContext(ctx, "Enhancing conversation context with semantic understanding", 
+		slog.String("session_id", sessionID.String()),
+		slog.String("message", userMessage))
+
+	if l.embeddingService == nil {
+		l.logger.WarnContext(ctx, "Embedding service not available for conversation enhancement")
+		span.AddEvent("Embedding service not available")
+		return "", nil
+	}
+
+	// Get session to understand the context
+	session, err := l.llmInteractionRepo.GetSession(ctx, sessionID)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to get session for context enhancement", slog.Any("error", err))
+		span.RecordError(err)
+		return "", fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Find city
+	city, err := l.cityRepo.FindCityByNameAndCountry(ctx, session.SessionContext.CityName, "")
+	if err != nil || city == nil {
+		l.logger.ErrorContext(ctx, "Failed to find city for semantic enhancement", slog.Any("error", err))
+		span.RecordError(err)
+		return "", fmt.Errorf("city not found: %w", err)
+	}
+
+	// Generate embedding for the user message
+	messageEmbedding, err := l.embeddingService.GenerateQueryEmbedding(ctx, userMessage)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to generate message embedding", slog.Any("error", err))
+		span.RecordError(err)
+		return "", fmt.Errorf("failed to generate message embedding: %w", err)
+	}
+
+	// Find contextually relevant POIs
+	contextualPOIs, err := l.poiRepo.FindSimilarPOIsByCity(ctx, messageEmbedding, city.ID, 5)
+	if err != nil {
+		l.logger.WarnContext(ctx, "Failed to find contextual POIs", slog.Any("error", err))
+		span.RecordError(err)
+		// Don't fail the conversation, just return empty context
+		return "", nil
+	}
+
+	// Build enhanced context string
+	var contextBuilder strings.Builder
+	contextBuilder.WriteString(fmt.Sprintf("Based on your message '%s', here are some relevant places in %s:\n", 
+		userMessage, session.SessionContext.CityName))
+
+	for i, poi := range contextualPOIs {
+		if i >= 3 { // Limit to top 3 for context
+			break
+		}
+		contextBuilder.WriteString(fmt.Sprintf("- %s (%s): %s\n", 
+			poi.Name, poi.Category, poi.DescriptionPOI))
+	}
+
+	enhancedContext := contextBuilder.String()
+
+	l.logger.InfoContext(ctx, "Enhanced conversation context with semantic POI recommendations", 
+		slog.String("session_id", sessionID.String()),
+		slog.Int("contextual_pois", len(contextualPOIs)))
+	span.SetAttributes(
+		attribute.String("enhanced.context", enhancedContext),
+		attribute.Int("contextual_pois.count", len(contextualPOIs)),
+	)
+	span.SetStatus(codes.Ok, "Conversation context enhanced with semantics")
+
+	return enhancedContext, nil
+}
+
+// generateSemanticPOIRecommendations generates POI recommendations using semantic search
+func (l *LlmInteractiontServiceImpl) generateSemanticPOIRecommendations(ctx context.Context, userMessage string, cityID uuid.UUID, userID uuid.UUID, userLocation *types.UserLocation, semanticWeight float64) ([]types.POIDetail, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "generateSemanticPOIRecommendations", trace.WithAttributes(
+		attribute.String("user.message", userMessage),
+		attribute.String("city.id", cityID.String()),
+		attribute.String("user.id", userID.String()),
+		attribute.Float64("semantic.weight", semanticWeight),
+	))
+	defer span.End()
+
+	l.logger.DebugContext(ctx, "Generating semantic POI recommendations", 
+		slog.String("message", userMessage),
+		slog.String("city_id", cityID.String()),
+		slog.Float64("semantic_weight", semanticWeight))
+
+	if l.embeddingService == nil {
+		err := fmt.Errorf("embedding service not available")
+		l.logger.ErrorContext(ctx, "Embedding service not available", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Embedding service not available")
+		return nil, err
+	}
+
+	// Generate embedding for user message
+	queryEmbedding, err := l.embeddingService.GenerateQueryEmbedding(ctx, userMessage)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to generate query embedding", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to generate query embedding")
+		return nil, fmt.Errorf("failed to generate query embedding: %w", err)
+	}
+
+	var pois []types.POIDetail
+
+	// If user location is available, use hybrid search (spatial + semantic)
+	if userLocation != nil && userLocation.UserLat != 0 && userLocation.UserLon != 0 {
+		filter := types.POIFilter{
+			Location: types.GeoPoint{
+				Latitude:  userLocation.UserLat,
+				Longitude: userLocation.UserLon,
+			},
+			Radius: userLocation.SearchRadiusKm,
+		}
+
+		hybridPOIs, err := l.poiRepo.SearchPOIsHybrid(ctx, filter, queryEmbedding, semanticWeight)
+		if err != nil {
+			l.logger.ErrorContext(ctx, "Failed to perform hybrid search", slog.Any("error", err))
+			span.RecordError(err)
+			// Fall back to semantic-only search
+		} else {
+			pois = hybridPOIs
+			l.logger.InfoContext(ctx, "Used hybrid search for POI recommendations", 
+				slog.Int("poi_count", len(pois)))
+			span.AddEvent("Used hybrid search")
+		}
+	}
+
+	// If hybrid search failed or no location available, use semantic-only search
+	if len(pois) == 0 {
+		semanticPOIs, err := l.poiRepo.FindSimilarPOIsByCity(ctx, queryEmbedding, cityID, 10)
+		if err != nil {
+			l.logger.ErrorContext(ctx, "Failed to find similar POIs", slog.Any("error", err))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to find similar POIs")
+			return nil, fmt.Errorf("failed to find similar POIs: %w", err)
+		}
+		pois = semanticPOIs
+		l.logger.InfoContext(ctx, "Used semantic-only search for POI recommendations", 
+			slog.Int("poi_count", len(pois)))
+		span.AddEvent("Used semantic-only search")
+	}
+
+	// Generate embeddings for new POIs if needed
+	for i, poi := range pois {
+		if poi.ID == uuid.Nil {
+			continue
+		}
+		
+		// Generate embedding for this POI if it doesn't have one
+		embedding, err := l.embeddingService.GeneratePOIEmbedding(ctx, poi.Name, poi.DescriptionPOI, poi.Category)
+		if err != nil {
+			l.logger.WarnContext(ctx, "Failed to generate embedding for POI", 
+				slog.Any("error", err),
+				slog.String("poi_name", poi.Name))
+			continue
+		}
+
+		// Update POI with embedding
+		err = l.poiRepo.UpdatePOIEmbedding(ctx, poi.ID, embedding)
+		if err != nil {
+			l.logger.WarnContext(ctx, "Failed to update POI embedding", 
+				slog.Any("error", err),
+				slog.String("poi_id", poi.ID.String()))
+		}
+
+		pois[i] = poi
+	}
+
+	l.logger.InfoContext(ctx, "Generated semantic POI recommendations", 
+		slog.String("message", userMessage),
+		slog.Int("recommendations", len(pois)))
+	span.SetAttributes(
+		attribute.String("search.query", userMessage),
+		attribute.Int("recommendations.count", len(pois)),
+		attribute.Float64("semantic.weight", semanticWeight),
+	)
+	span.SetStatus(codes.Ok, "Semantic POI recommendations generated")
+
+	return pois, nil
+}
+
+// handleSemanticAddPOI handles adding POIs with semantic search enhancement
+func (l *LlmInteractiontServiceImpl) handleSemanticAddPOI(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetail, userLocation *types.UserLocation, cityID uuid.UUID) (string, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "handleSemanticAddPOI")
+	defer span.End()
+
+	// Try semantic matching first - look for POIs semantically similar to the user's request
+	if len(semanticPOIs) > 0 {
+		// Check if any semantic POI matches what user is asking for
+		for _, semanticPOI := range semanticPOIs[:min(3, len(semanticPOIs))] {
+			// Check if this semantic POI is already in itinerary
+			alreadyExists := false
+			for _, existingPOI := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
+				if strings.EqualFold(existingPOI.Name, semanticPOI.Name) {
+					alreadyExists = true
+					break
+				}
+			}
+			
+			if !alreadyExists {
+				// Add semantic POI to itinerary
+				session.CurrentItinerary.AIItineraryResponse.PointsOfInterest = append(
+					session.CurrentItinerary.AIItineraryResponse.PointsOfInterest, semanticPOI)
+				l.logger.InfoContext(ctx, "Added semantic POI to itinerary", 
+					slog.String("poi_name", semanticPOI.Name))
+				span.SetAttributes(attribute.String("added_poi", semanticPOI.Name))
+				return fmt.Sprintf("Great! I found %s which matches what you're looking for. I've added it to your itinerary. %s", 
+					semanticPOI.Name, semanticPOI.DescriptionPOI), nil
+			}
+		}
+
+		// If semantic POIs exist but all are already in itinerary
+		return fmt.Sprintf("I found some great options matching your request, but they're already in your itinerary. Here are some suggestions: %s", 
+			strings.Join(func() []string {
+				var names []string
+				for i, poi := range semanticPOIs[:min(3, len(semanticPOIs))] {
+					names = append(names, poi.Name)
+					if i >= 2 { break }
+				}
+				return names
+			}(), ", ")), nil
+	}
+
+	// Fallback to traditional POI name extraction and generation
+	poiName := extractPOIName(message)
+	if poiName == "" {
+		return "I'd be happy to add a POI to your itinerary! Could you please specify which place you'd like to add?", nil
+	}
+
+	// Check if already exists
+	for _, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
+		if strings.EqualFold(poi.Name, poiName) {
+			return fmt.Sprintf("%s is already in your itinerary.", poiName), nil
+		}
+	}
+
+	// Generate new POI data
+	newPOI, err := l.generatePOIData(ctx, poiName, session.SessionContext.CityName, userLocation, session.UserID, cityID)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to generate POI data", slog.Any("error", err))
+		span.RecordError(err)
+		return "", fmt.Errorf("failed to generate POI data: %w", err)
+	}
+
+	session.CurrentItinerary.AIItineraryResponse.PointsOfInterest = append(
+		session.CurrentItinerary.AIItineraryResponse.PointsOfInterest, newPOI)
+	return fmt.Sprintf("I've added %s to your itinerary.", poiName), nil
+}
+
+// handleSemanticRemovePOI handles removing POIs with semantic understanding
+func (l *LlmInteractiontServiceImpl) handleSemanticRemovePOI(ctx context.Context, message string, session *types.ChatSession) string {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "handleSemanticRemovePOI")
+	defer span.End()
+
+	poiName := extractPOIName(message)
+	if poiName == "" {
+		return "I'd be happy to remove a POI from your itinerary! Could you please specify which place you'd like to remove?"
+	}
+
+	// Use semantic matching for removal - be more flexible with name matching
+	for i, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
+		// Check for exact match or semantic similarity
+		if strings.EqualFold(poi.Name, poiName) || 
+		   strings.Contains(strings.ToLower(poi.Name), strings.ToLower(poiName)) ||
+		   strings.Contains(strings.ToLower(poiName), strings.ToLower(poi.Name)) {
+			
+			removedName := poi.Name
+			session.CurrentItinerary.AIItineraryResponse.PointsOfInterest = append(
+				session.CurrentItinerary.AIItineraryResponse.PointsOfInterest[:i],
+				session.CurrentItinerary.AIItineraryResponse.PointsOfInterest[i+1:]...,
+			)
+			l.logger.InfoContext(ctx, "Removed POI from itinerary", 
+				slog.String("removed_poi", removedName))
+			span.SetAttributes(attribute.String("removed_poi", removedName))
+			return fmt.Sprintf("I've removed %s from your itinerary.", removedName)
+		}
+	}
+
+	return fmt.Sprintf("I couldn't find %s in your itinerary. Here's what you currently have: %s", 
+		poiName, strings.Join(func() []string {
+			var names []string
+			for _, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
+				names = append(names, poi.Name)
+			}
+			return names
+		}(), ", "))
+}
+
+// handleSemanticQuestion handles questions with contextual semantic information
+func (l *LlmInteractiontServiceImpl) handleSemanticQuestion(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetail) string {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "handleSemanticQuestion")
+	defer span.End()
+
+	var response strings.Builder
+	response.WriteString("I'm here to help with your trip planning! ")
+
+	// Add semantic context if available
+	if len(semanticPOIs) > 0 {
+		response.WriteString("Based on your question, here are some relevant suggestions for ")
+		response.WriteString(session.SessionContext.CityName)
+		response.WriteString(":\n\n")
+		
+		for i, poi := range semanticPOIs[:min(3, len(semanticPOIs))] {
+			response.WriteString(fmt.Sprintf("• %s (%s): %s\n", 
+				poi.Name, poi.Category, poi.DescriptionPOI))
+			if i >= 2 { break }
+		}
+		
+		response.WriteString("\nWould you like me to add any of these to your itinerary?")
+	} else {
+		response.WriteString("What specifically would you like to know about your trip to ")
+		response.WriteString(session.SessionContext.CityName)
+		response.WriteString("?")
+	}
+
+	l.logger.InfoContext(ctx, "Provided semantic question response", 
+		slog.Int("semantic_suggestions", len(semanticPOIs)))
+	span.SetAttributes(attribute.Int("semantic_suggestions.count", len(semanticPOIs)))
+
+	return response.String()
+}
+
+// handleSemanticModifyItinerary handles itinerary modifications with semantic understanding
+func (l *LlmInteractiontServiceImpl) handleSemanticModifyItinerary(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetail, userLocation *types.UserLocation, cityID uuid.UUID) (string, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "handleSemanticModifyItinerary")
+	defer span.End()
+
+	// Check for replacement pattern with semantic enhancement
+	if matches := regexp.MustCompile(`replace\s+(.+?)\s+with\s+(.+?)(?:\s+in\s+my\s+itinerary)?`).FindStringSubmatch(strings.ToLower(message)); len(matches) == 3 {
+		oldPOI := matches[1]
+		newPOIName := matches[2]
+		
+		// Find POI to replace with semantic matching
+		for i, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
+			if strings.Contains(strings.ToLower(poi.Name), oldPOI) {
+				// First try to find semantic match for replacement
+				var newPOI types.POIDetail
+				var found bool
+				
+				for _, semanticPOI := range semanticPOIs {
+					if strings.Contains(strings.ToLower(semanticPOI.Name), strings.ToLower(newPOIName)) ||
+					   strings.Contains(strings.ToLower(newPOIName), strings.ToLower(semanticPOI.Name)) {
+						newPOI = semanticPOI
+						found = true
+						break
+					}
+				}
+				
+				// If no semantic match, generate POI data
+				if !found {
+					var err error
+					newPOI, err = l.generatePOIData(ctx, newPOIName, session.SessionContext.CityName, userLocation, session.UserID, cityID)
+					if err != nil {
+						l.logger.ErrorContext(ctx, "Failed to generate POI data for replacement", slog.Any("error", err))
+						span.RecordError(err)
+						return "", fmt.Errorf("failed to generate POI data for replacement: %w", err)
+					}
+				}
+				
+				oldName := poi.Name
+				session.CurrentItinerary.AIItineraryResponse.PointsOfInterest[i] = newPOI
+				l.logger.InfoContext(ctx, "Replaced POI in itinerary", 
+					slog.String("old_poi", oldName),
+					slog.String("new_poi", newPOI.Name),
+					slog.Bool("semantic_match", found))
+				span.SetAttributes(
+					attribute.String("old_poi", oldName),
+					attribute.String("new_poi", newPOI.Name),
+					attribute.Bool("semantic_match", found),
+				)
+				
+				if found {
+					return fmt.Sprintf("Perfect! I found %s which matches your request and replaced %s with it. %s", 
+						newPOI.Name, oldName, newPOI.DescriptionPOI), nil
+				} else {
+					return fmt.Sprintf("I've replaced %s with %s in your itinerary.", oldName, newPOI.Name), nil
+				}
+			}
+		}
+		return fmt.Sprintf("I couldn't find %s in your itinerary to replace.", oldPOI), nil
+	}
+
+	// General modification request - suggest semantic alternatives
+	if len(semanticPOIs) > 0 {
+		var response strings.Builder
+		response.WriteString("I understand you'd like to modify your itinerary. ")
+		response.WriteString("Based on your message, here are some relevant suggestions:\n\n")
+		
+		for i, poi := range semanticPOIs[:min(3, len(semanticPOIs))] {
+			response.WriteString(fmt.Sprintf("• %s (%s): %s\n", 
+				poi.Name, poi.Category, poi.DescriptionPOI))
+			if i >= 2 { break }
+		}
+		
+		response.WriteString("\nWould you like me to add any of these, or could you be more specific about what changes you'd like (e.g., 'replace X with Y')?")
+		return response.String(), nil
+	}
+
+	return "I'd be happy to help modify your itinerary! Could you please be more specific about what changes you'd like (e.g., 'replace X with Y' or 'add more museums')?", nil
+}
+
+// min helper function
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

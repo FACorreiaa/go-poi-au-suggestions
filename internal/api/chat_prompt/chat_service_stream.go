@@ -526,6 +526,179 @@ func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorker(wg *sync.Wai
 	resultCh <- result
 }
 
+// streamingPersonalizedPOIWorkerWithSemantics generates personalized POIs with semantic context and streaming updates
+func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorkerWithSemantics(wg *sync.WaitGroup, ctx context.Context, cityName string, userID, profileID uuid.UUID, resultCh chan<- types.GenAIResponse, eventCh chan<- types.StreamEvent, interestNames []string, tagsPromptPart, userPrefs string, semanticPOIs []types.POIDetail) {
+	defer wg.Done()
+
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "streamingPersonalizedPOIWorkerWithSemantics", trace.WithAttributes(
+		attribute.String("city.name", cityName),
+		attribute.String("user.id", userID.String()),
+		attribute.String("profile.id", profileID.String()),
+		attribute.Int("semantic_pois.count", len(semanticPOIs)),
+	))
+	defer span.End()
+
+	l.sendEvent(ctx, eventCh, types.StreamEvent{
+		Type: types.EventTypeProgress,
+		Data: map[string]interface{}{
+			"status":           "generating_semantic_personalized_pois",
+			"progress":         50,
+			"semantic_context": len(semanticPOIs) > 0,
+		},
+		Timestamp: time.Now(),
+		EventID:   uuid.New().String(),
+	})
+
+	startTime := time.Now()
+	prompt := l.getPersonalizedPOIWithSemanticContext(interestNames, cityName, tagsPromptPart, userPrefs, semanticPOIs)
+	var responseText strings.Builder
+
+	// Try streaming
+	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	if err == nil {
+		for resp, err := range iter {
+			if err != nil {
+				span.RecordError(err)
+				l.sendEvent(ctx, eventCh, types.StreamEvent{
+					Type:      types.EventTypeError,
+					Error:     fmt.Sprintf("streaming semantic personalized POI error: %v", err),
+					Timestamp: time.Now(),
+					EventID:   uuid.New().String(),
+				})
+				resultCh <- types.GenAIResponse{Err: err}
+				return
+			}
+			for _, cand := range resp.Candidates {
+				if cand.Content != nil {
+					for _, part := range cand.Content.Parts {
+						if part.Text != "" {
+							responseText.WriteString(string(part.Text))
+							l.sendEvent(ctx, eventCh, types.StreamEvent{
+								Type: types.EventTypePersonalizedPOI,
+								Data: map[string]interface{}{
+									"partial_poi_data":       responseText.String(),
+									"semantic_enhanced":      true,
+									"semantic_context_count": len(semanticPOIs),
+								},
+								Timestamp: time.Now(),
+								EventID:   uuid.New().String(),
+							})
+						}
+					}
+				}
+			}
+		}
+	} else {
+		// Fallback to non-streaming
+		l.logger.WarnContext(ctx, "Streaming semantic personalized POIs failed, falling back to non-streaming", slog.Any("error", err))
+		response, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+		if err != nil {
+			span.RecordError(err)
+			l.sendEvent(ctx, eventCh, types.StreamEvent{
+				Type:      types.EventTypeError,
+				Error:     fmt.Sprintf("failed to generate semantic personalized POIs: %v", err),
+				Timestamp: time.Now(),
+				EventID:   uuid.New().String(),
+			})
+			resultCh <- types.GenAIResponse{Err: err}
+			return
+		}
+		for _, cand := range response.Candidates {
+			if cand.Content != nil {
+				for _, part := range cand.Content.Parts {
+					if part.Text != "" {
+						responseText.WriteString(string(part.Text))
+					}
+				}
+			}
+		}
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type: types.EventTypePersonalizedPOI,
+			Data: map[string]interface{}{
+				"partial_poi_data":       responseText.String(),
+				"semantic_enhanced":      true,
+				"semantic_context_count": len(semanticPOIs),
+			},
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		})
+	}
+
+	fullText := responseText.String()
+	if fullText == "" {
+		err := fmt.Errorf("empty semantic personalized POI response")
+		span.RecordError(err)
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     err.Error(),
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		})
+		resultCh <- types.GenAIResponse{Err: err}
+		return
+	}
+
+	// Save LLM interaction with semantic metadata
+	latencyMs := int(time.Since(startTime).Milliseconds())
+	interaction := types.LlmInteraction{
+		UserID:       userID,
+		Prompt:       prompt,
+		ResponseText: fullText,
+		ModelUsed:    model,
+		LatencyMs:    latencyMs,
+		CityName:     cityName,
+	}
+	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
+	if err != nil {
+		span.RecordError(err)
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     fmt.Sprintf("failed to save semantic personalized POI interaction: %v", err),
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		})
+		resultCh <- types.GenAIResponse{Err: err}
+		return
+	}
+
+	cleanTxt := cleanJSONResponse(fullText)
+	var itineraryData struct {
+		ItineraryName      string            `json:"itinerary_name"`
+		OverallDescription string            `json:"overall_description"`
+		PointsOfInterest   []types.POIDetail `json:"points_of_interest"`
+	}
+	if err := json.Unmarshal([]byte(cleanTxt), &itineraryData); err != nil {
+		span.RecordError(err)
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     fmt.Sprintf("failed to parse semantic personalized POI JSON: %v", err),
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		})
+		resultCh <- types.GenAIResponse{Err: err}
+		return
+	}
+
+	result := types.GenAIResponse{
+		ItineraryName:        itineraryData.ItineraryName,
+		ItineraryDescription: itineraryData.OverallDescription,
+		PersonalisedPOI:      itineraryData.PointsOfInterest,
+		LlmInteractionID:     savedInteractionID,
+	}
+
+	l.sendEvent(ctx, eventCh, types.StreamEvent{
+		Type: types.EventTypePersonalizedPOI,
+		Data: map[string]interface{}{
+			"result":                 result,
+			"semantic_enhanced":      true,
+			"semantic_context_count": len(semanticPOIs),
+		},
+		Timestamp: time.Now(),
+		EventID:   uuid.New().String(),
+	})
+	resultCh <- result
+}
+
 func (l *LlmInteractiontServiceImpl) StartNewSessionStreamed(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (*types.StreamingResponse, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "StartNewSessionStreamed", trace.WithAttributes(
 		attribute.String("city.name", cityName),
@@ -597,6 +770,46 @@ func (l *LlmInteractiontServiceImpl) StartNewSessionStreamed(ctx context.Context
 
 		interestNames, tagsPromptPart, userPrefs := l.PreparePromptData(interests, tags, searchProfile)
 
+		// Enhance with semantic search context - get contextually relevant POIs
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeProgress,
+			Data:      map[string]interface{}{"status": "generating_semantic_context", "progress": 10},
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		})
+
+		var semanticPOIs []types.POIDetail
+		if len(interestNames) > 0 {
+			cityUUID, cityErr := l.cityRepo.GetCityIDByName(ctx, cityName)
+			if cityErr == nil {
+				// Generate semantic recommendations based on user message and interests
+				searchQuery := fmt.Sprintf("%s %s", message, strings.Join(interestNames, " "))
+				semanticPOIs, err = l.enhancePOIRecommendationsWithSemantics(ctx, searchQuery, cityUUID, interestNames, 20)
+				if err != nil {
+					l.logger.WarnContext(ctx, "Failed to get semantic POI recommendations", slog.Any("error", err))
+					l.sendEvent(ctx, eventCh, types.StreamEvent{
+						Type:      types.EventTypeProgress,
+						Data:      map[string]interface{}{"status": "semantic_context_failed", "progress": 12},
+						Timestamp: time.Now(),
+						EventID:   uuid.New().String(),
+					})
+				} else {
+					l.logger.InfoContext(ctx, "Enhanced streaming session with semantic POI context",
+						slog.Int("semantic_pois_count", len(semanticPOIs)))
+					l.sendEvent(ctx, eventCh, types.StreamEvent{
+						Type: types.EventTypeProgress,
+						Data: map[string]interface{}{
+							"status":              "semantic_context_generated",
+							"progress":            15,
+							"semantic_pois_count": len(semanticPOIs),
+						},
+						Timestamp: time.Now(),
+						EventID:   uuid.New().String(),
+					})
+				}
+			}
+		}
+
 		// Channels for worker results
 		cityDataCh := make(chan types.GenAIResponse, 1)
 		generalPOICh := make(chan types.GenAIResponse, 1)
@@ -607,7 +820,7 @@ func (l *LlmInteractiontServiceImpl) StartNewSessionStreamed(ctx context.Context
 
 		go l.streamingCityDataWorker(&wg, ctx, cityName, cityDataCh, eventCh, userID)
 		go l.streamingGeneralPOIWorker(&wg, ctx, cityName, generalPOICh, eventCh, userID)
-		go l.streamingPersonalizedPOIWorker(&wg, ctx, cityName, userID, profileID, personalizedPOICh, eventCh, interestNames, tagsPromptPart, userPrefs)
+		go l.streamingPersonalizedPOIWorkerWithSemantics(&wg, ctx, cityName, userID, profileID, personalizedPOICh, eventCh, interestNames, tagsPromptPart, userPrefs, semanticPOIs)
 
 		go func() {
 			wg.Wait()
@@ -821,6 +1034,32 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 	l.logger.InfoContext(ctx, "Intent classified", slog.String("intent", string(intent)))
 	l.sendEvent(ctx, eventCh, types.StreamEvent{Type: "intent_classified", Data: map[string]string{"intent": string(intent)}})
 
+	// --- 5. Enhance with Semantic POI Recommendations ---
+	l.sendEvent(ctx, eventCh, types.StreamEvent{
+		Type: types.EventTypeProgress,
+		Data: map[string]interface{}{"status": "generating_semantic_context", "progress": 20},
+	})
+
+	semanticPOIs, err := l.generateSemanticPOIRecommendations(ctx, message, cityID, session.UserID, userLocation, 0.6)
+	if err != nil {
+		l.logger.WarnContext(ctx, "Failed to generate semantic POI recommendations for streaming session", slog.Any("error", err))
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type: types.EventTypeProgress,
+			Data: map[string]interface{}{"status": "semantic_context_failed", "progress": 22},
+		})
+	} else {
+		l.logger.InfoContext(ctx, "Generated semantic POI recommendations for streaming session",
+			slog.Int("semantic_recommendations", len(semanticPOIs)))
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type: "semantic_context_generated",
+			Data: map[string]interface{}{
+				"status":                         "semantic_context_ready",
+				"semantic_recommendations_count": len(semanticPOIs),
+				"progress":                       25,
+			},
+		})
+	}
+
 	// --- 5. Handle Intent and Generate Response ---
 	var finalResponseMessage string
 	var assistantMessageType types.MessageType = types.TypeResponse
@@ -828,55 +1067,25 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 
 	switch intent { // Align with ContinueSession's string-based intents
 	case types.IntentAddPOI:
-		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Adding Point of Interest..."})
-		poiName := extractPOIName(message)
-		isDuplicate := false
-		for _, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
-			if strings.EqualFold(poi.Name, poiName) {
-				finalResponseMessage = fmt.Sprintf("It looks like '%s' is already in your itinerary.", poiName)
-				isDuplicate = true
-				break
-			}
-		}
-		if !isDuplicate {
-			if poiName == "Unknown POI" || poiName == "" {
-				finalResponseMessage = "I couldn't identify a specific place to add. Could you tell me the name of the POI?"
-				assistantMessageType = types.TypeClarification
-			} else {
-				newPOI, genErr := l.generatePOIDataStream(ctx, poiName, session.SessionContext.CityName, userLocation, session.UserID, cityID, eventCh)
-				if genErr != nil {
-					finalResponseMessage = fmt.Sprintf("I had trouble finding details for '%s'. You might want to try rephrasing or checking the name. Error: %v", poiName, genErr)
-					assistantMessageType = types.TypeError
-				} else {
-					session.CurrentItinerary.AIItineraryResponse.PointsOfInterest = append(session.CurrentItinerary.AIItineraryResponse.PointsOfInterest, newPOI)
-					finalResponseMessage = fmt.Sprintf("Okay, I've added '%s' to your itinerary for %s!", newPOI.Name, session.SessionContext.CityName)
-					itineraryModifiedByThisTurn = true
-				}
-			}
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Adding Point of Interest with semantic enhancement..."})
+		var genErr error
+		finalResponseMessage, genErr = l.handleSemanticAddPOIStreamed(ctx, message, session, semanticPOIs, userLocation, cityID, eventCh)
+		if genErr != nil {
+			finalResponseMessage = "I had trouble understanding your request. Could you please specify which POI you'd like to add?"
+			assistantMessageType = types.TypeError
+		} else {
+			itineraryModifiedByThisTurn = true
 		}
 
 	case types.IntentRemovePOI:
-		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Removing Point of Interest..."})
-		poiName := extractPOIName(message)
-		var updatedPOIs []types.POIDetail
-		found := false
-		for _, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
-			if !strings.Contains(strings.ToLower(poi.Name), strings.ToLower(poiName)) {
-				updatedPOIs = append(updatedPOIs, poi)
-			} else {
-				found = true
-			}
-		}
-		if found {
-			session.CurrentItinerary.AIItineraryResponse.PointsOfInterest = updatedPOIs
-			finalResponseMessage = fmt.Sprintf("I've removed instances matching '%s' from your itinerary.", poiName)
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Removing Point of Interest with semantic understanding..."})
+		finalResponseMessage = l.handleSemanticRemovePOI(ctx, message, session)
+		if strings.Contains(finalResponseMessage, "I've removed") {
 			itineraryModifiedByThisTurn = true
-		} else {
-			finalResponseMessage = fmt.Sprintf("I couldn't find '%s' in your current itinerary.", poiName)
 		}
 
 	case types.IntentAskQuestion:
-		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Answering your question..."})
+		l.sendEvent(ctx, eventCh, types.StreamEvent{Type: types.EventTypeProgress, Data: "Processing: Answering your question with semantic context..."})
 		finalResponseMessage = "I’m here to help! For now, I’ll assume you’re asking about your trip. What specifically would you like to know?"
 
 		// questionPrompt := fmt.Sprintf(
@@ -1329,4 +1538,132 @@ func (l *LlmInteractiontServiceImpl) saveCityInteraction(ctx context.Context, in
 
 	span.SetAttributes(attribute.String("interaction.id", interactionID.String()))
 	return interactionID, nil
+}
+
+// handleSemanticAddPOIStreamed handles adding POIs with semantic search enhancement and streaming updates
+func (l *LlmInteractiontServiceImpl) handleSemanticAddPOIStreamed(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetail, userLocation *types.UserLocation, cityID uuid.UUID, eventCh chan<- types.StreamEvent) (string, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "handleSemanticAddPOIStreamed")
+	defer span.End()
+
+	// Try semantic matching first - look for POIs semantically similar to the user's request
+	if len(semanticPOIs) > 0 {
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type: types.EventTypeProgress,
+			Data: map[string]interface{}{
+				"status":           "analyzing_semantic_matches",
+				"semantic_options": len(semanticPOIs),
+			},
+		})
+
+		// Check if any semantic POI matches what user is asking for
+		for _, semanticPOI := range semanticPOIs[:min(3, len(semanticPOIs))] {
+			// Check if this semantic POI is already in itinerary
+			alreadyExists := false
+			for _, existingPOI := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
+				if strings.EqualFold(existingPOI.Name, semanticPOI.Name) {
+					alreadyExists = true
+					break
+				}
+			}
+
+			if !alreadyExists {
+				l.sendEvent(ctx, eventCh, types.StreamEvent{
+					Type: "semantic_poi_added",
+					Data: map[string]interface{}{
+						"poi_name":       semanticPOI.Name,
+						"poi_category":   semanticPOI.Category,
+						"semantic_match": true,
+					},
+				})
+
+				// Add semantic POI to itinerary
+				session.CurrentItinerary.AIItineraryResponse.PointsOfInterest = append(
+					session.CurrentItinerary.AIItineraryResponse.PointsOfInterest, semanticPOI)
+				l.logger.InfoContext(ctx, "Added semantic POI to streaming itinerary",
+					slog.String("poi_name", semanticPOI.Name))
+				span.SetAttributes(attribute.String("added_poi", semanticPOI.Name))
+
+				return fmt.Sprintf("Great! I found %s which matches what you're looking for. I've added it to your itinerary. %s",
+					semanticPOI.Name, semanticPOI.DescriptionPOI), nil
+			}
+		}
+
+		// If semantic POIs exist but all are already in itinerary
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type: "semantic_alternatives_suggested",
+			Data: map[string]interface{}{
+				"message": "All semantic matches already in itinerary",
+				"alternatives": func() []string {
+					var names []string
+					for i, poi := range semanticPOIs[:min(3, len(semanticPOIs))] {
+						names = append(names, poi.Name)
+						if i >= 2 {
+							break
+						}
+					}
+					return names
+				}(),
+			},
+		})
+
+		return fmt.Sprintf("I found some great options matching your request, but they're already in your itinerary. Here are some suggestions: %s",
+			strings.Join(func() []string {
+				var names []string
+				for i, poi := range semanticPOIs[:min(3, len(semanticPOIs))] {
+					names = append(names, poi.Name)
+					if i >= 2 {
+						break
+					}
+				}
+				return names
+			}(), ", ")), nil
+	}
+
+	// Fallback to traditional POI name extraction and generation
+	l.sendEvent(ctx, eventCh, types.StreamEvent{
+		Type: types.EventTypeProgress,
+		Data: map[string]interface{}{"status": "extracting_poi_name"},
+	})
+
+	poiName := extractPOIName(message)
+	if poiName == "" {
+		return "I'd be happy to add a POI to your itinerary! Could you please specify which place you'd like to add?", nil
+	}
+
+	// Check if already exists
+	for _, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
+		if strings.EqualFold(poi.Name, poiName) {
+			return fmt.Sprintf("%s is already in your itinerary.", poiName), nil
+		}
+	}
+
+	// Generate new POI data with streaming updates
+	l.sendEvent(ctx, eventCh, types.StreamEvent{
+		Type: types.EventTypeProgress,
+		Data: map[string]interface{}{
+			"status":   "generating_poi_data",
+			"poi_name": poiName,
+		},
+	})
+
+	newPOI, err := l.generatePOIDataStream(ctx, poiName, session.SessionContext.CityName, userLocation, session.UserID, cityID, eventCh)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to generate POI data for streaming", slog.Any("error", err))
+		span.RecordError(err)
+		return "", fmt.Errorf("failed to generate POI data: %w", err)
+	}
+
+	session.CurrentItinerary.AIItineraryResponse.PointsOfInterest = append(
+		session.CurrentItinerary.AIItineraryResponse.PointsOfInterest, newPOI)
+
+	l.sendEvent(ctx, eventCh, types.StreamEvent{
+		Type: "poi_added_successfully",
+		Data: map[string]interface{}{
+			"poi_name":       newPOI.Name,
+			"poi_category":   newPOI.Category,
+			"semantic_match": false,
+		},
+	})
+
+	return fmt.Sprintf("I've added %s to your itinerary.", poiName), nil
 }

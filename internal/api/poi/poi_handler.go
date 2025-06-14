@@ -33,6 +33,12 @@ type Handler interface {
 	// Search POIs with filters
 	GetPOIs(w http.ResponseWriter, r *http.Request)
 
+	// Semantic search endpoints
+	SearchPOIsSemantic(w http.ResponseWriter, r *http.Request)
+	SearchPOIsSemanticByCity(w http.ResponseWriter, r *http.Request)
+	SearchPOIsHybrid(w http.ResponseWriter, r *http.Request)
+	GenerateEmbeddingsForPOIs(w http.ResponseWriter, r *http.Request)
+
 	GetItinerary(w http.ResponseWriter, r *http.Request)
 	GetItineraries(w http.ResponseWriter, r *http.Request)
 	UpdateItinerary(w http.ResponseWriter, r *http.Request)
@@ -539,4 +545,375 @@ func (h *HandlerImpl) UpdateItinerary(w http.ResponseWriter, r *http.Request) {
 	l.InfoContext(ctx, "Successfully updated itinerary", slog.String("title", updatedItinerary.Title))
 	span.SetStatus(codes.Ok, "Itinerary updated")
 	api.WriteJSONResponse(w, r, http.StatusOK, updatedItinerary)
+}
+
+// SearchPOIsSemantic godoc
+// @Summary      Semantic POI Search
+// @Description  Search for POIs using natural language semantic search
+// @Tags         POI
+// @Accept       json
+// @Produce      json
+// @Param        query query string true "Natural language search query"
+// @Param        limit query int false "Maximum number of results (default: 10)"
+// @Success      200 {array} types.POIDetail "List of semantically similar POIs"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Authentication required"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /poi/search/semantic [get]
+func (h *HandlerImpl) SearchPOIsSemantic(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("SearchPOIsSemantic").Start(r.Context(), "SearchPOIsSemantic", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/poi/search/semantic"),
+	))
+	defer span.End()
+
+	l := h.logger.With(slog.String("handler", "SearchPOIsSemantic"))
+	l.DebugContext(ctx, "Semantic POI search endpoint invoked")
+
+	// Get query parameter
+	query := r.URL.Query().Get("query")
+	if query == "" {
+		l.ErrorContext(ctx, "Search query is required")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Query parameter is required")
+		return
+	}
+
+	// Get limit parameter (optional)
+	limitStr := r.URL.Query().Get("limit")
+	limit := 10 // default
+	if limitStr != "" {
+		var err error
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 || limit > 100 {
+			l.ErrorContext(ctx, "Invalid limit parameter", slog.String("limit", limitStr))
+			api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid limit parameter (must be 1-100)")
+			return
+		}
+	}
+
+	span.SetAttributes(
+		attribute.String("search.query", query),
+		attribute.Int("search.limit", limit),
+	)
+
+	// Perform semantic search
+	pois, err := h.poiService.SearchPOIsSemantic(ctx, query, limit)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to perform semantic search", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Semantic search failed")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to perform semantic search")
+		return
+	}
+
+	l.InfoContext(ctx, "Semantic search completed", 
+		slog.String("query", query),
+		slog.Int("results", len(pois)))
+	span.SetAttributes(attribute.Int("results.count", len(pois)))
+	span.SetStatus(codes.Ok, "Semantic search completed")
+
+	api.WriteJSONResponse(w, r, http.StatusOK, map[string]interface{}{
+		"query":   query,
+		"limit":   limit,
+		"results": pois,
+		"count":   len(pois),
+	})
+}
+
+// SearchPOIsSemanticByCity godoc
+// @Summary      Semantic POI Search by City
+// @Description  Search for POIs using natural language semantic search within a specific city
+// @Tags         POI
+// @Accept       json
+// @Produce      json
+// @Param        query query string true "Natural language search query"
+// @Param        city_id query string true "City UUID"
+// @Param        limit query int false "Maximum number of results (default: 10)"
+// @Success      200 {array} types.POIDetail "List of semantically similar POIs in the city"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Authentication required"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /poi/search/semantic/city [get]
+func (h *HandlerImpl) SearchPOIsSemanticByCity(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("SearchPOIsSemanticByCity").Start(r.Context(), "SearchPOIsSemanticByCity", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/poi/search/semantic/city"),
+	))
+	defer span.End()
+
+	l := h.logger.With(slog.String("handler", "SearchPOIsSemanticByCity"))
+	l.DebugContext(ctx, "Semantic POI search by city endpoint invoked")
+
+	// Get query parameter
+	query := r.URL.Query().Get("query")
+	if query == "" {
+		l.ErrorContext(ctx, "Search query is required")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Query parameter is required")
+		return
+	}
+
+	// Get city_id parameter
+	cityIDStr := r.URL.Query().Get("city_id")
+	if cityIDStr == "" {
+		l.ErrorContext(ctx, "City ID is required")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "City ID parameter is required")
+		return
+	}
+
+	cityID, err := uuid.Parse(cityIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid city ID format", slog.String("city_id", cityIDStr))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid city ID format")
+		return
+	}
+
+	// Get limit parameter (optional)
+	limitStr := r.URL.Query().Get("limit")
+	limit := 10 // default
+	if limitStr != "" {
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 || limit > 100 {
+			l.ErrorContext(ctx, "Invalid limit parameter", slog.String("limit", limitStr))
+			api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid limit parameter (must be 1-100)")
+			return
+		}
+	}
+
+	span.SetAttributes(
+		attribute.String("search.query", query),
+		attribute.String("city.id", cityID.String()),
+		attribute.Int("search.limit", limit),
+	)
+
+	// Perform semantic search by city
+	pois, err := h.poiService.SearchPOIsSemanticByCity(ctx, query, cityID, limit)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to perform semantic search by city", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Semantic search by city failed")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to perform semantic search by city")
+		return
+	}
+
+	l.InfoContext(ctx, "Semantic search by city completed", 
+		slog.String("query", query),
+		slog.String("city_id", cityID.String()),
+		slog.Int("results", len(pois)))
+	span.SetAttributes(attribute.Int("results.count", len(pois)))
+	span.SetStatus(codes.Ok, "Semantic search by city completed")
+
+	api.WriteJSONResponse(w, r, http.StatusOK, map[string]interface{}{
+		"query":   query,
+		"city_id": cityID.String(),
+		"limit":   limit,
+		"results": pois,
+		"count":   len(pois),
+	})
+}
+
+// SearchPOIsHybrid godoc
+// @Summary      Hybrid POI Search
+// @Description  Search for POIs using hybrid approach combining spatial and semantic search
+// @Tags         POI
+// @Accept       json
+// @Produce      json
+// @Param        query query string true "Natural language search query"
+// @Param        latitude query number true "User latitude"
+// @Param        longitude query number true "User longitude"
+// @Param        radius query number true "Search radius in kilometers"
+// @Param        semantic_weight query number false "Weight for semantic vs spatial (0.0-1.0, default: 0.5)"
+// @Param        category query string false "POI category filter"
+// @Success      200 {array} types.POIDetail "List of POIs ranked by hybrid score"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Authentication required"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /poi/search/hybrid [get]
+func (h *HandlerImpl) SearchPOIsHybrid(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("SearchPOIsHybrid").Start(r.Context(), "SearchPOIsHybrid", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/poi/search/hybrid"),
+	))
+	defer span.End()
+
+	l := h.logger.With(slog.String("handler", "SearchPOIsHybrid"))
+	l.DebugContext(ctx, "Hybrid POI search endpoint invoked")
+
+	// Get required parameters
+	query := r.URL.Query().Get("query")
+	if query == "" {
+		l.ErrorContext(ctx, "Search query is required")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Query parameter is required")
+		return
+	}
+
+	// Parse coordinates
+	latStr := r.URL.Query().Get("latitude")
+	lonStr := r.URL.Query().Get("longitude")
+	radiusStr := r.URL.Query().Get("radius")
+
+	if latStr == "" || lonStr == "" || radiusStr == "" {
+		l.ErrorContext(ctx, "Latitude, longitude, and radius are required")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Latitude, longitude, and radius parameters are required")
+		return
+	}
+
+	latitude, err := strconv.ParseFloat(latStr, 64)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid latitude", slog.String("latitude", latStr))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid latitude format")
+		return
+	}
+
+	longitude, err := strconv.ParseFloat(lonStr, 64)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid longitude", slog.String("longitude", lonStr))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid longitude format")
+		return
+	}
+
+	radius, err := strconv.ParseFloat(radiusStr, 64)
+	if err != nil || radius <= 0 {
+		l.ErrorContext(ctx, "Invalid radius", slog.String("radius", radiusStr))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid radius format (must be positive number)")
+		return
+	}
+
+	// Parse optional semantic weight
+	semanticWeightStr := r.URL.Query().Get("semantic_weight")
+	semanticWeight := 0.5 // default
+	if semanticWeightStr != "" {
+		semanticWeight, err = strconv.ParseFloat(semanticWeightStr, 64)
+		if err != nil || semanticWeight < 0 || semanticWeight > 1 {
+			l.ErrorContext(ctx, "Invalid semantic weight", slog.String("semantic_weight", semanticWeightStr))
+			api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid semantic weight (must be 0.0-1.0)")
+			return
+		}
+	}
+
+	// Get optional category filter
+	category := r.URL.Query().Get("category")
+
+	// Build filter
+	filter := types.POIFilter{
+		Location: types.GeoPoint{
+			Latitude:  latitude,
+			Longitude: longitude,
+		},
+		Radius:   radius,
+		Category: category,
+	}
+
+	span.SetAttributes(
+		attribute.String("search.query", query),
+		attribute.Float64("location.latitude", latitude),
+		attribute.Float64("location.longitude", longitude),
+		attribute.Float64("search.radius", radius),
+		attribute.Float64("semantic.weight", semanticWeight),
+		attribute.String("filter.category", category),
+	)
+
+	// Perform hybrid search
+	pois, err := h.poiService.SearchPOIsHybrid(ctx, filter, query, semanticWeight)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to perform hybrid search", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Hybrid search failed")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to perform hybrid search")
+		return
+	}
+
+	l.InfoContext(ctx, "Hybrid search completed", 
+		slog.String("query", query),
+		slog.Float64("semantic_weight", semanticWeight),
+		slog.Int("results", len(pois)))
+	span.SetAttributes(attribute.Int("results.count", len(pois)))
+	span.SetStatus(codes.Ok, "Hybrid search completed")
+
+	api.WriteJSONResponse(w, r, http.StatusOK, map[string]interface{}{
+		"query":           query,
+		"semantic_weight": semanticWeight,
+		"filter":          filter,
+		"results":         pois,
+		"count":           len(pois),
+	})
+}
+
+// GenerateEmbeddingsForPOIs godoc
+// @Summary      Generate Embeddings for POIs
+// @Description  Manually trigger embedding generation for POIs that don't have embeddings
+// @Tags         POI
+// @Accept       json
+// @Produce      json
+// @Param        batch_size query int false "Batch size for processing (default: 10, max: 100)"
+// @Success      200 {object} interface{} "Embedding generation status"
+// @Failure      400 {object} types.Response "Invalid Input"
+// @Failure      401 {object} types.Response "Authentication required"
+// @Failure      500 {object} types.Response "Internal Server Error"
+// @Security     BearerAuth
+// @Router       /poi/embeddings/generate [post]
+func (h *HandlerImpl) GenerateEmbeddingsForPOIs(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("GenerateEmbeddingsForPOIs").Start(r.Context(), "GenerateEmbeddingsForPOIs", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/poi/embeddings/generate"),
+	))
+	defer span.End()
+
+	l := h.logger.With(slog.String("handler", "GenerateEmbeddingsForPOIs"))
+	l.DebugContext(ctx, "Generate embeddings endpoint invoked")
+
+	// Check for admin/authorized user (you might want to add specific authorization here)
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	// Parse batch size
+	batchSizeStr := r.URL.Query().Get("batch_size")
+	batchSize := 10 // default
+	if batchSizeStr != "" {
+		var err error
+		batchSize, err = strconv.Atoi(batchSizeStr)
+		if err != nil || batchSize <= 0 || batchSize > 100 {
+			l.ErrorContext(ctx, "Invalid batch size", slog.String("batch_size", batchSizeStr))
+			api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid batch size (must be 1-100)")
+			return
+		}
+	}
+
+	span.SetAttributes(attribute.Int("batch.size", batchSize))
+
+	// Generate embeddings for all POIs
+	err := h.poiService.GenerateEmbeddingsForAllPOIs(ctx, batchSize)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to generate embeddings", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Embedding generation failed")
+		
+		// Check if it's a partial failure
+		if strings.Contains(err.Error(), "errors out of") {
+			api.WriteJSONResponse(w, r, http.StatusPartialContent, map[string]interface{}{
+				"status":     "partial_success",
+				"message":    err.Error(),
+				"batch_size": batchSize,
+			})
+			return
+		}
+		
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to generate embeddings")
+		return
+	}
+
+	l.InfoContext(ctx, "Embeddings generation completed", slog.Int("batch_size", batchSize))
+	span.SetStatus(codes.Ok, "Embeddings generated successfully")
+
+	api.WriteJSONResponse(w, r, http.StatusOK, map[string]interface{}{
+		"status":     "success",
+		"message":    "Embeddings generated successfully for all POIs",
+		"batch_size": batchSize,
+	})
 }

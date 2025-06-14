@@ -295,13 +295,12 @@ func (r *RepositoryImpl) Update(ctx context.Context, userID, tagsID uuid.UUID, p
 
 	query := `
         UPDATE user_personal_tags
-        SET name = $1, tag_type = $2, active = $3
-        WHERE id = $3 AND user_id = $4
-        AND tag_type = 'personal'
+        SET name = $1, tag_type = $2, active = $3, updated_at = $4
+        WHERE id = $5 AND user_id = $6
     `
 	now := time.Now()
 
-	cmdTag, err := tx.Exec(ctx, query, params.Name, params.TagType, params.Active, now, userID, tagsID)
+	cmdTag, err := tx.Exec(ctx, query, params.Name, params.TagType, params.Active, now, tagsID, userID)
 	if err != nil {
 		span.RecordError(err)
 		l.ErrorContext(ctx, "Failed to update user personal tag", slog.Any("error", err))

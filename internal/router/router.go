@@ -143,7 +143,7 @@ func tagsRoutes(HandlerImpl *tags.HandlerImpl) http.Handler {
 	r.Get("/", HandlerImpl.GetTags) // GET http://localhost:8000/api/v1/user/tags
 	r.Get("/{tagID}", HandlerImpl.GetTag)
 	r.Delete("/{tagID}", HandlerImpl.DeleteTag)
-	r.Put("/{tagID}", HandlerImpl.DeleteTag)
+	r.Put("/{tagID}", HandlerImpl.UpdateTag)
 	r.Post("/", HandlerImpl.CreateTag)
 
 	return r

@@ -23,11 +23,13 @@ type CreatePersonalTagParams struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	TagType     string `json:"tag_type"`
+	Active      *bool  `json:"active"`
 }
 
 // UpdatePersonalTagParams holds parameters for updating an existing personal tag.
 type UpdatePersonalTagParams struct {
 	Description string `json:"description"`
-	Name        string // New name
-	TagType     string // New type
+	Name        string `json:"name"`
+	TagType     string `json:"tag_type"`
+	Active      bool   `json:"active"`
 }

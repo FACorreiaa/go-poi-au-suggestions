@@ -192,6 +192,10 @@ func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueChatSession)
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueSessionStreamHandler)
 
+	// RAG-enabled routes
+	r.Post("/prompt-response/rag/query/{profileID}", HandlerImpl.RAGEnabledChatQuery)  // POST http://localhost:8000/api/v1/llm/prompt-response/rag/query/{profileID}
+	r.Get("/prompt-response/rag/search", HandlerImpl.SearchSimilarPOIs)               // GET http://localhost:8000/api/v1/llm/prompt-response/rag/search?query=...
+
 	// LLM interaction routes
 	r.Post("/prompt-response/profile/{profileID}", HandlerImpl.GetPrompResponse)        // GET http://localhost:8000/api/v1/user/interests
 	r.Get("/prompt-response/poi/details", HandlerImpl.GetPOIDetails)                    // GET http://localhost:8000/api/v1/llm/prompt-response/{interactionID}

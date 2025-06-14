@@ -86,12 +86,12 @@ func (s *tagsServiceImpl) GetTag(ctx context.Context, userID, tagID uuid.UUID) (
 
 // CreateTag adds an avoid tag for a user.
 func (s *tagsServiceImpl) CreateTag(ctx context.Context, userID uuid.UUID, params types.CreatePersonalTagParams) (*types.PersonalTag, error) {
-	ctx, span := otel.Tracer("UserService").Start(ctx, "AddUserAvoidTag", trace.WithAttributes(
+	ctx, span := otel.Tracer("UserService").Start(ctx, "AddUserTag", trace.WithAttributes(
 		attribute.String("user.id", userID.String()),
 	))
 	defer span.End()
 
-	l := s.logger.With(slog.String("method", "AddUserAvoidTag"), slog.String("userID", userID.String()))
+	l := s.logger.With(slog.String("method", "AddUserTag"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Adding user avoid tag")
 
 	tag, err := s.repo.Create(ctx, userID, params)

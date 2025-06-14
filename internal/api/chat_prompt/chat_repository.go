@@ -41,6 +41,10 @@ type Repository interface {
 	GetPOIsBySessionSortedByDistance(ctx context.Context, sessionID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error)
 	CalculateDistancePostGIS(ctx context.Context, userLat, userLon, poiLat, poiLon float64) (float64, error)
 	GetOrCreatePOI(ctx context.Context, tx pgx.Tx, poiDetail types.POIDetail, cityID uuid.UUID, sourceInteractionID uuid.UUID) (uuid.UUID, error)
+
+	// RAG
+	//SaveInteractionWithEmbedding(ctx context.Context, interaction types.LlmInteraction, embedding []float32) (uuid.UUID, error)
+	//FindSimilarInteractions(ctx context.Context, queryEmbedding []float32, limit int, threshold float32) ([]types.LlmInteraction, error)
 }
 
 type RepositoryImpl struct {
@@ -834,48 +838,186 @@ func (r *RepositoryImpl) GetOrCreatePOI(ctx context.Context, tx pgx.Tx, poiDetai
 	return poiDBID, nil
 }
 
-// func (r *RepositoryImpl) CalculateDistancePostGIS(ctx context.Context, poi types.POIDetail, userLocation types.UserLocation) (float64, error) {
-// 	ctx, span := otel.Tracer("Repository").Start(ctx, "CalculateDistancePostGIS", trace.WithAttributes(
-// 		attribute.String("poi.name", poi.Name),
-// 		attribute.Float64("poi.latitude", poi.Latitude),
-// 		attribute.Float64("poi.longitude", poi.Longitude),
-// 		attribute.Float64("user.latitude", userLocation.UserLat),
-// 		attribute.Float64("user.longitude", userLocation.UserLon),
+// func (r *RepositoryImpl) SaveInteractionWithEmbedding(ctx context.Context, interaction types.LlmInteraction, embedding []float32) (uuid.UUID, error) {
+// 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SaveInteractionWithEmbedding", trace.WithAttributes(
+// 		semconv.DBSystemPostgreSQL,
+// 		attribute.String("db.operation", "INSERT_COMPLEX"),
+// 		attribute.String("db.sql.table", "llm_interactions,itineraries,itinerary_pois"),
+// 		attribute.String("user.id", interaction.UserID.String()),
+// 		attribute.String("model.used", interaction.ModelUsed),
+// 		attribute.Int("latency.ms", interaction.LatencyMs),
+// 		attribute.String("city.name", interaction.CityName),
 // 	))
 // 	defer span.End()
 
-// 	// Validate coordinates
-// 	if poi.Latitude < -90 || poi.Latitude > 90 || poi.Longitude < -180 || poi.Longitude > 180 {
-// 		err := fmt.Errorf("invalid POI coordinates: lat=%f, lon=%f", poi.Latitude, poi.Longitude)
-// 		span.RecordError(err)
-// 		span.SetStatus(codes.Error, "Invalid POI coordinates")
-// 		return 0, err
-// 	}
-// 	if userLocation.UserLat < -90 || userLocation.UserLat > 90 || userLocation.UserLon < -180 || userLocation.UserLon > 180 {
-// 		err := fmt.Errorf("invalid user coordinates: lat=%f, lon=%f", userLocation.UserLat, userLocation.UserLon)
-// 		span.RecordError(err)
-// 		span.SetStatus(codes.Error, "Invalid user coordinates")
-// 		return 0, err
-// 	}
-
-// 	query := `
-//         SELECT ST_Distance(
-//             ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-//             ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography
-//         ) AS distance
-//     `
-// 	var distance float64
-// 	err := r.pgpool.QueryRow(ctx, query, poi.Longitude, poi.Latitude, userLocation.UserLon, userLocation.UserLat).Scan(&distance)
+// 	var err error
+// 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 // 	if err != nil {
 // 		span.RecordError(err)
-// 		span.SetStatus(codes.Error, "Failed to calculate distance")
-// 		return 0, fmt.Errorf("failed to calculate distance: %w", err)
+// 		span.SetStatus(codes.Error, "Failed to start transaction")
+// 		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
+// 	}
+// 	defer func() {
+// 		if p := recover(); p != nil {
+// 			_ = tx.Rollback(ctx)
+// 			panic(p)
+// 		}
+// 		if err != nil {
+// 			if rbErr := tx.Rollback(ctx); rbErr != nil {
+// 				r.logger.ErrorContext(ctx, "Transaction rollback failed", slog.Any("error", rbErr))
+// 			}
+// 		}
+// 	}()
+
+// 	// Convert embedding to pgvector format
+// 	vectorParam := pgvector.NewVector(embedding)
+
+// 	interactionQuery := `
+//         INSERT INTO llm_interactions (
+//             user_id, prompt, response_text, model_used, latency_ms, city_name, prompt_embedding
+//         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+//         RETURNING id
+//     `
+// 	var interactionID uuid.UUID
+// 	err = tx.QueryRow(ctx, interactionQuery,
+// 		interaction.UserID,
+// 		interaction.Prompt,
+// 		interaction.ResponseText,
+// 		interaction.ModelUsed,
+// 		interaction.LatencyMs,
+// 		interaction.CityName,
+// 		vectorParam,
+// 	).Scan(&interactionID)
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to insert llm_interaction")
+// 		return uuid.Nil, fmt.Errorf("failed to insert llm_interaction: %w", err)
+// 	}
+// 	span.SetAttributes(attribute.String("llm_interaction.id", interactionID.String()))
+
+// 	// Existing itinerary and POI logic remains unchanged
+// 	var cityID uuid.UUID
+// 	if interaction.CityName != "" {
+// 		cityQuery := `SELECT id FROM cities WHERE name = $1 LIMIT 1`
+// 		err = tx.QueryRow(ctx, cityQuery, interaction.CityName).Scan(&cityID)
+// 		if err != nil && err != pgx.ErrNoRows {
+// 			span.RecordError(err)
+// 			return interactionID, fmt.Errorf("failed to get city_id: %w", err)
+// 		}
 // 	}
 
-// 	span.SetAttributes(attribute.Float64("distance.meters", distance))
-// 	span.SetStatus(codes.Ok, "Distance calculated successfully")
-// 	r.logger.Info("Distance calculated",
-// 		slog.String("poi.name", poi.Name),
-// 		slog.Float64("distance.meters", distance))
-// 	return distance, nil
+// 	var itineraryID uuid.UUID
+// 	if cityID != uuid.Nil {
+// 		itineraryQuery := `
+//             INSERT INTO itineraries (user_id, city_id, source_llm_interaction_id)
+//             VALUES ($1, $2, $3)
+//             ON CONFLICT (user_id, city_id) DO UPDATE SET
+//                 updated_at = NOW(),
+//                 source_llm_interaction_id = EXCLUDED.source_llm_interaction_id
+//             RETURNING id
+//         `
+// 		err = tx.QueryRow(ctx, itineraryQuery, interaction.UserID, cityID, interactionID).Scan(&itineraryID)
+// 		if err != nil {
+// 			span.RecordError(err)
+// 			return interactionID, fmt.Errorf("failed to insert itinerary: %w", err)
+// 		}
+// 	}
+
+// 	if itineraryID != uuid.Nil {
+// 		var pois []types.POIDetail
+// 		pois, err = parsePOIsFromResponse(interaction.ResponseText, r.logger)
+// 		if err != nil {
+// 			span.RecordError(err)
+// 			return interactionID, fmt.Errorf("failed to parse POIs: %w", err)
+// 		}
+
+// 		if len(pois) > 0 {
+// 			poiBatch := &pgx.Batch{}
+// 			itineraryPoiInsertQuery := `
+//                 INSERT INTO itinerary_pois (itinerary_id, poi_id, order_index, ai_description)
+//                 VALUES ($1, $2, $3, $4)
+//                 ON CONFLICT (itinerary_id, poi_id) DO UPDATE SET
+//                     order_index = EXCLUDED.order_index,
+//                     ai_description = EXCLUDED.ai_description,
+//                     updated_at = NOW()
+//             `
+// 			for i, poiDetail := range pois {
+// 				var poiDBID uuid.UUID
+// 				poiDBID, err = r.GetOrCreatePOI(ctx, tx, poiDetail, cityID, interactionID)
+// 				if err != nil {
+// 					span.RecordError(err)
+// 					return interactionID, fmt.Errorf("failed to get or create POI: %w", err)
+// 				}
+// 				poiBatch.Queue(itineraryPoiInsertQuery, itineraryID, poiDBID, i, poiDetail.DescriptionPOI)
+// 			}
+
+// 			if poiBatch.Len() > 0 {
+// 				br := tx.SendBatch(ctx, poiBatch)
+// 				for i := 0; i < poiBatch.Len(); i++ {
+// 					_, execErr := br.Exec()
+// 					if execErr != nil {
+// 						err = fmt.Errorf("failed to insert itinerary_poi: %w", execErr)
+// 						br.Close()
+// 						return interactionID, err
+// 					}
+// 				}
+// 				br.Close()
+// 			}
+// 		}
+// 	}
+
+// 	err = tx.Commit(ctx)
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		return uuid.Nil, fmt.Errorf("failed to commit transaction: %w", err)
+// 	}
+
+// 	span.SetStatus(codes.Ok, "Interaction saved successfully")
+// 	return interactionID, nil
 // }
+
+// // func (r *RepositoryImpl) CalculateDistancePostGIS(ctx context.Context, poi types.POIDetail, userLocation types.UserLocation) (float64, error) {
+// // 	ctx, span := otel.Tracer("Repository").Start(ctx, "CalculateDistancePostGIS", trace.WithAttributes(
+// // 		attribute.String("poi.name", poi.Name),
+// // 		attribute.Float64("poi.latitude", poi.Latitude),
+// // 		attribute.Float64("poi.longitude", poi.Longitude),
+// // 		attribute.Float64("user.latitude", userLocation.UserLat),
+// // 		attribute.Float64("user.longitude", userLocation.UserLon),
+// // 	))
+// // 	defer span.End()
+
+// // 	// Validate coordinates
+// // 	if poi.Latitude < -90 || poi.Latitude > 90 || poi.Longitude < -180 || poi.Longitude > 180 {
+// // 		err := fmt.Errorf("invalid POI coordinates: lat=%f, lon=%f", poi.Latitude, poi.Longitude)
+// // 		span.RecordError(err)
+// // 		span.SetStatus(codes.Error, "Invalid POI coordinates")
+// // 		return 0, err
+// // 	}
+// // 	if userLocation.UserLat < -90 || userLocation.UserLat > 90 || userLocation.UserLon < -180 || userLocation.UserLon > 180 {
+// // 		err := fmt.Errorf("invalid user coordinates: lat=%f, lon=%f", userLocation.UserLat, userLocation.UserLon)
+// // 		span.RecordError(err)
+// // 		span.SetStatus(codes.Error, "Invalid user coordinates")
+// // 		return 0, err
+// // 	}
+
+// // 	query := `
+// //         SELECT ST_Distance(
+// //             ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+// //             ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography
+// //         ) AS distance
+// //     `
+// // 	var distance float64
+// // 	err := r.pgpool.QueryRow(ctx, query, poi.Longitude, poi.Latitude, userLocation.UserLon, userLocation.UserLat).Scan(&distance)
+// // 	if err != nil {
+// // 		span.RecordError(err)
+// // 		span.SetStatus(codes.Error, "Failed to calculate distance")
+// // 		return 0, fmt.Errorf("failed to calculate distance: %w", err)
+// // 	}
+
+// // 	span.SetAttributes(attribute.Float64("distance.meters", distance))
+// // 	span.SetStatus(codes.Ok, "Distance calculated successfully")
+// // 	r.logger.Info("Distance calculated",
+// // 		slog.String("poi.name", poi.Name),
+// // 		slog.Float64("distance.meters", distance))
+// // 	return distance, nil
+// // }

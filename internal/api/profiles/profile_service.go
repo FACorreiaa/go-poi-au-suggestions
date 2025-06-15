@@ -30,6 +30,8 @@ type Service interface {
 	UpdateSearchProfile(ctx context.Context, userID, profileID uuid.UUID, params types.UpdateSearchProfileParams) error
 	DeleteSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error
 	SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error
+	
+	// Domain preferences are now handled in the main UpdateSearchProfile method
 }
 
 // ServiceImpl provides the implementation for UserService.
@@ -467,3 +469,4 @@ func (s *ServiceImpl) UpdateSearchProfile(ctx context.Context, userID, profileID
 	span.SetStatus(codes.Ok, "User preference profile updated successfully")
 	return nil
 }
+

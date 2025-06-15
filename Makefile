@@ -4,7 +4,7 @@ swag-init:
 	swag init -g ./main.go -o ./docs
 
 migrate-db:
-	migrate -database "postgresql://postgres:postgres@localhost:5454/loci-ai-dev?sslmode=disable" -path ./app/db/migrations up
+	migrate -database "postgresql://postgres:postgres@localhost:5454/loci-dev?sslmode=disable" -path ./app/db/migrations up
 
 testifylint:
 	testifylint ./...

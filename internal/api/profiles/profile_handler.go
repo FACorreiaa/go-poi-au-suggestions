@@ -30,6 +30,7 @@ type Handler interface {
 	UpdateSearchProfile(w http.ResponseWriter, r *http.Request)
 	DeleteSearchProfile(w http.ResponseWriter, r *http.Request)
 	SetDefaultSearchProfile(w http.ResponseWriter, r *http.Request)
+	
 }
 type HandlerImpl struct {
 	userService Service

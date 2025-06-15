@@ -40,10 +40,7 @@ CREATE TABLE user_preference_profiles (
     preferred_transport transport_preference_enum DEFAULT 'any',
     dietary_needs TEXT [] DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    -- Constraint for unique profile name per user
-    CONSTRAINT unique_user_profile_name UNIQUE (user_id, profile_name)
-    -- NO unique constraint with WHERE clause here
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- *** SEPARATE PARTIAL UNIQUE INDEX for is_default ***

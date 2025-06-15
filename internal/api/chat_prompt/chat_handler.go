@@ -28,7 +28,7 @@ var _ Handler = (*HandlerImpl)(nil)
 
 type Handler interface {
 	// GetPrompResponse poi
-	GetPrompResponse(w http.ResponseWriter, r *http.Request)
+	//GetPrompResponse(w http.ResponseWriter, r *http.Request)
 	SaveItenerary(w http.ResponseWriter, r *http.Request)
 	RemoveItenerary(w http.ResponseWriter, r *http.Request)
 	GetPOIDetails(w http.ResponseWriter, r *http.Request)
@@ -328,114 +328,114 @@ func getDefaultPromptForContext(contextType types.ChatContextType, cityName stri
 	}
 }
 
-func (HandlerImpl *HandlerImpl) GetPrompResponse(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetPrompResponse", trace.WithAttributes(
-		semconv.HTTPRequestMethodKey.String(r.Method),
-		semconv.HTTPRouteKey.String("/user/interests"),
-	))
-	defer span.End()
+// func (HandlerImpl *HandlerImpl) GetPrompResponse(w http.ResponseWriter, r *http.Request) {
+// 	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetPrompResponse", trace.WithAttributes(
+// 		semconv.HTTPRequestMethodKey.String(r.Method),
+// 		semconv.HTTPRouteKey.String("/user/interests"),
+// 	))
+// 	defer span.End()
 
-	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "GetUserProfile"))
-	l.DebugContext(ctx, "Fetching user profile")
+// 	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "GetUserProfile"))
+// 	l.DebugContext(ctx, "Fetching user profile")
 
-	userIDStr, ok := auth.GetUserIDFromContext(ctx)
-	if !ok || userIDStr == "" {
-		l.ErrorContext(ctx, "User ID not found in context")
-		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
-	}
+// 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+// 	if !ok || userIDStr == "" {
+// 		l.ErrorContext(ctx, "User ID not found in context")
+// 		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+// 	}
 
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
-		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
-	}
-	span.SetAttributes(semconv.EnduserIDKey.String(userID.String()))
-	l = l.With(slog.String("userID", userID.String()))
+// 	userID, err := uuid.Parse(userIDStr)
+// 	if err != nil {
+// 		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+// 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+// 	}
+// 	span.SetAttributes(semconv.EnduserIDKey.String(userID.String()))
+// 	l = l.With(slog.String("userID", userID.String()))
 
-	profileIDStr := chi.URLParam(r, "profileID")
-	profileID, err := uuid.Parse(profileIDStr)
-	if err != nil {
-		l.ErrorContext(ctx, "Invalid profile ID format", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Invalid profile ID format")
-		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid profile ID format in URL")
-		return
-	}
-	span.SetAttributes(attribute.String("app.profile.id", profileID.String()))
-	l = l.With(slog.String("profileID", profileID.String()))
+// 	profileIDStr := chi.URLParam(r, "profileID")
+// 	profileID, err := uuid.Parse(profileIDStr)
+// 	if err != nil {
+// 		l.ErrorContext(ctx, "Invalid profile ID format", slog.Any("error", err))
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Invalid profile ID format")
+// 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid profile ID format in URL")
+// 		return
+// 	}
+// 	span.SetAttributes(attribute.String("app.profile.id", profileID.String()))
+// 	l = l.With(slog.String("profileID", profileID.String()))
 
-	cityName := r.URL.Query().Get("city")
-	if cityName == "" {
-		l.WarnContext(ctx, "City name missing from query parameters")
-		span.SetStatus(codes.Error, "City name missing")
-		api.ErrorResponse(w, r, http.StatusBadRequest, "Query parameter 'city' is required.")
-		return
-	}
-	span.SetAttributes(attribute.String("app.city.name", cityName))
-	l = l.With(slog.String("cityName", cityName))
+// 	cityName := r.URL.Query().Get("city")
+// 	if cityName == "" {
+// 		l.WarnContext(ctx, "City name missing from query parameters")
+// 		span.SetStatus(codes.Error, "City name missing")
+// 		api.ErrorResponse(w, r, http.StatusBadRequest, "Query parameter 'city' is required.")
+// 		return
+// 	}
+// 	span.SetAttributes(attribute.String("app.city.name", cityName))
+// 	l = l.With(slog.String("cityName", cityName))
 
-	l.InfoContext(ctx, "Processing itinerary request")
+// 	l.InfoContext(ctx, "Processing itinerary request")
 
-	// TODO set userLocation from route later
-	userLocation := &types.UserLocation{
-		UserLat: 41.3851,
-		UserLon: 2.1734,
-	}
+// 	// TODO set userLocation from route later
+// 	userLocation := &types.UserLocation{
+// 		UserLat: 41.3851,
+// 		UserLon: 2.1734,
+// 	}
 
-	// sessionIDParam := r.URL.Query().Get("session_id")
+// 	// sessionIDParam := r.URL.Query().Get("session_id")
 
-	// isNewConversation := (sessionIDParam == "")
-	// var sessionIDPtr *string
-	// if !isNewConversation {
-	// 	sessionIDPtr = &sessionIDParam
-	// }
+// 	// isNewConversation := (sessionIDParam == "")
+// 	// var sessionIDPtr *string
+// 	// if !isNewConversation {
+// 	// 	sessionIDPtr = &sessionIDParam
+// 	// }
 
-	//
-	// userRequest := UserRequest{
-	// 	Interests:  []string{"art", "history"},
-	// 	Tags:       []string{"family-friendly"},
-	// 	Categories: []string{"restaurants"},
-	// }
+// 	//
+// 	// userRequest := UserRequest{
+// 	// 	Interests:  []string{"art", "history"},
+// 	// 	Tags:       []string{"family-friendly"},
+// 	// 	Categories: []string{"restaurants"},
+// 	// }
 
-	itineraryResponse, err := HandlerImpl.llmInteractionService.GetIteneraryResponse(ctx, cityName, userID, profileID, userLocation)
-	responsePayload := struct {
-		Data *types.AiCityResponse `json:"data"`
-		//SessionID string                `json:"session_id"` // IMPORTANT: Send this back
-	}{
-		Data: itineraryResponse,
-		//SessionID: chatSessionID,
-	}
+// 	itineraryResponse, err := HandlerImpl.llmInteractionService.GetIteneraryResponse(ctx, cityName, userID, profileID, userLocation)
+// 	responsePayload := struct {
+// 		Data *types.AiCityResponse `json:"data"`
+// 		//SessionID string                `json:"session_id"` // IMPORTANT: Send this back
+// 	}{
+// 		Data: itineraryResponse,
+// 		//SessionID: chatSessionID,
+// 	}
 
-	if err != nil {
-		l.ErrorContext(ctx, "Service failed to generate prompt response", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Service error")
-		// Determine appropriate HTTP status code based on the error type
-		// For example, if it's a validation error from the service, could be 400.
-		// If it's an AI error or DB error, could be 500.
-		// For now, using a generic 500.
-		// You might want to check error types (e.g., errors.Is(err, types.ErrNotFound)) for more specific statuses.
-		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to generate itinerary: %s", err.Error()))
-		return
-	}
+// 	if err != nil {
+// 		l.ErrorContext(ctx, "Service failed to generate prompt response", slog.Any("error", err))
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Service error")
+// 		// Determine appropriate HTTP status code based on the error type
+// 		// For example, if it's a validation error from the service, could be 400.
+// 		// If it's an AI error or DB error, could be 500.
+// 		// For now, using a generic 500.
+// 		// You might want to check error types (e.g., errors.Is(err, types.ErrNotFound)) for more specific statuses.
+// 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to generate itinerary: %s", err.Error()))
+// 		return
+// 	}
 
-	if itineraryResponse == nil {
-		l.ErrorContext(ctx, "Service returned nil itinerary response without error")
-		span.SetStatus(codes.Error, "Service returned nil response")
-		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to generate itinerary: received empty response from service.")
-		return
-	}
+// 	if itineraryResponse == nil {
+// 		l.ErrorContext(ctx, "Service returned nil itinerary response without error")
+// 		span.SetStatus(codes.Error, "Service returned nil response")
+// 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to generate itinerary: received empty response from service.")
+// 		return
+// 	}
 
-	// 5. Send successful response
-	l.InfoContext(ctx, "Successfully generated itinerary response",
-		slog.String("itinerary_name", itineraryResponse.AIItineraryResponse.ItineraryName),
-		slog.Int("poi_count", len(itineraryResponse.PointsOfInterest)))
+// 	// 5. Send successful response
+// 	l.InfoContext(ctx, "Successfully generated itinerary response",
+// 		slog.String("itinerary_name", itineraryResponse.AIItineraryResponse.ItineraryName),
+// 		slog.Int("poi_count", len(itineraryResponse.PointsOfInterest)))
 
-	span.SetAttributes(attribute.String("app.itinerary.name", itineraryResponse.AIItineraryResponse.ItineraryName))
-	span.SetStatus(codes.Ok, "Itinerary generated")
-	l.InfoContext(ctx, "User preference profile created successfully")
-	api.WriteJSONResponse(w, r, http.StatusCreated, responsePayload)
-}
+// 	span.SetAttributes(attribute.String("app.itinerary.name", itineraryResponse.AIItineraryResponse.ItineraryName))
+// 	span.SetStatus(codes.Ok, "Itinerary generated")
+// 	l.InfoContext(ctx, "User preference profile created successfully")
+// 	api.WriteJSONResponse(w, r, http.StatusCreated, responsePayload)
+// }
 
 func (HandlerImpl *HandlerImpl) SaveItenerary(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "SaveItenerary", trace.WithAttributes(

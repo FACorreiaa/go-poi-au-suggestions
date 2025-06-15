@@ -64,7 +64,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			r.Post("/auth/login", cfg.AuthHandler.Login)
 			r.Get("/auth/google", cfg.AuthHandler.LoginWithGoogle)
 			r.Get("/auth/google/callback", cfg.AuthHandler.GoogleCallback)
-			//r.Post("/auth/refresh", cfg.AuthHandlerImpl.RefreshSession) // Assuming RefreshSession exists
+			r.Post("/auth/refresh", cfg.AuthHandler.RefreshToken) // Refresh tokens via HttpOnly cookie
 		})
 
 		// --- Protected Routes ---
@@ -76,7 +76,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			// Mount protected auth routes
 			r.Post("/auth/logout", cfg.AuthHandler.Logout)
 			//r.Get("/auth/session/{sessionID}", cfg.AuthHandlerImpl.GetSession)                    // Needs Auth? Usually yes.
-			r.Get("/auth/validate-session", cfg.AuthHandler.ValidateSession) // Needs Auth
+			r.Post("/auth/validate-session", cfg.AuthHandler.ValidateSession) // Needs Auth
 			//r.Post("/auth/verify-password", cfg.AuthHandlerImpl.VerifyPassword)                   // Needs Auth
 			r.Put("/auth/update-password", cfg.AuthHandler.ChangePassword) // Needs Auth (use PUT for update)
 			//r.Post("/auth/invalidate-tokens", cfg.AuthHandlerImpl.InvalidateAllUserRefreshTokens) // Needs Auth
@@ -143,7 +143,7 @@ func tagsRoutes(HandlerImpl *tags.HandlerImpl) http.Handler {
 	r.Get("/", HandlerImpl.GetTags) // GET http://localhost:8000/api/v1/user/tags
 	r.Get("/{tagID}", HandlerImpl.GetTag)
 	r.Delete("/{tagID}", HandlerImpl.DeleteTag)
-	r.Put("/{tagID}", HandlerImpl.DeleteTag)
+	r.Put("/{tagID}", HandlerImpl.UpdateTag)
 	r.Post("/", HandlerImpl.CreateTag)
 
 	return r
@@ -192,6 +192,10 @@ func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueChatSession)
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueSessionStreamHandler)
 
+	// RAG-enabled routes
+	r.Post("/prompt-response/rag/query/{profileID}", HandlerImpl.RAGEnabledChatQuery)  // POST http://localhost:8000/api/v1/llm/prompt-response/rag/query/{profileID}
+	r.Get("/prompt-response/rag/search", HandlerImpl.SearchSimilarPOIs)               // GET http://localhost:8000/api/v1/llm/prompt-response/rag/search?query=...
+
 	// LLM interaction routes
 	r.Post("/prompt-response/profile/{profileID}", HandlerImpl.GetPrompResponse)        // GET http://localhost:8000/api/v1/user/interests
 	r.Get("/prompt-response/poi/details", HandlerImpl.GetPOIDetails)                    // GET http://localhost:8000/api/v1/llm/prompt-response/{interactionID}
@@ -219,7 +223,22 @@ func POIRoutes(HandlerImpl *poi.HandlerImpl) http.Handler {
 	r.Get("/itineraries", HandlerImpl.GetItineraries)                           // GET /api/v1/itineraries?page=1&page_size=20
 	r.Get("/itineraries/itinerary/{itinerary_id}", HandlerImpl.GetItinerary)    // GET /api/v1/itineraries/{uuid}
 	r.Put("/itineraries/itinerary/{itinerary_id}", HandlerImpl.UpdateItinerary) // PUT /api/v1/itineraries/{uuid}
-	r.Get("/search", HandlerImpl.GetPOIs)
+	
+	// Traditional search
+	r.Get("/search", HandlerImpl.GetPOIs) // GET http://localhost:8000/api/v1/pois/search
+	
+	// Semantic search routes
+	r.Route("/search", func(r chi.Router) {
+		r.Get("/semantic", HandlerImpl.SearchPOIsSemantic)           // GET http://localhost:8000/api/v1/pois/search/semantic?query=romantic%20restaurants
+		r.Get("/semantic/city", HandlerImpl.SearchPOIsSemanticByCity) // GET http://localhost:8000/api/v1/pois/search/semantic/city?query=museums&city_id={uuid}
+		r.Get("/hybrid", HandlerImpl.SearchPOIsHybrid)               // GET http://localhost:8000/api/v1/pois/search/hybrid?query=outdoor%20activities&latitude=40.7128&longitude=-74.0060&radius=5.0
+	})
+	
+	// Embedding management routes (for admin/maintenance)
+	r.Route("/embeddings", func(r chi.Router) {
+		r.Post("/generate", HandlerImpl.GenerateEmbeddingsForPOIs) // POST http://localhost:8000/api/v1/pois/embeddings/generate?batch_size=20
+	})
+	
 	return r
 }
 

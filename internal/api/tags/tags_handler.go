@@ -1,6 +1,7 @@
 package tags
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -89,6 +90,7 @@ func (u *HandlerImpl) GetTags(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to get user tags")
 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to retrieve user tags")
+		return
 	}
 	span.SetStatus(codes.Ok, "Tags retrieved successfully")
 	api.WriteJSONResponse(w, r, http.StatusOK, tags)
@@ -137,6 +139,7 @@ func (u *HandlerImpl) GetTag(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to get user tag")
 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to retrieve user tag")
+		return
 	}
 	span.SetStatus(codes.Ok, "Tag retrieved successfully")
 	api.WriteJSONResponse(w, r, http.StatusOK, tag)
@@ -166,6 +169,7 @@ func (u *HandlerImpl) CreateTag(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Invalid user ID format")
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
 	}
 
 	var req types.CreatePersonalTagParams
@@ -183,6 +187,7 @@ func (u *HandlerImpl) CreateTag(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to create user tag")
 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to create user tag")
+		return
 	}
 	span.SetStatus(codes.Ok, "Tag created successfully")
 	api.WriteJSONResponse(w, r, http.StatusOK, tag)
@@ -212,6 +217,7 @@ func (u *HandlerImpl) DeleteTag(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Invalid user ID format")
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
 	}
 
 	tagIDStr := chi.URLParam(r, "tagID")
@@ -221,14 +227,22 @@ func (u *HandlerImpl) DeleteTag(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Invalid tag ID format")
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid tag ID format")
+		return
 	}
 
 	err = u.tagsService.DeleteTag(ctx, userID, tagID)
 	if err != nil {
+		if errors.Is(err, types.ErrNotFound) {
+			l.WarnContext(ctx, "Tag not found for deletion", slog.String("tagID", tagID.String()))
+			span.SetStatus(codes.Error, "Tag not found")
+			api.ErrorResponse(w, r, http.StatusNotFound, "Tag not found")
+			return
+		}
 		l.ErrorContext(ctx, "Failed to delete user tag", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to delete user tag")
 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to delete user tag")
+		return
 	}
 	span.SetStatus(codes.Ok, "Tag deleted successfully")
 	api.WriteJSONResponse(w, r, http.StatusOK, nil)
@@ -258,6 +272,7 @@ func (u *HandlerImpl) UpdateTag(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Invalid user ID format")
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
 	}
 
 	tagIDStr := chi.URLParam(r, "tagID")
@@ -268,6 +283,7 @@ func (u *HandlerImpl) UpdateTag(w http.ResponseWriter, r *http.Request) {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Invalid tag ID format")
 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid tag ID format")
+		return
 	}
 
 	var req types.UpdatePersonalTagParams
@@ -281,10 +297,17 @@ func (u *HandlerImpl) UpdateTag(w http.ResponseWriter, r *http.Request) {
 
 	err = u.tagsService.Update(ctx, userID, tagID, req)
 	if err != nil {
+		if errors.Is(err, types.ErrNotFound) {
+			l.WarnContext(ctx, "Tag not found for update", slog.String("tagID", tagID.String()))
+			span.SetStatus(codes.Error, "Tag not found")
+			api.ErrorResponse(w, r, http.StatusNotFound, "Tag not found")
+			return
+		}
 		l.ErrorContext(ctx, "Failed to update user tag", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to update user tag")
 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to update user tag")
+		return
 	}
 	span.SetStatus(codes.Ok, "Tag updated successfully")
 	api.WriteJSONResponse(w, r, http.StatusOK, nil)

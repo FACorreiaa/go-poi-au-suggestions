@@ -48,6 +48,10 @@ type Handler interface {
 	// GetNearbyRecommendations(w http.ResponseWriter, r *http.Request)
 	GetNearbyRecommendations(w http.ResponseWriter, r *http.Request)
 
+	// RAG-enabled chat methods
+	RAGEnabledChatQuery(w http.ResponseWriter, r *http.Request)
+	SearchSimilarPOIs(w http.ResponseWriter, r *http.Request)
+
 	// sessions
 	StartChatSession(w http.ResponseWriter, r *http.Request)
 	StartChatSessionStream(w http.ResponseWriter, r *http.Request)
@@ -1076,4 +1080,203 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 
 func (HandlerImpl *HandlerImpl) GetNearbyRecommendations(w http.ResponseWriter, r *http.Request) {
 	return
+}
+
+// RAGEnabledChatQuery handles queries using RAG for enhanced responses
+func (h *HandlerImpl) RAGEnabledChatQuery(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "RAGEnabledChatQuery", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/prompt-response/rag/query"),
+	))
+	defer span.End()
+
+	l := h.logger.With(slog.String("handler", "RAGEnabledChatQuery"))
+
+	// Parse request body
+	var req struct {
+		Query       string `json:"query"`
+		CityContext string `json:"city_context,omitempty"`
+		SessionID   string `json:"session_id,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		l.ErrorContext(ctx, "Failed to decode request body", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate query
+	if strings.TrimSpace(req.Query) == "" {
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Query cannot be empty")
+		return
+	}
+
+	// Get user ID from context
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+
+	// Parse profile ID from URL
+	profileIDStr := chi.URLParam(r, "profileID")
+	profileID, err := uuid.Parse(profileIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid profile ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid profile ID format")
+		return
+	}
+
+	// Parse session ID if provided
+	var sessionID uuid.UUID
+	if req.SessionID != "" {
+		sessionID, err = uuid.Parse(req.SessionID)
+		if err != nil {
+			l.WarnContext(ctx, "Invalid session ID format, proceeding without session", slog.String("session_id", req.SessionID))
+			sessionID = uuid.Nil
+		}
+	} else {
+		sessionID = uuid.New() // Generate new session if not provided
+	}
+
+	span.SetAttributes(
+		attribute.String("user.id", userID.String()),
+		attribute.String("profile.id", profileID.String()),
+		attribute.String("query", req.Query),
+		attribute.String("session.id", sessionID.String()),
+	)
+
+	// Generate RAG response
+	ragResponse, err := h.llmInteractionService.GetRAGEnabledChatResponse(ctx, req.Query, userID, profileID, sessionID, req.CityContext)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to generate RAG response", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to generate RAG response")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to generate response")
+		return
+	}
+
+	// Prepare response
+	response := struct {
+		SessionID   uuid.UUID                         `json:"session_id"`
+		Answer      string                            `json:"answer"`
+		SourcePOIs  []types.POIDetail                 `json:"source_pois"`
+		Confidence  float64                           `json:"confidence"`
+		Suggestions []string                          `json:"suggestions"`
+		Metadata    map[string]interface{}            `json:"metadata"`
+	}{
+		SessionID:   sessionID,
+		Answer:      ragResponse.Answer,
+		SourcePOIs:  ragResponse.SourcePOIs,
+		Confidence:  ragResponse.Confidence,
+		Suggestions: ragResponse.Suggestions,
+		Metadata: map[string]interface{}{
+			"query":        req.Query,
+			"city_context": req.CityContext,
+			"timestamp":    time.Now().UTC(),
+		},
+	}
+
+	span.SetAttributes(
+		attribute.Float64("response.confidence", ragResponse.Confidence),
+		attribute.Int("response.source_pois", len(ragResponse.SourcePOIs)),
+		attribute.Int("response.suggestions", len(ragResponse.Suggestions)),
+	)
+	span.SetStatus(codes.Ok, "RAG response generated successfully")
+
+	l.InfoContext(ctx, "RAG response generated successfully",
+		slog.Float64("confidence", ragResponse.Confidence),
+		slog.Int("source_pois", len(ragResponse.SourcePOIs)),
+		slog.Int("suggestions", len(ragResponse.Suggestions)))
+
+	api.WriteJSONResponse(w, r, http.StatusOK, response)
+}
+
+// SearchSimilarPOIs handles semantic search for POIs
+func (h *HandlerImpl) SearchSimilarPOIs(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "SearchSimilarPOIs", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/prompt-response/rag/search"),
+	))
+	defer span.End()
+
+	l := h.logger.With(slog.String("handler", "SearchSimilarPOIs"))
+
+	// Parse query parameters
+	query := r.URL.Query().Get("query")
+	if strings.TrimSpace(query) == "" {
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Query parameter 'query' is required")
+		return
+	}
+
+	cityIDStr := r.URL.Query().Get("city_id")
+	var cityID *uuid.UUID
+	if cityIDStr != "" {
+		parsed, err := uuid.Parse(cityIDStr)
+		if err != nil {
+			api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid city_id format")
+			return
+		}
+		cityID = &parsed
+	}
+
+	limitStr := r.URL.Query().Get("limit")
+	limit := 10 // Default limit
+	if limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 50 {
+			limit = parsed
+		}
+	}
+
+	span.SetAttributes(
+		attribute.String("query", query),
+		attribute.Int("limit", limit),
+	)
+	if cityID != nil {
+		span.SetAttributes(attribute.String("city.id", cityID.String()))
+	}
+
+	// Search for similar POIs
+	relevantPOIs, err := h.llmInteractionService.SearchRelevantPOIsForRAG(ctx, query, cityID, limit)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to search similar POIs", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to search similar POIs")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to search similar POIs")
+		return
+	}
+
+	// Prepare response
+	response := struct {
+		Query        string            `json:"query"`
+		CityID       *uuid.UUID        `json:"city_id,omitempty"`
+		POIs         []types.POIDetail `json:"pois"`
+		Count        int               `json:"count"`
+		Metadata     map[string]interface{} `json:"metadata"`
+	}{
+		Query:  query,
+		CityID: cityID,
+		POIs:   relevantPOIs,
+		Count:  len(relevantPOIs),
+		Metadata: map[string]interface{}{
+			"search_method": "semantic_similarity",
+			"limit":         limit,
+			"timestamp":     time.Now().UTC(),
+		},
+	}
+
+	span.SetAttributes(
+		attribute.Int("results.count", len(relevantPOIs)),
+	)
+	span.SetStatus(codes.Ok, "Similar POIs found successfully")
+
+	l.InfoContext(ctx, "Similar POIs search completed",
+		slog.String("query", query),
+		slog.Int("results", len(relevantPOIs)))
+
+	api.WriteJSONResponse(w, r, http.StatusOK, response)
 }

@@ -40,6 +40,13 @@ type Repository interface {
 	SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
 	SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error)
 
+	// Vector similarity search methods
+	FindSimilarPOIs(ctx context.Context, queryEmbedding []float32, limit int) ([]types.POIDetail, error)
+	FindSimilarPOIsByCity(ctx context.Context, queryEmbedding []float32, cityID uuid.UUID, limit int) ([]types.POIDetail, error)
+	SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, queryEmbedding []float32, semanticWeight float64) ([]types.POIDetail, error)
+	UpdatePOIEmbedding(ctx context.Context, poiID uuid.UUID, embedding []float32) error
+	GetPOIsWithoutEmbeddings(ctx context.Context, limit int) ([]types.POIDetail, error)
+
 	// Hotels
 	FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error)
 	SaveHotelDetails(ctx context.Context, hotel types.HotelDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
@@ -1239,4 +1246,464 @@ func (r *RepositoryImpl) CityExists(ctx context.Context, cityID uuid.UUID) (bool
 		return false, fmt.Errorf("failed to check city existence: %w", err)
 	}
 	return exists, nil
+}
+
+// FindSimilarPOIs finds POIs similar to the provided query embedding using cosine similarity
+func (r *RepositoryImpl) FindSimilarPOIs(ctx context.Context, queryEmbedding []float32, limit int) ([]types.POIDetail, error) {
+	ctx, span := otel.Tracer("Repository").Start(ctx, "FindSimilarPOIs", trace.WithAttributes(
+		attribute.Int("embedding.dimension", len(queryEmbedding)),
+		attribute.Int("limit", limit),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "FindSimilarPOIs"))
+
+	// Convert []float32 to pgvector format string
+	embeddingStr := fmt.Sprintf("[%v]", strings.Join(func() []string {
+		strs := make([]string, len(queryEmbedding))
+		for i, v := range queryEmbedding {
+			strs[i] = fmt.Sprintf("%f", v)
+		}
+		return strs
+	}(), ","))
+
+	query := `
+        SELECT 
+            id, 
+            name, 
+            description, 
+            ST_X(location::geometry) AS longitude, 
+            ST_Y(location::geometry) AS latitude, 
+            poi_type AS category,
+            1 - (embedding <=> $1::vector) AS similarity_score
+        FROM points_of_interest
+        WHERE embedding IS NOT NULL
+        ORDER BY embedding <=> $1::vector
+        LIMIT $2
+    `
+
+	l.DebugContext(ctx, "Executing similarity search query", 
+		slog.String("query", query), 
+		slog.Int("embedding_dim", len(queryEmbedding)),
+		slog.Int("limit", limit))
+
+	rows, err := r.pgpool.Query(ctx, query, embeddingStr, limit)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to query similar POIs", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database query failed")
+		return nil, fmt.Errorf("failed to search similar POIs: %w", err)
+	}
+	defer rows.Close()
+
+	var pois []types.POIDetail
+	for rows.Next() {
+		var poi types.POIDetail
+		var similarityScore float64
+		var description sql.NullString
+
+		err := rows.Scan(
+			&poi.ID,
+			&poi.Name,
+			&description,
+			&poi.Longitude,
+			&poi.Latitude,
+			&poi.Category,
+			&similarityScore,
+		)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to scan similar POI row", slog.Any("error", err))
+			span.RecordError(err)
+			return nil, fmt.Errorf("failed to scan similar POI row: %w", err)
+		}
+
+		if description.Valid {
+			poi.DescriptionPOI = description.String
+		}
+
+		// Store similarity score in distance field for now (could add dedicated field)
+		poi.Distance = similarityScore
+
+		pois = append(pois, poi)
+	}
+
+	if err = rows.Err(); err != nil {
+		l.ErrorContext(ctx, "Error iterating similar POI rows", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("error iterating similar POI rows: %w", err)
+	}
+
+	l.InfoContext(ctx, "Similar POIs found", slog.Int("count", len(pois)))
+	span.SetAttributes(attribute.Int("results.count", len(pois)))
+	span.SetStatus(codes.Ok, "Similar POIs found")
+
+	return pois, nil
+}
+
+// FindSimilarPOIsByCity finds POIs similar to the provided query embedding within a specific city
+func (r *RepositoryImpl) FindSimilarPOIsByCity(ctx context.Context, queryEmbedding []float32, cityID uuid.UUID, limit int) ([]types.POIDetail, error) {
+	ctx, span := otel.Tracer("Repository").Start(ctx, "FindSimilarPOIsByCity", trace.WithAttributes(
+		attribute.String("city.id", cityID.String()),
+		attribute.Int("embedding.dimension", len(queryEmbedding)),
+		attribute.Int("limit", limit),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "FindSimilarPOIsByCity"))
+
+	// Convert []float32 to pgvector format string
+	embeddingStr := fmt.Sprintf("[%v]", strings.Join(func() []string {
+		strs := make([]string, len(queryEmbedding))
+		for i, v := range queryEmbedding {
+			strs[i] = fmt.Sprintf("%f", v)
+		}
+		return strs
+	}(), ","))
+
+	query := `
+        SELECT 
+            id, 
+            name, 
+            description, 
+            ST_X(location::geometry) AS longitude, 
+            ST_Y(location::geometry) AS latitude, 
+            poi_type AS category,
+            1 - (embedding <=> $1::vector) AS similarity_score
+        FROM points_of_interest
+        WHERE embedding IS NOT NULL AND city_id = $2
+        ORDER BY embedding <=> $1::vector
+        LIMIT $3
+    `
+
+	l.DebugContext(ctx, "Executing city-specific similarity search", 
+		slog.String("city_id", cityID.String()),
+		slog.Int("embedding_dim", len(queryEmbedding)),
+		slog.Int("limit", limit))
+
+	rows, err := r.pgpool.Query(ctx, query, embeddingStr, cityID, limit)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to query similar POIs by city", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database query failed")
+		return nil, fmt.Errorf("failed to search similar POIs by city: %w", err)
+	}
+	defer rows.Close()
+
+	var pois []types.POIDetail
+	for rows.Next() {
+		var poi types.POIDetail
+		var similarityScore float64
+		var description sql.NullString
+
+		err := rows.Scan(
+			&poi.ID,
+			&poi.Name,
+			&description,
+			&poi.Longitude,
+			&poi.Latitude,
+			&poi.Category,
+			&similarityScore,
+		)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to scan similar POI row", slog.Any("error", err))
+			span.RecordError(err)
+			return nil, fmt.Errorf("failed to scan similar POI row: %w", err)
+		}
+
+		if description.Valid {
+			poi.DescriptionPOI = description.String
+		}
+
+		poi.Distance = similarityScore
+		poi.CityID = cityID
+
+		pois = append(pois, poi)
+	}
+
+	if err = rows.Err(); err != nil {
+		l.ErrorContext(ctx, "Error iterating similar POI rows", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("error iterating similar POI rows: %w", err)
+	}
+
+	l.InfoContext(ctx, "Similar POIs by city found", 
+		slog.String("city_id", cityID.String()),
+		slog.Int("count", len(pois)))
+	span.SetAttributes(
+		attribute.String("city.id", cityID.String()),
+		attribute.Int("results.count", len(pois)),
+	)
+	span.SetStatus(codes.Ok, "Similar POIs by city found")
+
+	return pois, nil
+}
+
+// SearchPOIsHybrid combines spatial filtering with semantic similarity search
+func (r *RepositoryImpl) SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, queryEmbedding []float32, semanticWeight float64) ([]types.POIDetail, error) {
+	ctx, span := otel.Tracer("Repository").Start(ctx, "SearchPOIsHybrid", trace.WithAttributes(
+		attribute.Float64("location.latitude", filter.Location.Latitude),
+		attribute.Float64("location.longitude", filter.Location.Longitude),
+		attribute.Float64("radius", filter.Radius),
+		attribute.String("category", filter.Category),
+		attribute.Float64("semantic.weight", semanticWeight),
+		attribute.Int("embedding.dimension", len(queryEmbedding)),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "SearchPOIsHybrid"))
+
+	// Convert []float32 to pgvector format string
+	embeddingStr := fmt.Sprintf("[%v]", strings.Join(func() []string {
+		strs := make([]string, len(queryEmbedding))
+		for i, v := range queryEmbedding {
+			strs[i] = fmt.Sprintf("%f", v)
+		}
+		return strs
+	}(), ","))
+
+	// Hybrid search combining spatial distance and semantic similarity
+	query := `
+        SELECT 
+            id, 
+            name, 
+            description, 
+            ST_X(location::geometry) AS longitude, 
+            ST_Y(location::geometry) AS latitude, 
+            poi_type AS category,
+            ST_Distance(
+                location,
+                ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+            ) AS distance_meters,
+            CASE 
+                WHEN embedding IS NOT NULL THEN 1 - (embedding <=> $6::vector)
+                ELSE 0 
+            END AS similarity_score,
+            -- Hybrid score: weighted combination of spatial proximity and semantic similarity
+            CASE 
+                WHEN embedding IS NOT NULL THEN
+                    (1 - $5) * (1 / (1 + ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000)) +
+                    $5 * (1 - (embedding <=> $6::vector))
+                ELSE
+                    (1 - $5) * (1 / (1 + ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000))
+            END AS hybrid_score
+        FROM points_of_interest
+        WHERE ST_DWithin(
+            location,
+            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+            $3
+        )
+    `
+
+	args := []interface{}{
+		filter.Location.Longitude, // $1
+		filter.Location.Latitude,  // $2
+		filter.Radius * 1000,      // $3 (convert km to meters)
+	}
+
+	// Add category filter if provided
+	argIndex := 4
+	if filter.Category != "" {
+		query += fmt.Sprintf(` AND poi_type = $%d`, argIndex)
+		args = append(args, filter.Category)
+		argIndex++
+	}
+
+	// Add semantic weight and embedding (adjust indexes based on whether category was added)
+	args = append(args, semanticWeight)    // semantic weight
+	args = append(args, embeddingStr)      // embedding
+
+	// Order by hybrid score (descending)
+	query += ` ORDER BY hybrid_score DESC`
+
+	l.DebugContext(ctx, "Executing hybrid search query", 
+		slog.String("query", query), 
+		slog.Any("args_count", len(args)),
+		slog.Float64("semantic_weight", semanticWeight))
+
+	rows, err := r.pgpool.Query(ctx, query, args...)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to execute hybrid search", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database query failed")
+		return nil, fmt.Errorf("failed to execute hybrid POI search: %w", err)
+	}
+	defer rows.Close()
+
+	var pois []types.POIDetail
+	for rows.Next() {
+		var poi types.POIDetail
+		var distanceMeters, similarityScore, hybridScore float64
+		var description sql.NullString
+
+		err := rows.Scan(
+			&poi.ID,
+			&poi.Name,
+			&description,
+			&poi.Longitude,
+			&poi.Latitude,
+			&poi.Category,
+			&distanceMeters,
+			&similarityScore,
+			&hybridScore,
+		)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to scan hybrid search POI row", slog.Any("error", err))
+			span.RecordError(err)
+			return nil, fmt.Errorf("failed to scan hybrid search POI row: %w", err)
+		}
+
+		if description.Valid {
+			poi.DescriptionPOI = description.String
+		}
+
+		// Store the actual distance in meters converted to km
+		poi.Distance = distanceMeters / 1000
+
+		pois = append(pois, poi)
+	}
+
+	if err = rows.Err(); err != nil {
+		l.ErrorContext(ctx, "Error iterating hybrid search POI rows", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("error iterating hybrid search POI rows: %w", err)
+	}
+
+	l.InfoContext(ctx, "Hybrid search POIs found", 
+		slog.Int("count", len(pois)),
+		slog.Float64("semantic_weight", semanticWeight))
+	span.SetAttributes(
+		attribute.Int("results.count", len(pois)),
+		attribute.Float64("semantic.weight", semanticWeight),
+	)
+	span.SetStatus(codes.Ok, "Hybrid search completed")
+
+	return pois, nil
+}
+
+// UpdatePOIEmbedding updates the embedding vector for a specific POI
+func (r *RepositoryImpl) UpdatePOIEmbedding(ctx context.Context, poiID uuid.UUID, embedding []float32) error {
+	ctx, span := otel.Tracer("Repository").Start(ctx, "UpdatePOIEmbedding", trace.WithAttributes(
+		attribute.String("poi.id", poiID.String()),
+		attribute.Int("embedding.dimension", len(embedding)),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "UpdatePOIEmbedding"))
+
+	// Convert []float32 to pgvector format string
+	embeddingStr := fmt.Sprintf("[%v]", strings.Join(func() []string {
+		strs := make([]string, len(embedding))
+		for i, v := range embedding {
+			strs[i] = fmt.Sprintf("%f", v)
+		}
+		return strs
+	}(), ","))
+
+	query := `
+        UPDATE points_of_interest 
+        SET embedding = $1::vector, embedding_generated_at = NOW()
+        WHERE id = $2
+    `
+
+	result, err := r.pgpool.Exec(ctx, query, embeddingStr, poiID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to update POI embedding", 
+			slog.Any("error", err),
+			slog.String("poi_id", poiID.String()))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database update failed")
+		return fmt.Errorf("failed to update POI embedding: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		err := fmt.Errorf("no POI found with ID %s", poiID.String())
+		l.WarnContext(ctx, "No POI found for embedding update", slog.String("poi_id", poiID.String()))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "POI not found")
+		return err
+	}
+
+	l.InfoContext(ctx, "POI embedding updated successfully", 
+		slog.String("poi_id", poiID.String()),
+		slog.Int("embedding_dimension", len(embedding)))
+	span.SetAttributes(
+		attribute.String("poi.id", poiID.String()),
+		attribute.Int("embedding.dimension", len(embedding)),
+	)
+	span.SetStatus(codes.Ok, "POI embedding updated")
+
+	return nil
+}
+
+// GetPOIsWithoutEmbeddings retrieves POIs that don't have embeddings generated yet
+func (r *RepositoryImpl) GetPOIsWithoutEmbeddings(ctx context.Context, limit int) ([]types.POIDetail, error) {
+	ctx, span := otel.Tracer("Repository").Start(ctx, "GetPOIsWithoutEmbeddings", trace.WithAttributes(
+		attribute.Int("limit", limit),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetPOIsWithoutEmbeddings"))
+
+	query := `
+        SELECT 
+            id, 
+            name, 
+            description, 
+            ST_X(location::geometry) AS longitude, 
+            ST_Y(location::geometry) AS latitude, 
+            poi_type AS category,
+            city_id
+        FROM points_of_interest
+        WHERE embedding IS NULL
+        ORDER BY created_at ASC
+        LIMIT $1
+    `
+
+	rows, err := r.pgpool.Query(ctx, query, limit)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to query POIs without embeddings", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database query failed")
+		return nil, fmt.Errorf("failed to query POIs without embeddings: %w", err)
+	}
+	defer rows.Close()
+
+	var pois []types.POIDetail
+	for rows.Next() {
+		var poi types.POIDetail
+		var description sql.NullString
+
+		err := rows.Scan(
+			&poi.ID,
+			&poi.Name,
+			&description,
+			&poi.Longitude,
+			&poi.Latitude,
+			&poi.Category,
+			&poi.CityID,
+		)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to scan POI without embedding row", slog.Any("error", err))
+			span.RecordError(err)
+			return nil, fmt.Errorf("failed to scan POI without embedding row: %w", err)
+		}
+
+		if description.Valid {
+			poi.DescriptionPOI = description.String
+		}
+
+		pois = append(pois, poi)
+	}
+
+	if err = rows.Err(); err != nil {
+		l.ErrorContext(ctx, "Error iterating POI without embedding rows", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("error iterating POI without embedding rows: %w", err)
+	}
+
+	l.InfoContext(ctx, "POIs without embeddings found", slog.Int("count", len(pois)))
+	span.SetAttributes(attribute.Int("results.count", len(pois)))
+	span.SetStatus(codes.Ok, "POIs without embeddings retrieved")
+
+	return pois, nil
 }

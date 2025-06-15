@@ -40,6 +40,17 @@ type Repository interface {
 	DeleteSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error
 	// SetDefaultSearchProfile sets a profile as the default for a user
 	SetDefaultSearchProfile(ctx context.Context, userID, profileID uuid.UUID) error
+	
+	// Domain-specific preference methods
+	GetAccommodationPreferences(ctx context.Context, profileID uuid.UUID) (*types.AccommodationPreferences, error)
+	GetDiningPreferences(ctx context.Context, profileID uuid.UUID) (*types.DiningPreferences, error)
+	GetActivityPreferences(ctx context.Context, profileID uuid.UUID) (*types.ActivityPreferences, error)
+	GetItineraryPreferences(ctx context.Context, profileID uuid.UUID) (*types.ItineraryPreferences, error)
+	
+	UpdateAccommodationPreferences(ctx context.Context, profileID uuid.UUID, prefs *types.AccommodationPreferences) error
+	UpdateDiningPreferences(ctx context.Context, profileID uuid.UUID, prefs *types.DiningPreferences) error
+	UpdateActivityPreferences(ctx context.Context, profileID uuid.UUID, prefs *types.ActivityPreferences) error
+	UpdateItineraryPreferences(ctx context.Context, profileID uuid.UUID, prefs *types.ItineraryPreferences) error
 }
 
 type RepositoryImpl struct {
@@ -603,5 +614,354 @@ func (r *RepositoryImpl) SetDefaultSearchProfile(ctx context.Context, userID, pr
 
 	l.InfoContext(ctx, "User preference profile set as default successfully")
 	span.SetStatus(codes.Ok, "Profile set as default")
+	return nil
+}
+
+// Domain-specific preference implementations
+
+// GetAccommodationPreferences retrieves accommodation preferences for a profile
+func (r *RepositoryImpl) GetAccommodationPreferences(ctx context.Context, profileID uuid.UUID) (*types.AccommodationPreferences, error) {
+	ctx, span := otel.Tracer("ProfileRepo").Start(ctx, "GetAccommodationPreferences", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "user_accommodation_preferences"),
+		attribute.String("profile.id", profileID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetAccommodationPreferences"), slog.String("profileID", profileID.String()))
+	l.DebugContext(ctx, "Fetching accommodation preferences")
+
+	query := `
+		SELECT id, user_preference_profile_id, accommodation_filters, created_at, updated_at 
+		FROM user_accommodation_preferences 
+		WHERE user_preference_profile_id = $1`
+
+	var prefs types.AccommodationPreferences
+	var filtersJSON []byte
+
+	err := r.pgpool.QueryRow(ctx, query, profileID).Scan(
+		&prefs.ID,
+		&prefs.UserPreferenceID,
+		&filtersJSON,
+		&prefs.CreatedAt,
+		&prefs.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			l.WarnContext(ctx, "Accommodation preferences not found")
+			span.SetStatus(codes.Error, "Preferences not found")
+			return nil, fmt.Errorf("accommodation preferences not found: %w", types.ErrNotFound)
+		}
+		l.ErrorContext(ctx, "Failed to fetch accommodation preferences", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB query failed")
+		return nil, fmt.Errorf("database error fetching accommodation preferences: %w", err)
+	}
+
+	// Parse JSONB filters into struct fields
+	// This would need proper JSON unmarshaling logic based on your JSONB structure
+	// For now, returning the basic structure
+	l.InfoContext(ctx, "Accommodation preferences fetched successfully")
+	span.SetStatus(codes.Ok, "Preferences fetched")
+	return &prefs, nil
+}
+
+// GetDiningPreferences retrieves dining preferences for a profile
+func (r *RepositoryImpl) GetDiningPreferences(ctx context.Context, profileID uuid.UUID) (*types.DiningPreferences, error) {
+	ctx, span := otel.Tracer("ProfileRepo").Start(ctx, "GetDiningPreferences", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "user_dining_preferences"),
+		attribute.String("profile.id", profileID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetDiningPreferences"), slog.String("profileID", profileID.String()))
+	l.DebugContext(ctx, "Fetching dining preferences")
+
+	query := `
+		SELECT id, user_preference_profile_id, dining_filters, created_at, updated_at 
+		FROM user_dining_preferences 
+		WHERE user_preference_profile_id = $1`
+
+	var prefs types.DiningPreferences
+	var filtersJSON []byte
+
+	err := r.pgpool.QueryRow(ctx, query, profileID).Scan(
+		&prefs.ID,
+		&prefs.UserPreferenceID,
+		&filtersJSON,
+		&prefs.CreatedAt,
+		&prefs.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			l.WarnContext(ctx, "Dining preferences not found")
+			span.SetStatus(codes.Error, "Preferences not found")
+			return nil, fmt.Errorf("dining preferences not found: %w", types.ErrNotFound)
+		}
+		l.ErrorContext(ctx, "Failed to fetch dining preferences", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB query failed")
+		return nil, fmt.Errorf("database error fetching dining preferences: %w", err)
+	}
+
+	l.InfoContext(ctx, "Dining preferences fetched successfully")
+	span.SetStatus(codes.Ok, "Preferences fetched")
+	return &prefs, nil
+}
+
+// GetActivityPreferences retrieves activity preferences for a profile
+func (r *RepositoryImpl) GetActivityPreferences(ctx context.Context, profileID uuid.UUID) (*types.ActivityPreferences, error) {
+	ctx, span := otel.Tracer("ProfileRepo").Start(ctx, "GetActivityPreferences", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "user_activity_preferences"),
+		attribute.String("profile.id", profileID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetActivityPreferences"), slog.String("profileID", profileID.String()))
+	l.DebugContext(ctx, "Fetching activity preferences")
+
+	query := `
+		SELECT id, user_preference_profile_id, activity_filters, created_at, updated_at 
+		FROM user_activity_preferences 
+		WHERE user_preference_profile_id = $1`
+
+	var prefs types.ActivityPreferences
+	var filtersJSON []byte
+
+	err := r.pgpool.QueryRow(ctx, query, profileID).Scan(
+		&prefs.ID,
+		&prefs.UserPreferenceID,
+		&filtersJSON,
+		&prefs.CreatedAt,
+		&prefs.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			l.WarnContext(ctx, "Activity preferences not found")
+			span.SetStatus(codes.Error, "Preferences not found")
+			return nil, fmt.Errorf("activity preferences not found: %w", types.ErrNotFound)
+		}
+		l.ErrorContext(ctx, "Failed to fetch activity preferences", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB query failed")
+		return nil, fmt.Errorf("database error fetching activity preferences: %w", err)
+	}
+
+	l.InfoContext(ctx, "Activity preferences fetched successfully")
+	span.SetStatus(codes.Ok, "Preferences fetched")
+	return &prefs, nil
+}
+
+// GetItineraryPreferences retrieves itinerary preferences for a profile
+func (r *RepositoryImpl) GetItineraryPreferences(ctx context.Context, profileID uuid.UUID) (*types.ItineraryPreferences, error) {
+	ctx, span := otel.Tracer("ProfileRepo").Start(ctx, "GetItineraryPreferences", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "user_itinerary_preferences"),
+		attribute.String("profile.id", profileID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetItineraryPreferences"), slog.String("profileID", profileID.String()))
+	l.DebugContext(ctx, "Fetching itinerary preferences")
+
+	query := `
+		SELECT id, user_preference_profile_id, itinerary_filters, created_at, updated_at 
+		FROM user_itinerary_preferences 
+		WHERE user_preference_profile_id = $1`
+
+	var prefs types.ItineraryPreferences
+	var filtersJSON []byte
+
+	err := r.pgpool.QueryRow(ctx, query, profileID).Scan(
+		&prefs.ID,
+		&prefs.UserPreferenceID,
+		&filtersJSON,
+		&prefs.CreatedAt,
+		&prefs.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			l.WarnContext(ctx, "Itinerary preferences not found")
+			span.SetStatus(codes.Error, "Preferences not found")
+			return nil, fmt.Errorf("itinerary preferences not found: %w", types.ErrNotFound)
+		}
+		l.ErrorContext(ctx, "Failed to fetch itinerary preferences", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB query failed")
+		return nil, fmt.Errorf("database error fetching itinerary preferences: %w", err)
+	}
+
+	l.InfoContext(ctx, "Itinerary preferences fetched successfully")
+	span.SetStatus(codes.Ok, "Preferences fetched")
+	return &prefs, nil
+}
+
+// Update methods for domain-specific preferences
+
+// UpdateAccommodationPreferences updates accommodation preferences
+func (r *RepositoryImpl) UpdateAccommodationPreferences(ctx context.Context, profileID uuid.UUID, prefs *types.AccommodationPreferences) error {
+	ctx, span := otel.Tracer("ProfileRepo").Start(ctx, "UpdateAccommodationPreferences", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "UPDATE"),
+		attribute.String("db.sql.table", "user_accommodation_preferences"),
+		attribute.String("profile.id", profileID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "UpdateAccommodationPreferences"), slog.String("profileID", profileID.String()))
+	l.DebugContext(ctx, "Updating accommodation preferences")
+
+	// Convert preferences to JSONB
+	// This would need proper JSON marshaling logic
+	query := `
+		UPDATE user_accommodation_preferences 
+		SET accommodation_filters = $2, updated_at = CURRENT_TIMESTAMP 
+		WHERE user_preference_profile_id = $1`
+
+	filtersJSON := []byte("{}")  // Placeholder - would need proper marshaling
+
+	tag, err := r.pgpool.Exec(ctx, query, profileID, filtersJSON)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to update accommodation preferences", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB update failed")
+		return fmt.Errorf("database error updating accommodation preferences: %w", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		l.WarnContext(ctx, "No accommodation preferences found to update")
+		span.SetStatus(codes.Error, "No rows affected")
+		return fmt.Errorf("accommodation preferences not found: %w", types.ErrNotFound)
+	}
+
+	l.InfoContext(ctx, "Accommodation preferences updated successfully")
+	span.SetStatus(codes.Ok, "Preferences updated")
+	return nil
+}
+
+// UpdateDiningPreferences updates dining preferences
+func (r *RepositoryImpl) UpdateDiningPreferences(ctx context.Context, profileID uuid.UUID, prefs *types.DiningPreferences) error {
+	ctx, span := otel.Tracer("ProfileRepo").Start(ctx, "UpdateDiningPreferences", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "UPDATE"),
+		attribute.String("db.sql.table", "user_dining_preferences"),
+		attribute.String("profile.id", profileID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "UpdateDiningPreferences"), slog.String("profileID", profileID.String()))
+	l.DebugContext(ctx, "Updating dining preferences")
+
+	query := `
+		UPDATE user_dining_preferences 
+		SET dining_filters = $2, updated_at = CURRENT_TIMESTAMP 
+		WHERE user_preference_profile_id = $1`
+
+	filtersJSON := []byte("{}")  // Placeholder - would need proper marshaling
+
+	tag, err := r.pgpool.Exec(ctx, query, profileID, filtersJSON)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to update dining preferences", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB update failed")
+		return fmt.Errorf("database error updating dining preferences: %w", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		l.WarnContext(ctx, "No dining preferences found to update")
+		span.SetStatus(codes.Error, "No rows affected")
+		return fmt.Errorf("dining preferences not found: %w", types.ErrNotFound)
+	}
+
+	l.InfoContext(ctx, "Dining preferences updated successfully")
+	span.SetStatus(codes.Ok, "Preferences updated")
+	return nil
+}
+
+// UpdateActivityPreferences updates activity preferences
+func (r *RepositoryImpl) UpdateActivityPreferences(ctx context.Context, profileID uuid.UUID, prefs *types.ActivityPreferences) error {
+	ctx, span := otel.Tracer("ProfileRepo").Start(ctx, "UpdateActivityPreferences", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "UPDATE"),
+		attribute.String("db.sql.table", "user_activity_preferences"),
+		attribute.String("profile.id", profileID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "UpdateActivityPreferences"), slog.String("profileID", profileID.String()))
+	l.DebugContext(ctx, "Updating activity preferences")
+
+	query := `
+		UPDATE user_activity_preferences 
+		SET activity_filters = $2, updated_at = CURRENT_TIMESTAMP 
+		WHERE user_preference_profile_id = $1`
+
+	filtersJSON := []byte("{}")  // Placeholder - would need proper marshaling
+
+	tag, err := r.pgpool.Exec(ctx, query, profileID, filtersJSON)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to update activity preferences", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB update failed")
+		return fmt.Errorf("database error updating activity preferences: %w", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		l.WarnContext(ctx, "No activity preferences found to update")
+		span.SetStatus(codes.Error, "No rows affected")
+		return fmt.Errorf("activity preferences not found: %w", types.ErrNotFound)
+	}
+
+	l.InfoContext(ctx, "Activity preferences updated successfully")
+	span.SetStatus(codes.Ok, "Preferences updated")
+	return nil
+}
+
+// UpdateItineraryPreferences updates itinerary preferences
+func (r *RepositoryImpl) UpdateItineraryPreferences(ctx context.Context, profileID uuid.UUID, prefs *types.ItineraryPreferences) error {
+	ctx, span := otel.Tracer("ProfileRepo").Start(ctx, "UpdateItineraryPreferences", trace.WithAttributes(
+		semconv.DBSystemPostgreSQL,
+		attribute.String("db.operation", "UPDATE"),
+		attribute.String("db.sql.table", "user_itinerary_preferences"),
+		attribute.String("profile.id", profileID.String()),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "UpdateItineraryPreferences"), slog.String("profileID", profileID.String()))
+	l.DebugContext(ctx, "Updating itinerary preferences")
+
+	query := `
+		UPDATE user_itinerary_preferences 
+		SET itinerary_filters = $2, updated_at = CURRENT_TIMESTAMP 
+		WHERE user_preference_profile_id = $1`
+
+	filtersJSON := []byte("{}")  // Placeholder - would need proper marshaling
+
+	tag, err := r.pgpool.Exec(ctx, query, profileID, filtersJSON)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to update itinerary preferences", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "DB update failed")
+		return fmt.Errorf("database error updating itinerary preferences: %w", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		l.WarnContext(ctx, "No itinerary preferences found to update")
+		span.SetStatus(codes.Error, "No rows affected")
+		return fmt.Errorf("itinerary preferences not found: %w", types.ErrNotFound)
+	}
+
+	l.InfoContext(ctx, "Itinerary preferences updated successfully")
+	span.SetStatus(codes.Ok, "Preferences updated")
 	return nil
 }

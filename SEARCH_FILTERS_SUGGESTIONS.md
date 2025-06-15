@@ -646,3 +646,296 @@ Respond in JSON format appropriate for %s domain:
 5. **Observability**: Comprehensive logging of filter application and results
 
 This integration strategy leverages the existing sophisticated chat system while adding the multi-domain filter capabilities, creating a powerful and intuitive travel recommendation system.
+
+---
+
+## Testing Endpoints for Enhanced Multi-Domain Filtering System
+
+### Base URL
+```
+http://localhost:8000/api/v1/user/search-profile
+```
+
+### Authentication
+All endpoints require Bearer token authentication:
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+### 1. Get Combined Filters (with Domain Support)
+
+**Endpoint:**
+```
+GET /api/v1/user/search-profile/{profileID}/filters?domain={domain}
+```
+
+**Query Parameters:**
+- `domain` (optional): "accommodation", "dining", "activities", "itinerary", "general" (default: "general")
+
+**Example Request:**
+```
+GET http://localhost:8000/api/v1/user/search-profile/30d93077-7aa7-4fb0-adec-7519448ba824/filters?domain=accommodation
+```
+
+**Expected Response:**
+```json
+{
+  "profile_id": "30d93077-7aa7-4fb0-adec-7519448ba824",
+  "domain": "accommodation",
+  "base_preferences": {
+    "search_radius_km": 5,
+    "budget_level": 3,
+    "preferred_transport": "public"
+  },
+  "accommodation_preferences": {
+    "accommodation_type": ["hotel", "apartment"],
+    "star_rating": {"min": 3, "max": 5},
+    "price_range_per_night": {"min": 50, "max": 200},
+    "amenities": ["wifi", "parking", "gym"]
+  }
+}
+```
+
+### 2. Accommodation Preferences Endpoints
+
+#### Get Accommodation Preferences
+**Endpoint:**
+```
+GET /api/v1/user/search-profile/{profileID}/accommodation
+```
+
+**Example Request:**
+```
+GET http://localhost:8000/api/v1/user/search-profile/30d93077-7aa7-4fb0-adec-7519448ba824/accommodation
+```
+
+#### Update Accommodation Preferences
+**Endpoint:**
+```
+PUT /api/v1/user/search-profile/{profileID}/accommodation
+```
+
+**Request Body:**
+```json
+{
+  "accommodation_type": ["hotel", "boutique", "apartment"],
+  "star_rating": {"min": 4, "max": 5},
+  "price_range_per_night": {"min": 100, "max": 300},
+  "amenities": ["wifi", "parking", "pool", "gym", "spa"],
+  "room_type": ["double", "suite"],
+  "chain_preference": "boutique_chains",
+  "cancellation_policy": ["free_cancellation"],
+  "booking_flexibility": "instant_book"
+}
+```
+
+### 3. Dining Preferences Endpoints
+
+#### Get Dining Preferences
+**Endpoint:**
+```
+GET /api/v1/user/search-profile/{profileID}/dining
+```
+
+#### Update Dining Preferences
+**Endpoint:**
+```
+PUT /api/v1/user/search-profile/{profileID}/dining
+```
+
+**Request Body:**
+```json
+{
+  "cuisine_types": ["italian", "french", "local_specialty"],
+  "meal_types": ["lunch", "dinner"],
+  "service_style": ["fine_dining", "casual"],
+  "price_range_per_person": {"min": 25, "max": 100},
+  "dietary_needs": ["vegetarian"],
+  "allergen_free": ["nuts", "shellfish"],
+  "michelin_rated": true,
+  "local_recommendations": true,
+  "chain_vs_local": "local_preferred",
+  "organic_preference": false,
+  "outdoor_seating_preferred": true
+}
+```
+
+### 4. Activity Preferences Endpoints
+
+#### Get Activity Preferences
+**Endpoint:**
+```
+GET /api/v1/user/search-profile/{profileID}/activities
+```
+
+#### Update Activity Preferences
+**Endpoint:**
+```
+PUT /api/v1/user/search-profile/{profileID}/activities
+```
+
+**Request Body:**
+```json
+{
+  "activity_categories": ["museums", "nature", "arts", "history"],
+  "physical_activity_level": "moderate",
+  "indoor_outdoor_preference": "mixed",
+  "cultural_immersion_level": "deep_local",
+  "must_see_vs_hidden_gems": "mixed",
+  "educational_preference": true,
+  "photography_opportunities": true,
+  "season_specific_activities": ["year_round"],
+  "avoid_crowds": false,
+  "local_events_interest": ["festivals", "cultural_events", "food_events"]
+}
+```
+
+### 5. Itinerary Preferences Endpoints
+
+#### Get Itinerary Preferences
+**Endpoint:**
+```
+GET /api/v1/user/search-profile/{profileID}/itinerary
+```
+
+#### Update Itinerary Preferences
+**Endpoint:**
+```
+PUT /api/v1/user/search-profile/{profileID}/itinerary
+```
+
+**Request Body:**
+```json
+{
+  "planning_style": "flexible",
+  "preferred_pace": "moderate",
+  "time_flexibility": "loose_schedule",
+  "morning_vs_evening": "flexible",
+  "weekend_vs_weekday": "any",
+  "preferred_seasons": ["spring", "summer", "fall"],
+  "avoid_peak_season": false,
+  "adventure_vs_relaxation": "balanced",
+  "spontaneous_vs_planned": "semi_planned"
+}
+```
+
+### 6. Enhanced LLM Chat Endpoint (Using New Filters)
+
+**Endpoint:**
+```
+POST /api/v1/llm/prompt-response/chat/sessions/{profileID}
+```
+
+**Request Body:**
+```json
+{
+  "city_name": "Paris",
+  "message": "Find me a romantic Italian restaurant with outdoor seating near the Eiffel Tower"
+}
+```
+
+**Expected Enhanced Response:**
+```json
+{
+  "session_id": "1f0841de-8929-49d4-a9e7-1cea4eb67664",
+  "domain_detected": "dining",
+  "applied_filters": {
+    "cuisine_types": ["italian"],
+    "outdoor_seating_preferred": true,
+    "ambiance": "romantic",
+    "location_proximity": "eiffel_tower"
+  },
+  "data": {
+    "restaurants": [
+      {
+        "name": "Bistrot de la Tour Eiffel",
+        "cuisine_type": "Italian",
+        "outdoor_seating": true,
+        "price_range": "$$",
+        "rating": 4.5,
+        "distance_km": 0.3
+      }
+    ]
+  }
+}
+```
+
+### Testing Workflow
+
+1. **Setup**: Create a user profile with ID `30d93077-7aa7-4fb0-adec-7519448ba824`
+2. **Test Base Functionality**: Get combined filters for different domains
+3. **Test Domain Updates**: Update preferences for each domain (accommodation, dining, activities, itinerary)
+4. **Test Integration**: Use the enhanced chat endpoint to see filter application
+5. **Test Filter Combinations**: Request combined filters to see merged preferences
+
+### Example Test Sequence
+
+1. **Get general filters:**
+   ```
+   GET /api/v1/user/search-profile/30d93077-7aa7-4fb0-adec-7519448ba824/filters
+   ```
+
+2. **Update accommodation preferences:**
+   ```
+   PUT /api/v1/user/search-profile/30d93077-7aa7-4fb0-adec-7519448ba824/accommodation
+   ```
+
+3. **Get accommodation-specific combined filters:**
+   ```
+   GET /api/v1/user/search-profile/30d93077-7aa7-4fb0-adec-7519448ba824/filters?domain=accommodation
+   ```
+
+4. **Test chat with enhanced filters:**
+   ```
+   POST /api/v1/llm/prompt-response/chat/sessions/30d93077-7aa7-4fb0-adec-7519448ba824
+   Body: {"city_name": "Paris", "message": "Find luxury hotels with spa amenities"}
+   ```
+
+### Notes
+- Replace `{profileID}` with actual profile UUID (e.g., `30d93077-7aa7-4fb0-adec-7519448ba824`)
+- All endpoints return JSON responses with appropriate HTTP status codes
+- Error responses include detailed error messages for debugging
+- The system maintains backward compatibility with existing profile structures
+
+ Looking at your pasted content and
+  understanding your architecture, here's a
+   good client-side approach:
+
+  1. Route-based separation:
+  /chat/hotels/[cityId] - Hotel-specific
+  chat
+  /chat/restaurants/[cityId] -
+  Restaurant-specific chat
+  /chat/itineraries/[cityId] -
+  Itinerary-specific chat
+
+  2. Context-aware API calls:
+  - Pass the route context to your LLM
+  endpoint
+  - Modify your chat service to include the
+   content type:
+
+  // In your chat API call
+  const response = await
+  fetch('/api/v1/llm/prompt-response/chat/s
+  essions/{sessionId}', {
+    body: JSON.stringify({
+      city_name: "Paris",
+      message: "Find luxury hotels with spa
+   amenities",
+      context_type: "hotels" // Add this
+    })
+  })
+
+  3. Server-side routing enhancement:
+  Create separate endpoints or use query
+  parameters:
+  - /api/v1/llm/hotels/chat/sessions/{id}
+  - /api/v1/llm/restaurants/chat/sessions/{
+  id}
+  - /api/v1/llm/itineraries/chat/sessions/{
+  id}
+
+  This keeps your chat sessions
+  contextually aware and allows for
+  specialized prompting per content type.

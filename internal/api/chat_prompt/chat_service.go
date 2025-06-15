@@ -43,6 +43,36 @@ func (c *SimpleIntentClassifier) Classify(ctx context.Context, message string) (
 	return types.IntentModifyItinerary, nil // Default intent
 }
 
+// DomainDetector detects the primary domain from user queries
+type DomainDetector struct{}
+
+func (d *DomainDetector) DetectDomain(ctx context.Context, message string) types.DomainType {
+	message = strings.ToLower(message)
+	
+	// Accommodation domain keywords
+	if matched, _ := regexp.MatchString(`hotel|hostel|accommodation|stay|sleep|room|booking|airbnb|lodge|resort|guesthouse`, message); matched {
+		return types.DomainAccommodation
+	}
+	
+	// Dining domain keywords
+	if matched, _ := regexp.MatchString(`restaurant|food|eat|dine|meal|cuisine|drink|cafe|bar|lunch|dinner|breakfast|brunch`, message); matched {
+		return types.DomainDining
+	}
+	
+	// Activity domain keywords
+	if matched, _ := regexp.MatchString(`activity|museum|park|attraction|tour|visit|see|do|experience|adventure|shopping|nightlife`, message); matched {
+		return types.DomainActivities
+	}
+	
+	// Itinerary domain keywords
+	if matched, _ := regexp.MatchString(`itinerary|plan|schedule|trip|day|week|journey|route|organize|arrange`, message); matched {
+		return types.DomainItinerary
+	}
+	
+	// Default to general domain
+	return types.DomainGeneral
+}
+
 const (
 	model              = "gemini-2.0-flash"
 	defaultTemperature = 0.5
@@ -99,6 +129,7 @@ type LlmInteractiontServiceImpl struct {
 	logger             *slog.Logger
 	interestRepo       interests.Repository
 	searchProfileRepo  profiles.Repository
+	searchProfileSvc   profiles.Service  // Add service for enhanced methods
 	tagsRepo           tags.Repository
 	aiClient           *generativeAI.AIClient
 	embeddingService   *generativeAI.EmbeddingService
@@ -116,6 +147,7 @@ type LlmInteractiontServiceImpl struct {
 // NewLlmInteractiontService creates a new user service instance.
 func NewLlmInteractiontService(interestRepo interests.Repository,
 	searchProfileRepo profiles.Repository,
+	searchProfileSvc profiles.Service,
 	tagsRepo tags.Repository,
 	llmInteractionRepo Repository,
 	cityRepo city.Repository,
@@ -145,6 +177,7 @@ func NewLlmInteractiontService(interestRepo interests.Repository,
 		tagsRepo:           tagsRepo,
 		interestRepo:       interestRepo,
 		searchProfileRepo:  searchProfileRepo,
+		searchProfileSvc:   searchProfileSvc,
 		aiClient:           aiClient,
 		embeddingService:   embeddingService,
 		ragService:         ragService,
@@ -558,6 +591,30 @@ func (l *LlmInteractiontServiceImpl) FetchUserData(ctx context.Context, userID, 
 		return nil, nil, nil, fmt.Errorf("failed to fetch user tags: %w", err)
 	}
 	return interests, searchProfile, tags, nil
+}
+
+// FetchEnhancedUserData fetches user data including domain-specific preferences
+func (l *LlmInteractiontServiceImpl) FetchEnhancedUserData(ctx context.Context, userID, profileID uuid.UUID, domain types.DomainType) (*types.CombinedFilters, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "FetchEnhancedUserData", trace.WithAttributes(
+		attribute.String("profile.id", profileID.String()),
+		attribute.String("domain", string(domain)),
+	))
+	defer span.End()
+
+	l.logger.DebugContext(ctx, "Fetching enhanced user data", slog.String("profileID", profileID.String()), slog.String("domain", string(domain)))
+
+	// Get combined filters through the profile service
+	combinedFilters, err := l.searchProfileSvc.GetCombinedFilters(ctx, userID, profileID, domain)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to fetch combined filters", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to fetch combined filters")
+		return nil, fmt.Errorf("failed to fetch enhanced user data: %w", err)
+	}
+
+	l.logger.InfoContext(ctx, "Enhanced user data fetched successfully")
+	span.SetStatus(codes.Ok, "Enhanced user data fetched successfully")
+	return combinedFilters, nil
 }
 
 func (l *LlmInteractiontServiceImpl) PreparePromptData(interests []*types.Interest, tags []*types.Tags, searchProfile *types.UserPreferenceProfileResponse) (interestNames []string, tagsPromptPart string, userPrefs string) {
@@ -1012,6 +1069,402 @@ func (l *LlmInteractiontServiceImpl) GetIteneraryResponse(ctx context.Context, c
 
 	span.SetStatus(codes.Ok, "Itinerary generated successfully")
 	return &itinerary, nil
+}
+
+// GetEnhancedIteneraryResponse generates an itinerary with enhanced domain-specific filtering
+func (l *LlmInteractiontServiceImpl) GetEnhancedIteneraryResponse(ctx context.Context, cityName, userMessage string, userID, profileID uuid.UUID, userLocation *types.UserLocation) (*types.AiCityResponse, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetEnhancedIteneraryResponse", trace.WithAttributes(
+		attribute.String("city.name", cityName),
+		attribute.String("user.id", userID.String()),
+		attribute.String("profile.id", profileID.String()),
+		attribute.String("user.message", userMessage),
+	))
+	defer span.End()
+
+	l.logger.DebugContext(ctx, "Starting enhanced itinerary generation", 
+		slog.String("cityName", cityName), 
+		slog.String("userID", userID.String()), 
+		slog.String("profileID", profileID.String()),
+		slog.String("userMessage", userMessage))
+
+	// Detect domain from user message
+	domainDetector := &DomainDetector{}
+	detectedDomain := domainDetector.DetectDomain(ctx, userMessage)
+	l.logger.DebugContext(ctx, "Detected domain", slog.String("domain", string(detectedDomain)))
+	span.SetAttributes(attribute.String("detected.domain", string(detectedDomain)))
+
+	// Fetch enhanced user data including domain-specific preferences
+	combinedFilters, err := l.FetchEnhancedUserData(ctx, userID, profileID, detectedDomain)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to fetch enhanced user data")
+		return nil, err
+	}
+
+	// Prepare enhanced prompt data with domain-specific filters
+	enhancedPromptData := l.PrepareEnhancedPromptData(combinedFilters, detectedDomain)
+	span.SetAttributes(
+		attribute.Int("base_interests.count", len(combinedFilters.BasePreferences.Interests)),
+		attribute.Bool("has_accommodation_prefs", combinedFilters.AccommodationPreferences != nil),
+		attribute.Bool("has_dining_prefs", combinedFilters.DiningPreferences != nil),
+		attribute.Bool("has_activity_prefs", combinedFilters.ActivityPreferences != nil),
+		attribute.Bool("has_itinerary_prefs", combinedFilters.ItineraryPreferences != nil),
+	)
+
+	// Determine user location from profile if not provided
+	if userLocation == nil && combinedFilters.BasePreferences.UserLatitude != nil && combinedFilters.BasePreferences.UserLongitude != nil {
+		userLocation = &types.UserLocation{
+			UserLat: *combinedFilters.BasePreferences.UserLatitude,
+			UserLon: *combinedFilters.BasePreferences.UserLongitude,
+		}
+		span.SetAttributes(
+			attribute.Float64("user.latitude", *combinedFilters.BasePreferences.UserLatitude),
+			attribute.Float64("user.longitude", *combinedFilters.BasePreferences.UserLongitude),
+		)
+	}
+
+	// Set up channels and wait group for fan-in fan-out
+	resultCh := make(chan types.GenAIResponse, 3)
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	// Fan-out: Start workers with enhanced prompts
+	go l.GenerateCityDataWorker(&wg, ctx, cityName, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	go l.GenerateGeneralPOIWorker(&wg, ctx, cityName, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	go l.GenerateEnhancedPersonalisedPOIWorker(&wg, ctx, cityName, userID, profileID, resultCh, enhancedPromptData, detectedDomain, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+
+	// Close channel after workers complete
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	// Fan-in: Collect results
+	itinerary, llmInteractionID, rawPersonalisedPOIs, errors := l.CollectResults(resultCh)
+	if len(errors) > 0 {
+		l.logger.ErrorContext(ctx, "Errors during enhanced itinerary generation", slog.Any("errors", errors))
+		for _, err := range errors {
+			span.RecordError(err)
+		}
+		span.SetStatus(codes.Error, "Failed to generate enhanced itinerary")
+		return nil, fmt.Errorf("failed to generate enhanced itinerary: %v", errors)
+	}
+
+	// Handle city data
+	cityID, err := l.HandleCityData(ctx, itinerary.GeneralCityData)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to handle city data")
+		return nil, err
+	}
+	span.SetAttributes(attribute.String("city.id", cityID.String()))
+
+	// Handle general POIs
+	l.HandleGeneralPOIs(ctx, itinerary.PointsOfInterest, cityID)
+	span.SetAttributes(attribute.Int("general_pois.count", len(itinerary.PointsOfInterest)))
+
+	// Handle personalized POIs with domain-aware filtering
+	sortedPois, err := l.HandlePersonalisedPOIs(ctx, rawPersonalisedPOIs, cityID, userLocation, llmInteractionID, userID, profileID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to handle personalized POIs")
+		return nil, err
+	}
+	itinerary.AIItineraryResponse.PointsOfInterest = sortedPois
+	span.SetAttributes(
+		attribute.Int("personalized_pois.count", len(sortedPois)),
+		attribute.String("llm_interaction.id", llmInteractionID.String()),
+	)
+
+	l.logger.InfoContext(ctx, "Enhanced itinerary ready",
+		slog.String("itinerary_name", itinerary.AIItineraryResponse.ItineraryName),
+		slog.Int("final_personalised_poi_count", len(itinerary.AIItineraryResponse.PointsOfInterest)),
+		slog.String("detected_domain", string(detectedDomain)))
+
+	span.SetStatus(codes.Ok, "Enhanced itinerary generated successfully")
+	return &itinerary, nil
+}
+
+// PrepareEnhancedPromptData prepares prompt data with domain-specific filters
+func (l *LlmInteractiontServiceImpl) PrepareEnhancedPromptData(filters *types.CombinedFilters, domain types.DomainType) string {
+	var promptParts []string
+
+	// Base preferences
+	if filters.BasePreferences != nil {
+		basePrompt := getUserPreferencesPrompt(filters.BasePreferences)
+		if basePrompt != "" {
+			promptParts = append(promptParts, "Base Preferences: "+basePrompt)
+		}
+	}
+
+	// Domain-specific preferences based on detected domain
+	switch domain {
+	case types.DomainAccommodation:
+		if filters.AccommodationPreferences != nil {
+			accommodationPrompt := l.getAccommodationPreferencesPrompt(filters.AccommodationPreferences)
+			if accommodationPrompt != "" {
+				promptParts = append(promptParts, "Accommodation Focus: "+accommodationPrompt)
+			}
+		}
+	case types.DomainDining:
+		if filters.DiningPreferences != nil {
+			diningPrompt := l.getDiningPreferencesPrompt(filters.DiningPreferences)
+			if diningPrompt != "" {
+				promptParts = append(promptParts, "Dining Focus: "+diningPrompt)
+			}
+		}
+	case types.DomainActivities:
+		if filters.ActivityPreferences != nil {
+			activityPrompt := l.getActivityPreferencesPrompt(filters.ActivityPreferences)
+			if activityPrompt != "" {
+				promptParts = append(promptParts, "Activity Focus: "+activityPrompt)
+			}
+		}
+	case types.DomainItinerary:
+		if filters.ItineraryPreferences != nil {
+			itineraryPrompt := l.getItineraryPreferencesPrompt(filters.ItineraryPreferences)
+			if itineraryPrompt != "" {
+				promptParts = append(promptParts, "Planning Focus: "+itineraryPrompt)
+			}
+		}
+	default:
+		// For general domain, include all available preferences
+		if filters.AccommodationPreferences != nil {
+			accommodationPrompt := l.getAccommodationPreferencesPrompt(filters.AccommodationPreferences)
+			if accommodationPrompt != "" {
+				promptParts = append(promptParts, "Accommodation: "+accommodationPrompt)
+			}
+		}
+		if filters.DiningPreferences != nil {
+			diningPrompt := l.getDiningPreferencesPrompt(filters.DiningPreferences)
+			if diningPrompt != "" {
+				promptParts = append(promptParts, "Dining: "+diningPrompt)
+			}
+		}
+		if filters.ActivityPreferences != nil {
+			activityPrompt := l.getActivityPreferencesPrompt(filters.ActivityPreferences)
+			if activityPrompt != "" {
+				promptParts = append(promptParts, "Activities: "+activityPrompt)
+			}
+		}
+		if filters.ItineraryPreferences != nil {
+			itineraryPrompt := l.getItineraryPreferencesPrompt(filters.ItineraryPreferences)
+			if itineraryPrompt != "" {
+				promptParts = append(promptParts, "Planning: "+itineraryPrompt)
+			}
+		}
+	}
+
+	return strings.Join(promptParts, "\n")
+}
+
+// Domain-specific prompt generation methods
+func (l *LlmInteractiontServiceImpl) getAccommodationPreferencesPrompt(prefs *types.AccommodationPreferences) string {
+	var parts []string
+	
+	if len(prefs.AccommodationType) > 0 {
+		parts = append(parts, fmt.Sprintf("preferred accommodation types: %s", strings.Join(prefs.AccommodationType, ", ")))
+	}
+	if len(prefs.Amenities) > 0 {
+		parts = append(parts, fmt.Sprintf("required amenities: %s", strings.Join(prefs.Amenities, ", ")))
+	}
+	if prefs.StarRating != nil {
+		if prefs.StarRating.Min != nil && prefs.StarRating.Max != nil {
+			parts = append(parts, fmt.Sprintf("star rating: %.0f-%.0f stars", *prefs.StarRating.Min, *prefs.StarRating.Max))
+		}
+	}
+	
+	return strings.Join(parts, "; ")
+}
+
+func (l *LlmInteractiontServiceImpl) getDiningPreferencesPrompt(prefs *types.DiningPreferences) string {
+	var parts []string
+	
+	if len(prefs.CuisineTypes) > 0 {
+		parts = append(parts, fmt.Sprintf("preferred cuisines: %s", strings.Join(prefs.CuisineTypes, ", ")))
+	}
+	if len(prefs.ServiceStyle) > 0 {
+		parts = append(parts, fmt.Sprintf("service style: %s", strings.Join(prefs.ServiceStyle, ", ")))
+	}
+	if len(prefs.DietaryNeeds) > 0 {
+		parts = append(parts, fmt.Sprintf("dietary requirements: %s", strings.Join(prefs.DietaryNeeds, ", ")))
+	}
+	if prefs.MichelinRated {
+		parts = append(parts, "prefer Michelin-rated restaurants")
+	}
+	if prefs.LocalRecommendations {
+		parts = append(parts, "prioritize local recommendations")
+	}
+	
+	return strings.Join(parts, "; ")
+}
+
+func (l *LlmInteractiontServiceImpl) getActivityPreferencesPrompt(prefs *types.ActivityPreferences) string {
+	var parts []string
+	
+	if len(prefs.ActivityCategories) > 0 {
+		parts = append(parts, fmt.Sprintf("preferred activities: %s", strings.Join(prefs.ActivityCategories, ", ")))
+	}
+	if prefs.PhysicalActivityLevel != "" {
+		parts = append(parts, fmt.Sprintf("physical activity level: %s", prefs.PhysicalActivityLevel))
+	}
+	if prefs.CulturalImmersionLevel != "" {
+		parts = append(parts, fmt.Sprintf("cultural immersion: %s", prefs.CulturalImmersionLevel))
+	}
+	if prefs.EducationalPreference {
+		parts = append(parts, "prefer educational experiences")
+	}
+	if prefs.PhotoOpportunities {
+		parts = append(parts, "value photo opportunities")
+	}
+	
+	return strings.Join(parts, "; ")
+}
+
+func (l *LlmInteractiontServiceImpl) getItineraryPreferencesPrompt(prefs *types.ItineraryPreferences) string {
+	var parts []string
+	
+	if prefs.PlanningStyle != "" {
+		parts = append(parts, fmt.Sprintf("planning style: %s", prefs.PlanningStyle))
+	}
+	if prefs.PreferredPace != "" {
+		parts = append(parts, fmt.Sprintf("preferred pace: %s", prefs.PreferredPace))
+	}
+	if prefs.TimeFlexibility != "" {
+		parts = append(parts, fmt.Sprintf("time flexibility: %s", prefs.TimeFlexibility))
+	}
+	if len(prefs.PreferredSeasons) > 0 {
+		parts = append(parts, fmt.Sprintf("preferred seasons: %s", strings.Join(prefs.PreferredSeasons, ", ")))
+	}
+	if prefs.AvoidPeakSeason {
+		parts = append(parts, "avoid peak season")
+	}
+	
+	return strings.Join(parts, "; ")
+}
+
+// GenerateEnhancedPersonalisedPOIWorker generates personalized POIs with domain-aware filtering
+func (l *LlmInteractiontServiceImpl) GenerateEnhancedPersonalisedPOIWorker(wg *sync.WaitGroup, ctx context.Context,
+	cityName string, userID, profileID uuid.UUID, resultCh chan<- types.GenAIResponse,
+	enhancedPromptData string, domain types.DomainType,
+	config *genai.GenerateContentConfig) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GenerateEnhancedPersonalisedPOIWorker", trace.WithAttributes(
+		attribute.String("city.name", cityName),
+		attribute.String("user.id", userID.String()),
+		attribute.String("profile.id", profileID.String()),
+		attribute.String("domain", string(domain)),
+	))
+	defer span.End()
+	defer wg.Done()
+
+	startTime := time.Now()
+
+	// Create enhanced prompt based on domain
+	prompt := l.getEnhancedPersonalizedPOIPrompt(cityName, enhancedPromptData, domain)
+	span.SetAttributes(attribute.Int("prompt.length", len(prompt)))
+
+	response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "AI generation failed")
+		resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to generate enhanced personalized POIs: %w", err)}
+		return
+	}
+
+	duration := time.Since(startTime)
+	span.SetAttributes(attribute.Int64("generation.duration_ms", duration.Milliseconds()))
+
+	var txt string
+	for _, candidate := range response.Candidates {
+		if candidate.Content != nil && len(candidate.Content.Parts) > 0 {
+			txt = candidate.Content.Parts[0].Text
+			break
+		}
+	}
+	if txt == "" {
+		err := fmt.Errorf("no valid enhanced personalized POI content from AI")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Empty response from AI")
+		resultCh <- types.GenAIResponse{Err: err}
+		return
+	}
+	span.SetAttributes(attribute.Int("response.length", len(txt)))
+
+	cleanTxt := cleanJSONResponse(txt)
+	var itineraryData types.AIItineraryResponse
+	if err := json.Unmarshal([]byte(cleanTxt), &itineraryData); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to parse enhanced personalized POI JSON")
+		resultCh <- types.GenAIResponse{Err: fmt.Errorf("failed to parse enhanced personalized POI JSON: %w", err)}
+		return
+	}
+
+	span.SetAttributes(attribute.Int("pois.count", len(itineraryData.PointsOfInterest)))
+	span.SetStatus(codes.Ok, "Enhanced personalized POIs generated successfully")
+	resultCh <- types.GenAIResponse{
+		ItineraryName:        itineraryData.ItineraryName,
+		ItineraryDescription: itineraryData.OverallDescription,
+		PersonalisedPOI:      itineraryData.PointsOfInterest,
+		LlmInteractionID:     uuid.New(), // Generate a new LLM interaction ID
+	}
+}
+
+// getEnhancedPersonalizedPOIPrompt creates a domain-aware prompt for personalized POI generation
+func (l *LlmInteractiontServiceImpl) getEnhancedPersonalizedPOIPrompt(cityName, enhancedPromptData string, domain types.DomainType) string {
+	domainFocus := ""
+	switch domain {
+	case types.DomainAccommodation:
+		domainFocus = "Focus particularly on accommodation recommendations and nearby attractions that complement the user's accommodation preferences."
+	case types.DomainDining:
+		domainFocus = "Focus particularly on restaurant, food, and dining experiences that align with the user's culinary preferences."
+	case types.DomainActivities:
+		domainFocus = "Focus particularly on activities, attractions, and experiences that match the user's activity preferences and physical capabilities."
+	case types.DomainItinerary:
+		domainFocus = "Focus particularly on creating a well-structured itinerary that respects the user's planning style and pace preferences."
+	default:
+		domainFocus = "Provide a balanced mix of attractions, dining, and activities based on all user preferences."
+	}
+
+	prompt := fmt.Sprintf(`You are a travel AI assistant creating a personalized itinerary for %s. 
+
+User Preferences and Filters:
+%s
+
+Domain Focus: %s
+
+%s
+
+Create a comprehensive and personalized itinerary that heavily weighs the user's specific preferences and filters. Ensure that every recommendation aligns with their stated preferences.
+
+Format the response in JSON with the following structure:
+{
+    "itinerary_name": "Personalized itinerary name reflecting user preferences",
+    "overall_description": "Description emphasizing how this itinerary matches user preferences",
+    "points_of_interest": [
+        {
+            "name": "POI name",
+            "category": "Category",
+            "coordinates": {
+                "latitude": float64,
+                "longitude": float64
+            },
+            "description": "Detailed description explaining why this POI matches the user's specific preferences and filters"
+        }
+    ]
+}`, cityName, enhancedPromptData, domainFocus, getBasePersonalizedPromptInstructions())
+
+	return prompt
+}
+
+func getBasePersonalizedPromptInstructions() string {
+	return `
+**Instructions:**
+- Prioritize POIs that directly align with user preferences and filters
+- Explain in descriptions how each POI matches their specific preferences
+- Ensure variety while maintaining preference alignment
+- Include practical details like accessibility if relevant to user preferences
+- Consider user's pace and planning style preferences in the selection
+- Maximum 8-10 POIs to maintain quality over quantity`
 }
 
 func TruncateString(str string, num int) string {

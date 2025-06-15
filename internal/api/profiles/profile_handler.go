@@ -30,6 +30,17 @@ type Handler interface {
 	UpdateSearchProfile(w http.ResponseWriter, r *http.Request)
 	DeleteSearchProfile(w http.ResponseWriter, r *http.Request)
 	SetDefaultSearchProfile(w http.ResponseWriter, r *http.Request)
+	
+	// Enhanced domain-specific preference endpoints
+	GetCombinedFilters(w http.ResponseWriter, r *http.Request)
+	GetAccommodationPreferences(w http.ResponseWriter, r *http.Request)
+	UpdateAccommodationPreferences(w http.ResponseWriter, r *http.Request)
+	GetDiningPreferences(w http.ResponseWriter, r *http.Request)
+	UpdateDiningPreferences(w http.ResponseWriter, r *http.Request)
+	GetActivityPreferences(w http.ResponseWriter, r *http.Request)
+	UpdateActivityPreferences(w http.ResponseWriter, r *http.Request)
+	GetItineraryPreferences(w http.ResponseWriter, r *http.Request)
+	UpdateItineraryPreferences(w http.ResponseWriter, r *http.Request)
 }
 type HandlerImpl struct {
 	userService Service

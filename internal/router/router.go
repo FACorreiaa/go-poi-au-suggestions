@@ -166,6 +166,17 @@ func profilesRoutes(HandlerImpl *profiles.HandlerImpl) http.Handler {
 	r.Get("/", HandlerImpl.GetSearchProfiles)                          // GET http://localhost:8000/api/v1/user/search-profile
 	r.Post("/", HandlerImpl.CreateSearchProfile)                       // POST http://localhost:8000/api/v1/user/search-profile
 
+	// Enhanced domain-specific preference routes
+	r.Get("/{profileID}/filters", HandlerImpl.GetCombinedFilters)                         // GET http://localhost:8000/api/v1/user/search-profile/{profileID}/filters?domain=accommodation
+	r.Get("/{profileID}/accommodation", HandlerImpl.GetAccommodationPreferences)         // GET http://localhost:8000/api/v1/user/search-profile/{profileID}/accommodation
+	r.Put("/{profileID}/accommodation", HandlerImpl.UpdateAccommodationPreferences)      // PUT http://localhost:8000/api/v1/user/search-profile/{profileID}/accommodation
+	r.Get("/{profileID}/dining", HandlerImpl.GetDiningPreferences)                       // GET http://localhost:8000/api/v1/user/search-profile/{profileID}/dining
+	r.Put("/{profileID}/dining", HandlerImpl.UpdateDiningPreferences)                    // PUT http://localhost:8000/api/v1/user/search-profile/{profileID}/dining
+	r.Get("/{profileID}/activities", HandlerImpl.GetActivityPreferences)                 // GET http://localhost:8000/api/v1/user/search-profile/{profileID}/activities
+	r.Put("/{profileID}/activities", HandlerImpl.UpdateActivityPreferences)              // PUT http://localhost:8000/api/v1/user/search-profile/{profileID}/activities
+	r.Get("/{profileID}/itinerary", HandlerImpl.GetItineraryPreferences)                 // GET http://localhost:8000/api/v1/user/search-profile/{profileID}/itinerary
+	r.Put("/{profileID}/itinerary", HandlerImpl.UpdateItineraryPreferences)              // PUT http://localhost:8000/api/v1/user/search-profile/{profileID}/itinerary
+
 	return r
 }
 

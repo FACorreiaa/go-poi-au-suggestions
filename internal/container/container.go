@@ -86,6 +86,7 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	llmInteractionRepo := llmChat.NewRepositoryImpl(pool, logger)
 	llmInteractionService := llmChat.NewLlmInteractiontService(interestsRepo,
 		profilessRepo,
+		profilessService,
 		tagsRepo,
 		llmInteractionRepo,
 		cityRepo,

@@ -91,15 +91,16 @@ func (h *HandlerImpl) StartChatSessionStream(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Start streaming with context support
-	streamResp, err := h.llmInteractionService.StartNewSessionStreamedWithContext(ctx, userID, profileID, req.CityName, prompt, userLocation, req.ContextType)
-	if err != nil {
-		// Fallback to original method for backward compatibility
-		streamResp, err = h.llmInteractionService.StartNewSessionStreamed(ctx, userID, profileID, req.CityName, prompt, userLocation)
-		if err != nil {
-			h.writeSSEError(w, fmt.Sprintf("Failed to start session: %v", err))
-			return
-		}
-	}
+	//streamResp, err := h.llmInteractionService.StartNewSessionStreamedWithContext(ctx, userID, profileID, req.CityName, prompt, userLocation, req.ContextType)
+	// if err != nil {
+	// 	// Fallback to original method for backward compatibility
+	// 	streamResp, err = h.llmInteractionService.StartNewSessionStreamed(ctx, userID, profileID, req.CityName, prompt, userLocation)
+	// 	if err != nil {
+	// 		h.writeSSEError(w, fmt.Sprintf("Failed to start session: %v", err))
+	// 		return
+	// 	}
+	// }
+	streamResp, err := h.llmInteractionService.StartNewSessionStreamed(ctx, userID, profileID, req.CityName, prompt, userLocation)
 	defer streamResp.Cancel()
 
 	h.logger.InfoContext(ctx, "Started streaming session",
@@ -212,7 +213,8 @@ func (h *HandlerImpl) ContinueSessionStreamHandler(w http.ResponseWriter, r *htt
 	// Start the service in a goroutine with context support
 	go func() {
 		// Try context-aware method first, fallback for backward compatibility
-		err := h.llmInteractionService.ContinueSessionStreamedWithContext(ctx, sessionID, req.Message, req.UserLocation, req.ContextType, eventCh)
+		//err := h.llmInteractionService.ContinueSessionStreamedWithContext(ctx, sessionID, req.Message, req.UserLocation, req.ContextType, eventCh)
+		err := h.llmInteractionService.ContinueSessionStreamed(ctx, sessionID, req.Message, req.UserLocation, eventCh)
 		if err != nil {
 			// Fallback to original method
 			err = h.llmInteractionService.ContinueSessionStreamed(ctx, sessionID, req.Message, req.UserLocation, eventCh)

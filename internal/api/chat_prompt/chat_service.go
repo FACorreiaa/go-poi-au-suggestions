@@ -115,22 +115,22 @@ type LlmInteractiontService interface {
 		eventCh chan<- types.StreamEvent, // Channel to send events back
 	) error
 
-	// Context-aware chat methods
-	StartNewSessionWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (uuid.UUID, *types.AiCityResponse, error)
-	ContinueSessionWithContext(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.AiCityResponse, error)
-	StartNewSessionStreamedWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.StreamingResponse, error)
-	ContinueSessionStreamedWithContext(
-		ctx context.Context,
-		sessionID uuid.UUID,
-		message string,
-		userLocation *types.UserLocation, // For distance sorting context
-		contextType types.ChatContextType,
-		eventCh chan<- types.StreamEvent, // Channel to send events back
-	) error
+	// // Context-aware chat methods
+	// StartNewSessionWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (uuid.UUID, *types.AiCityResponse, error)
+	// ContinueSessionWithContext(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.AiCityResponse, error)
+	// StartNewSessionStreamedWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.StreamingResponse, error)
+	// ContinueSessionStreamedWithContext(
+	// 	ctx context.Context,
+	// 	sessionID uuid.UUID,
+	// 	message string,
+	// 	userLocation *types.UserLocation, // For distance sorting context
+	// 	contextType types.ChatContextType,
+	// 	eventCh chan<- types.StreamEvent, // Channel to send events back
+	// ) error
 
-	// RAG
-	GetRAGEnabledChatResponse(ctx context.Context, message string, userID, profileID uuid.UUID, sessionID uuid.UUID, cityContext string) (*generativeAI.RAGResponse, error)
-	SearchRelevantPOIsForRAG(ctx context.Context, query string, cityID *uuid.UUID, limit int) ([]types.POIDetail, error)
+	// // RAG
+	// GetRAGEnabledChatResponse(ctx context.Context, message string, userID, profileID uuid.UUID, sessionID uuid.UUID, cityContext string) (*generativeAI.RAGResponse, error)
+	// SearchRelevantPOIsForRAG(ctx context.Context, query string, cityID *uuid.UUID, limit int) ([]types.POIDetail, error)
 }
 
 type IntentClassifier interface {

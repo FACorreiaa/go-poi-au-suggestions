@@ -142,15 +142,16 @@ func (h *HandlerImpl) StartChatSession(w http.ResponseWriter, r *http.Request) {
 		prompt = getDefaultPromptForContext(req.ContextType, req.CityName)
 	}
 
-	sessionID, itinerary, err := h.llmInteractionService.StartNewSessionWithContext(ctx, userID, profileID, req.CityName, prompt, userLocation, req.ContextType)
-	if err != nil {
-		// Fallback to original method for backward compatibility
-		sessionID, itinerary, err = h.llmInteractionService.StartNewSession(ctx, userID, profileID, req.CityName, prompt, userLocation)
-		if err != nil {
-			api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to start session: "+err.Error())
-			return
-		}
-	}
+	// sessionID, itinerary, err := h.llmInteractionService.StartNewSessionWithContext(ctx, userID, profileID, req.CityName, prompt, userLocation, req.ContextType)
+	// if err != nil {
+	// 	// Fallback to original method for backward compatibility
+	// 	sessionID, itinerary, err = h.llmInteractionService.StartNewSession(ctx, userID, profileID, req.CityName, prompt, userLocation)
+	// 	if err != nil {
+	// 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to start session: "+err.Error())
+	// 		return
+	// 	}
+	// }
+	sessionID, itinerary, err := h.llmInteractionService.StartNewSession(ctx, userID, profileID, req.CityName, prompt, userLocation)
 
 	response := struct {
 		SessionID uuid.UUID             `json:"session_id"`
@@ -298,15 +299,16 @@ func (h *HandlerImpl) ContinueChatSession(w http.ResponseWriter, r *http.Request
 	}
 
 	// Try context-aware method first, fallback to original for backward compatibility
-	itinerary, err := h.llmInteractionService.ContinueSessionWithContext(ctx, sessionID, req.Message, userLocation, req.ContextType)
-	if err != nil {
-		// Fallback to original method
-		itinerary, err = h.llmInteractionService.ContinueSession(ctx, sessionID, req.Message, userLocation)
-		if err != nil {
-			api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to continue session: "+err.Error())
-			return
-		}
-	}
+	// itinerary, err := h.llmInteractionService.ContinueSessionWithContext(ctx, sessionID, req.Message, userLocation, req.ContextType)
+	// if err != nil {
+	// 	// Fallback to original method
+	// 	itinerary, err = h.llmInteractionService.ContinueSession(ctx, sessionID, req.Message, userLocation)
+	// 	if err != nil {
+	// 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to continue session: "+err.Error())
+	// 		return
+	// 	}
+	// }
+	itinerary, err := h.llmInteractionService.ContinueSession(ctx, sessionID, req.Message, userLocation)
 
 	response := struct {
 		Data *types.AiCityResponse `json:"data"`

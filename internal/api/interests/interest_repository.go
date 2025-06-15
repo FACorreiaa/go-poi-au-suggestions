@@ -157,7 +157,9 @@ func (r *RepositoryImpl) GetAllInterests(ctx context.Context) ([]*types.Interest
 	l.DebugContext(ctx, "Fetching all active interests")
 
 	query := `
-        SELECT id, name, description, active, created_at, updated_at, 'global' AS type
+        SELECT id, name, description, 
+               CASE WHEN 'global' = 'global' THEN false ELSE active END AS active, 
+               created_at, updated_at, 'global' AS type
 		FROM interests
 		UNION
 		SELECT id, name, description, active, created_at, updated_at, 'custom' AS type
@@ -374,11 +376,15 @@ func (r *RepositoryImpl) GetInterest(ctx context.Context, interestID uuid.UUID) 
 	l.DebugContext(ctx, "Fetching interest")
 
 	query := `
-		SELECT id, name, description, active, created_at, updated_at, 'global' AS type
-		FROM interests
-		UNION
-		SELECT id, name, description, active, created_at, updated_at, 'custom' AS type
-		FROM user_custom_interests 
+		SELECT id, name, description, active, created_at, updated_at, type FROM (
+			SELECT id, name, description, 
+			       CASE WHEN 'global' = 'global' THEN false ELSE active END AS active, 
+			       created_at, updated_at, 'global' AS type
+			FROM interests
+			UNION
+			SELECT id, name, description, active, created_at, updated_at, 'custom' AS type
+			FROM user_custom_interests 
+		) AS combined_interests
         WHERE id = $1`
 
 	err := r.pgpool.QueryRow(ctx, query, interestID).Scan(

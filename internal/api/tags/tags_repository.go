@@ -79,6 +79,7 @@ func (r *RepositoryImpl) GetAll(ctx context.Context, userID uuid.UUID) ([]*types
             g.description,
             g.tag_type,
             'global' AS source, 
+			CASE WHEN 'global' = 'global' THEN false ELSE g.active END AS active,
             g.created_at        
         FROM global_tags g
         WHERE g.active = TRUE
@@ -92,6 +93,7 @@ func (r *RepositoryImpl) GetAll(ctx context.Context, userID uuid.UUID) ([]*types
             NULL AS description, 
             upt.tag_type,
             'personal' AS source, 
+			active,
             upt.created_at
         FROM user_personal_tags upt 
         WHERE upt.user_id = $1
@@ -115,6 +117,8 @@ func (r *RepositoryImpl) GetAll(ctx context.Context, userID uuid.UUID) ([]*types
 			&t.Name,
 			&t.Description,
 			&t.TagType,
+			&t.Source,
+			&t.Active,
 			&t.CreatedAt,
 		)
 		if err != nil {
@@ -291,13 +295,12 @@ func (r *RepositoryImpl) Update(ctx context.Context, userID, tagsID uuid.UUID, p
 
 	query := `
         UPDATE user_personal_tags
-        SET name = $1, tag_type = $2
-        WHERE id = $3 AND user_id = $4
-        AND tag_type = 'personal'
+        SET name = $1, tag_type = $2, active = $3, updated_at = $4
+        WHERE id = $5 AND user_id = $6
     `
 	now := time.Now()
 
-	cmdTag, err := tx.Exec(ctx, query, params.Name, params.TagType, now, userID, tagsID)
+	cmdTag, err := tx.Exec(ctx, query, params.Name, params.TagType, params.Active, now, tagsID, userID)
 	if err != nil {
 		span.RecordError(err)
 		l.ErrorContext(ctx, "Failed to update user personal tag", slog.Any("error", err))

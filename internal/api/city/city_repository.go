@@ -5,12 +5,16 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var _ Repository = (*RepositoryImpl)(nil)
@@ -18,6 +22,12 @@ var _ Repository = (*RepositoryImpl)(nil)
 type Repository interface {
 	SaveCity(ctx context.Context, city types.CityDetail) (uuid.UUID, error)
 	FindCityByNameAndCountry(ctx context.Context, city, country string) (*types.CityDetail, error)
+	GetCityIDByName(ctx context.Context, cityName string) (uuid.UUID, error)
+	
+	// Vector similarity search methods
+	FindSimilarCities(ctx context.Context, queryEmbedding []float32, limit int) ([]types.CityDetail, error)
+	UpdateCityEmbedding(ctx context.Context, cityID uuid.UUID, embedding []float32) error
+	GetCitiesWithoutEmbeddings(ctx context.Context, limit int) ([]types.CityDetail, error)
 }
 
 type RepositoryImpl struct {
@@ -173,4 +183,273 @@ func (r *RepositoryImpl) FindCityByNameAndCountry(ctx context.Context, cityName,
 	}
 
 	return &cityDetail, nil
+}
+
+// GetCityIDByName retrieves a city ID by its name
+func (r *RepositoryImpl) GetCityIDByName(ctx context.Context, cityName string) (uuid.UUID, error) {
+	ctx, span := otel.Tracer("CityRepository").Start(ctx, "GetCityIDByName", trace.WithAttributes(
+		attribute.String("city.name", cityName),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetCityIDByName"))
+
+	query := `
+        SELECT id
+        FROM cities
+        WHERE LOWER(name) = LOWER($1)
+        LIMIT 1
+    `
+
+	var cityID uuid.UUID
+	err := r.pgpool.QueryRow(ctx, query, cityName).Scan(&cityID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			l.WarnContext(ctx, "City not found", slog.String("city_name", cityName))
+			span.SetStatus(codes.Error, "City not found")
+			return uuid.Nil, fmt.Errorf("city not found: %s", cityName)
+		}
+		l.ErrorContext(ctx, "Failed to get city ID by name", 
+			slog.Any("error", err),
+			slog.String("city_name", cityName))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database query failed")
+		return uuid.Nil, fmt.Errorf("failed to get city ID by name '%s': %w", cityName, err)
+	}
+
+	l.InfoContext(ctx, "City ID retrieved successfully", 
+		slog.String("city_name", cityName),
+		slog.String("city_id", cityID.String()))
+	span.SetAttributes(
+		attribute.String("city.name", cityName),
+		attribute.String("city.id", cityID.String()),
+	)
+	span.SetStatus(codes.Ok, "City ID retrieved")
+
+	return cityID, nil
+}
+
+// FindSimilarCities finds cities similar to the provided query embedding using cosine similarity
+func (r *RepositoryImpl) FindSimilarCities(ctx context.Context, queryEmbedding []float32, limit int) ([]types.CityDetail, error) {
+	ctx, span := otel.Tracer("CityRepository").Start(ctx, "FindSimilarCities", trace.WithAttributes(
+		attribute.Int("embedding.dimension", len(queryEmbedding)),
+		attribute.Int("limit", limit),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "FindSimilarCities"))
+
+	// Convert []float32 to pgvector format string
+	embeddingStr := fmt.Sprintf("[%v]", strings.Join(func() []string {
+		strs := make([]string, len(queryEmbedding))
+		for i, v := range queryEmbedding {
+			strs[i] = fmt.Sprintf("%f", v)
+		}
+		return strs
+	}(), ","))
+
+	query := `
+        SELECT 
+            id, 
+            name, 
+            country,
+            COALESCE(state_province, '') as state_province,
+            ai_summary,
+            ST_Y(center_location) as center_latitude,
+            ST_X(center_location) as center_longitude,
+            1 - (embedding <=> $1::vector) AS similarity_score
+        FROM cities
+        WHERE embedding IS NOT NULL
+        ORDER BY embedding <=> $1::vector
+        LIMIT $2
+    `
+
+	l.DebugContext(ctx, "Executing city similarity search query", 
+		slog.String("query", query), 
+		slog.Int("embedding_dim", len(queryEmbedding)),
+		slog.Int("limit", limit))
+
+	rows, err := r.pgpool.Query(ctx, query, embeddingStr, limit)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to query similar cities", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database query failed")
+		return nil, fmt.Errorf("failed to search similar cities: %w", err)
+	}
+	defer rows.Close()
+
+	var cities []types.CityDetail
+	for rows.Next() {
+		var city types.CityDetail
+		var similarityScore float64
+		var lat, lon sql.NullFloat64
+
+		err := rows.Scan(
+			&city.ID,
+			&city.Name,
+			&city.Country,
+			&city.StateProvince,
+			&city.AiSummary,
+			&lat,
+			&lon,
+			&similarityScore,
+		)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to scan similar city row", slog.Any("error", err))
+			span.RecordError(err)
+			return nil, fmt.Errorf("failed to scan similar city row: %w", err)
+		}
+
+		if lat.Valid {
+			city.CenterLatitude = lat.Float64
+		}
+		if lon.Valid {
+			city.CenterLongitude = lon.Float64
+		}
+
+		cities = append(cities, city)
+	}
+
+	if err = rows.Err(); err != nil {
+		l.ErrorContext(ctx, "Error iterating similar city rows", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("error iterating similar city rows: %w", err)
+	}
+
+	l.InfoContext(ctx, "Similar cities found", slog.Int("count", len(cities)))
+	span.SetAttributes(attribute.Int("results.count", len(cities)))
+	span.SetStatus(codes.Ok, "Similar cities found")
+
+	return cities, nil
+}
+
+// UpdateCityEmbedding updates the embedding vector for a specific city
+func (r *RepositoryImpl) UpdateCityEmbedding(ctx context.Context, cityID uuid.UUID, embedding []float32) error {
+	ctx, span := otel.Tracer("CityRepository").Start(ctx, "UpdateCityEmbedding", trace.WithAttributes(
+		attribute.String("city.id", cityID.String()),
+		attribute.Int("embedding.dimension", len(embedding)),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "UpdateCityEmbedding"))
+
+	// Convert []float32 to pgvector format string
+	embeddingStr := fmt.Sprintf("[%v]", strings.Join(func() []string {
+		strs := make([]string, len(embedding))
+		for i, v := range embedding {
+			strs[i] = fmt.Sprintf("%f", v)
+		}
+		return strs
+	}(), ","))
+
+	query := `
+        UPDATE cities 
+        SET embedding = $1::vector, embedding_generated_at = NOW()
+        WHERE id = $2
+    `
+
+	result, err := r.pgpool.Exec(ctx, query, embeddingStr, cityID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to update city embedding", 
+			slog.Any("error", err),
+			slog.String("city_id", cityID.String()))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database update failed")
+		return fmt.Errorf("failed to update city embedding: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		err := fmt.Errorf("no city found with ID %s", cityID.String())
+		l.WarnContext(ctx, "No city found for embedding update", slog.String("city_id", cityID.String()))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "City not found")
+		return err
+	}
+
+	l.InfoContext(ctx, "City embedding updated successfully", 
+		slog.String("city_id", cityID.String()),
+		slog.Int("embedding_dimension", len(embedding)))
+	span.SetAttributes(
+		attribute.String("city.id", cityID.String()),
+		attribute.Int("embedding.dimension", len(embedding)),
+	)
+	span.SetStatus(codes.Ok, "City embedding updated")
+
+	return nil
+}
+
+// GetCitiesWithoutEmbeddings retrieves cities that don't have embeddings generated yet
+func (r *RepositoryImpl) GetCitiesWithoutEmbeddings(ctx context.Context, limit int) ([]types.CityDetail, error) {
+	ctx, span := otel.Tracer("CityRepository").Start(ctx, "GetCitiesWithoutEmbeddings", trace.WithAttributes(
+		attribute.Int("limit", limit),
+	))
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetCitiesWithoutEmbeddings"))
+
+	query := `
+        SELECT 
+            id, 
+            name, 
+            country,
+            COALESCE(state_province, '') as state_province,
+            ai_summary,
+            ST_Y(center_location) as center_latitude,
+            ST_X(center_location) as center_longitude
+        FROM cities
+        WHERE embedding IS NULL
+        ORDER BY created_at ASC
+        LIMIT $1
+    `
+
+	rows, err := r.pgpool.Query(ctx, query, limit)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to query cities without embeddings", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database query failed")
+		return nil, fmt.Errorf("failed to query cities without embeddings: %w", err)
+	}
+	defer rows.Close()
+
+	var cities []types.CityDetail
+	for rows.Next() {
+		var city types.CityDetail
+		var lat, lon sql.NullFloat64
+
+		err := rows.Scan(
+			&city.ID,
+			&city.Name,
+			&city.Country,
+			&city.StateProvince,
+			&city.AiSummary,
+			&lat,
+			&lon,
+		)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to scan city without embedding row", slog.Any("error", err))
+			span.RecordError(err)
+			return nil, fmt.Errorf("failed to scan city without embedding row: %w", err)
+		}
+
+		if lat.Valid {
+			city.CenterLatitude = lat.Float64
+		}
+		if lon.Valid {
+			city.CenterLongitude = lon.Float64
+		}
+
+		cities = append(cities, city)
+	}
+
+	if err = rows.Err(); err != nil {
+		l.ErrorContext(ctx, "Error iterating city without embedding rows", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("error iterating city without embedding rows: %w", err)
+	}
+
+	l.InfoContext(ctx, "Cities without embeddings found", slog.Int("count", len(cities)))
+	span.SetAttributes(attribute.Int("results.count", len(cities)))
+	span.SetStatus(codes.Ok, "Cities without embeddings retrieved")
+
+	return cities, nil
 }

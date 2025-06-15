@@ -281,49 +281,42 @@ func (h *HandlerImpl) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 // ValidateSession godoc
-// @Summary      Validate User Session
-// @Description  Checks if a session ID is valid and returns user information if it is.
+// @Summary      Validate JWT Access Token
+// @Description  Validates the JWT access token from Authorization header and returns user information.
 // @Tags         Auth
 // @Accept       json
 // @Produce      json
-// @Param        session body types.ValidateSessionRequest true "Session ID to validate"
-// @Success      200 {object} types.ValidateSessionResponse "Session validation result with user info if valid"
-// @Failure      400 {object} types.Response "Invalid Input"
+// @Success      200 {object} types.ValidateSessionResponse "Token validation result with user info if valid"
+// @Failure      401 {object} types.Response "Invalid or expired token"
 // @Failure      500 {object} types.Response "Internal Server Error"
-// @Router       /auth/validate [post]
+// @Security     BearerAuth
+// @Router       /auth/validate-session [post]
 func (h *HandlerImpl) ValidateSession(w http.ResponseWriter, r *http.Request) {
-	var req types.ValidateSessionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.respondWithError(w, http.StatusBadRequest, "Invalid request payload")
-		return
-	}
+	ctx := r.Context()
+	l := h.logger.With(slog.String("handler", "ValidateSession"))
 
-	// Validate request
-	if req.SessionID == "" {
-		h.respondWithError(w, http.StatusBadRequest, "session ID is required")
-		return
-	}
-
-	// Call service
-	userID, err := h.authService.ValidateRefreshToken(r.Context(), req.SessionID)
-	if err != nil {
-		h.logger.Error("Session validation failed", "error", err)
+	// Get UserID from context (set by Authenticate middleware)
+	userID, ok := GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
+		l.WarnContext(ctx, "User ID not found in context - middleware issue")
 		h.respondWithJSON(w, http.StatusOK, types.ValidateSessionResponse{
 			Valid: false,
 		})
 		return
 	}
 
-	user, err := h.authService.GetUserByID(r.Context(), userID)
+	// Fetch user details to return complete info
+	user, err := h.authService.GetUserByID(ctx, userID)
 	if err != nil {
-		h.logger.Error("Failed to get user details", "error", err)
+		l.ErrorContext(ctx, "Failed to get user details", slog.String("userID", userID), slog.Any("error", err))
 		h.respondWithJSON(w, http.StatusOK, types.ValidateSessionResponse{
 			Valid: false,
 		})
 		return
 	}
 
-	// Respond with session info
+	// Token is valid (confirmed by middleware), return user info
+	l.DebugContext(ctx, "JWT token validation successful", slog.String("userID", userID))
 	h.respondWithJSON(w, http.StatusOK, types.ValidateSessionResponse{
 		Valid:    true,
 		UserID:   user.ID,

@@ -101,20 +101,21 @@ func (r *PostgresUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*
 	var user types.UserProfile
 	var interests, badges []string
 	query := `
-		SELECT id, username, firstname, lastname, age, city, 
+		SELECT id, username, firstname, lastname, phone, age, city, 
 		       country, email, display_name, profile_image_url, 
 		       email_verified_at, about_you, location, interests, badges,
 		       places_visited, reviews_written, lists_created, followers, following,
 		       is_active, last_login_at, theme, language, created_at, updated_at
 		FROM users WHERE id = $1 AND is_active = TRUE
 	`
-	
+
 	stats := &types.UserStats{}
 	err := r.pgpool.QueryRow(ctx, query, userID).Scan(
 		&user.ID,
 		&user.Username,
 		&user.Firstname,
 		&user.Lastname,
+		&user.PhoneNumber,
 		&user.Age,
 		&user.City,
 		&user.Country,
@@ -142,9 +143,9 @@ func (r *PostgresUserRepo) GetUserByID(ctx context.Context, userID uuid.UUID) (*
 	}
 
 	// Set additional fields for frontend compatibility
-	user.Bio = user.AboutYou // Map about_you to bio
+	user.Bio = user.AboutYou           // Map about_you to bio
 	user.Avatar = user.ProfileImageURL // Map profile_image_url to avatar
-	user.JoinedDate = user.CreatedAt // Map created_at to joinedDate
+	user.JoinedDate = user.CreatedAt   // Map created_at to joinedDate
 	user.Interests = interests
 	user.Badges = badges
 	user.Stats = stats
@@ -241,6 +242,12 @@ func (r *PostgresUserRepo) UpdateProfile(ctx context.Context, userID uuid.UUID, 
 		args = append(args, *params.Interests)
 		argID++
 		span.SetAttributes(attribute.Bool("update.interests", true))
+	}
+	if params.PhoneNumber != nil {
+		setClauses = append(setClauses, fmt.Sprintf("phone = $%d", argID))
+		args = append(args, *params.PhoneNumber)
+		argID++
+		span.SetAttributes(attribute.Bool("update.phone", true))
 	}
 	if params.Badges != nil {
 		setClauses = append(setClauses, fmt.Sprintf("badges = $%d", argID))

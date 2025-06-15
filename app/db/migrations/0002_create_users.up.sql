@@ -10,6 +10,7 @@ CREATE TABLE users (
     country CITEXT,
     about_you TEXT,
     theme TEXT,
+    phone TEXT,
     language TEXT,
     role VARCHAR(50) NOT NULL DEFAULT 'user', -- e.g., 'admin', 'user', 'moderator'
     password_hash VARCHAR(255), -- Store hashed passwords only!

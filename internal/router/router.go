@@ -172,9 +172,9 @@ func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
 
 	// Legacy chat endpoints (maintain backward compatibility)
-	r.Post("/prompt-response/chat/sessions/{profileID}", HandlerImpl.StartChatSession)
-	r.Post("/prompt-response/chat/sessions/stream/{profileID}", HandlerImpl.StartChatSessionStream)
-	r.Post("/prompt-response/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueChatSession)
+	r.Post("/prompt-response/chat/sessions/{profileID}", HandlerImpl.StartChatSessionHandler)
+	r.Post("/prompt-response/chat/sessions/stream/{profileID}", HandlerImpl.StartChatSessionStreamHandler)
+	r.Post("/prompt-response/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueChatSessionHandler)
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueSessionStreamHandler)
 
 	// TODO
@@ -202,7 +202,7 @@ func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	// r.Get("/prompt-response/rag/search", HandlerImpl.SearchSimilarPOIs)               // GET http://localhost:8000/api/v1/llm/prompt-response/rag/search?query=...
 
 	// LLM interaction routes
-	r.Post("/prompt-response/profile/{profileID}", HandlerImpl.GetPrompResponse)        // GET http://localhost:8000/api/v1/user/interests
+	//r.Post("/prompt-response/profile/{profileID}", HandlerImpl.GetPrompResponse)        // GET http://localhost:8000/api/v1/user/interests
 	r.Get("/prompt-response/poi/details", HandlerImpl.GetPOIDetails)                    // GET http://localhost:8000/api/v1/llm/prompt-response/{interactionID}
 	r.Get("/prompt-response/poi/nearby", HandlerImpl.GetPOIsByDistance)                 // GET http://localhost:8000/api/v1/llm/prompt-response/poi/nearby
 	r.Post("/prompt-response/bookmark", HandlerImpl.SaveItenerary)                      // POST http://localhost:8000/api/v1/llm/prompt-response

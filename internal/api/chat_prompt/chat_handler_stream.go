@@ -29,7 +29,7 @@ func NewStreamingHandler(llmService LlmInteractiontService, logger *slog.Logger)
 	}
 }
 
-func (h *HandlerImpl) StartChatSessionStream(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerImpl) StartChatSessionStreamHandler(w http.ResponseWriter, r *http.Request) {
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")

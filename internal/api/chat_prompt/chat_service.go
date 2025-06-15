@@ -116,21 +116,21 @@ type LlmInteractiontService interface {
 	) error
 
 	// // Context-aware chat methods
-	// StartNewSessionWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (uuid.UUID, *types.AiCityResponse, error)
-	// ContinueSessionWithContext(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.AiCityResponse, error)
-	// StartNewSessionStreamedWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.StreamingResponse, error)
-	// ContinueSessionStreamedWithContext(
-	// 	ctx context.Context,
-	// 	sessionID uuid.UUID,
-	// 	message string,
-	// 	userLocation *types.UserLocation, // For distance sorting context
-	// 	contextType types.ChatContextType,
-	// 	eventCh chan<- types.StreamEvent, // Channel to send events back
-	// ) error
+	StartNewSessionWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (uuid.UUID, *types.AiCityResponse, error)
+	ContinueSessionWithContext(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.AiCityResponse, error)
+	StartNewSessionStreamedWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.StreamingResponse, error)
+	ContinueSessionStreamedWithContext(
+		ctx context.Context,
+		sessionID uuid.UUID,
+		message string,
+		userLocation *types.UserLocation, // For distance sorting context
+		contextType types.ChatContextType,
+		eventCh chan<- types.StreamEvent, // Channel to send events back
+	) error
 
 	// // RAG
-	// GetRAGEnabledChatResponse(ctx context.Context, message string, userID, profileID uuid.UUID, sessionID uuid.UUID, cityContext string) (*generativeAI.RAGResponse, error)
-	// SearchRelevantPOIsForRAG(ctx context.Context, query string, cityID *uuid.UUID, limit int) ([]types.POIDetail, error)
+	//GetRAGEnabledChatResponse(ctx context.Context, message string, userID, profileID uuid.UUID, sessionID uuid.UUID, cityContext string) (*generativeAI.RAGResponse, error)
+	//SearchRelevantPOIsForRAG(ctx context.Context, query string, cityID *uuid.UUID, limit int) ([]types.POIDetail, error)
 }
 
 type IntentClassifier interface {
@@ -660,242 +660,242 @@ func (l *LlmInteractiontServiceImpl) PreparePromptData(interests []*types.Intere
 // RAG-enhanced methods for improved responses using semantic search
 
 // SearchRelevantPOIsForRAG searches for POIs semantically similar to the user's query
-func (l *LlmInteractiontServiceImpl) SearchRelevantPOIsForRAG(ctx context.Context, query string, cityID *uuid.UUID, limit int) ([]types.POIDetail, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "SearchRelevantPOIsForRAG", trace.WithAttributes(
-		attribute.String("query", query),
-		attribute.Int("limit", limit),
-	))
-	defer span.End()
+// func (l *LlmInteractiontServiceImpl) SearchRelevantPOIsForRAG(ctx context.Context, query string, cityID *uuid.UUID, limit int) ([]types.POIDetail, error) {
+// 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "SearchRelevantPOIsForRAG", trace.WithAttributes(
+// 		attribute.String("query", query),
+// 		attribute.Int("limit", limit),
+// 	))
+// 	defer span.End()
 
-	// Generate embedding for the query
-	queryEmbedding, err := l.embeddingService.GenerateQueryEmbedding(ctx, query)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to generate query embedding")
-		l.logger.ErrorContext(ctx, "Failed to generate query embedding", slog.Any("error", err))
-		return nil, fmt.Errorf("failed to generate query embedding: %w", err)
-	}
+// 	// Generate embedding for the query
+// 	queryEmbedding, err := l.embeddingService.GenerateQueryEmbedding(ctx, query)
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to generate query embedding")
+// 		l.logger.ErrorContext(ctx, "Failed to generate query embedding", slog.Any("error", err))
+// 		return nil, fmt.Errorf("failed to generate query embedding: %w", err)
+// 	}
 
-	// Search for similar POIs
-	var relevantPOIs []types.POIDetail
-	if cityID != nil {
-		// City-specific search
-		relevantPOIs, err = l.poiRepo.FindSimilarPOIsByCity(ctx, queryEmbedding, *cityID, limit)
-	} else {
-		// Global search
-		relevantPOIs, err = l.poiRepo.FindSimilarPOIs(ctx, queryEmbedding, limit)
-	}
+// 	// Search for similar POIs
+// 	var relevantPOIs []types.POIDetail
+// 	if cityID != nil {
+// 		// City-specific search
+// 		relevantPOIs, err = l.poiRepo.FindSimilarPOIsByCity(ctx, queryEmbedding, *cityID, limit)
+// 	} else {
+// 		// Global search
+// 		relevantPOIs, err = l.poiRepo.FindSimilarPOIs(ctx, queryEmbedding, limit)
+// 	}
 
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to search similar POIs")
-		l.logger.ErrorContext(ctx, "Failed to search similar POIs", slog.Any("error", err))
-		return nil, fmt.Errorf("failed to search similar POIs: %w", err)
-	}
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to search similar POIs")
+// 		l.logger.ErrorContext(ctx, "Failed to search similar POIs", slog.Any("error", err))
+// 		return nil, fmt.Errorf("failed to search similar POIs: %w", err)
+// 	}
 
-	span.SetAttributes(
-		attribute.Int("relevant_pois.count", len(relevantPOIs)),
-		attribute.Int("embedding.dimension", len(queryEmbedding)),
-	)
-	span.SetStatus(codes.Ok, "Relevant POIs found for RAG")
+// 	span.SetAttributes(
+// 		attribute.Int("relevant_pois.count", len(relevantPOIs)),
+// 		attribute.Int("embedding.dimension", len(queryEmbedding)),
+// 	)
+// 	span.SetStatus(codes.Ok, "Relevant POIs found for RAG")
 
-	l.logger.InfoContext(ctx, "Found relevant POIs for RAG",
-		slog.Int("count", len(relevantPOIs)),
-		slog.String("query", query))
+// 	l.logger.InfoContext(ctx, "Found relevant POIs for RAG",
+// 		slog.Int("count", len(relevantPOIs)),
+// 		slog.String("query", query))
 
-	return relevantPOIs, nil
-}
+// 	return relevantPOIs, nil
+// }
 
 // GenerateRAGResponse generates a response using retrieved POI context
-func (l *LlmInteractiontServiceImpl) GenerateRAGResponse(ctx context.Context, query string, userID, profileID uuid.UUID, cityContext string, conversationHistory []generativeAI.ConversationTurn) (*generativeAI.RAGResponse, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GenerateRAGResponse", trace.WithAttributes(
-		attribute.String("query", query),
-		attribute.String("user.id", userID.String()),
-		attribute.String("profile.id", profileID.String()),
-	))
-	defer span.End()
+// func (l *LlmInteractiontServiceImpl) GenerateRAGResponse(ctx context.Context, query string, userID, profileID uuid.UUID, cityContext string, conversationHistory []generativeAI.ConversationTurn) (*generativeAI.RAGResponse, error) {
+// 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GenerateRAGResponse", trace.WithAttributes(
+// 		attribute.String("query", query),
+// 		attribute.String("user.id", userID.String()),
+// 		attribute.String("profile.id", profileID.String()),
+// 	))
+// 	defer span.End()
 
-	// Fetch user data for context
-	interests, searchProfile, tags, err := l.FetchUserData(ctx, userID, profileID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to fetch user data")
-		return nil, fmt.Errorf("failed to fetch user data: %w", err)
-	}
+// 	// Fetch user data for context
+// 	interests, searchProfile, tags, err := l.FetchUserData(ctx, userID, profileID)
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to fetch user data")
+// 		return nil, fmt.Errorf("failed to fetch user data: %w", err)
+// 	}
 
-	// Prepare user preferences context
-	userPreferences := make(map[string]interface{})
-	if searchProfile != nil {
-		userPreferences["search_radius"] = searchProfile.SearchRadiusKm
-		//userPreferences["travel_pace"] = searchProfile.TravelPace
-		userPreferences["preferred_transport"] = searchProfile.PreferredTransport
-		userPreferences["budget_level"] = searchProfile.BudgetLevel
-		//userPreferences["group_size"] = searchProfile.GroupSize
-		//userPreferences["accessibility_needs"] = searchProfile.AccessibilityNeeds
-		//userPreferences["privacy_level"] = searchProfile.PrivacyLevel
-		//userPreferences["preferred_atmosphere"] = searchProfile.PreferredAtmosphere
-	}
+// 	// Prepare user preferences context
+// 	userPreferences := make(map[string]interface{})
+// 	if searchProfile != nil {
+// 		userPreferences["search_radius"] = searchProfile.SearchRadiusKm
+// 		//userPreferences["travel_pace"] = searchProfile.TravelPace
+// 		userPreferences["preferred_transport"] = searchProfile.PreferredTransport
+// 		userPreferences["budget_level"] = searchProfile.BudgetLevel
+// 		//userPreferences["group_size"] = searchProfile.GroupSize
+// 		//userPreferences["accessibility_needs"] = searchProfile.AccessibilityNeeds
+// 		//userPreferences["privacy_level"] = searchProfile.PrivacyLevel
+// 		//userPreferences["preferred_atmosphere"] = searchProfile.PreferredAtmosphere
+// 	}
 
-	// Add interests to preferences
-	interestNames := make([]string, 0, len(interests))
-	for _, interest := range interests {
-		if interest != nil {
-			interestNames = append(interestNames, interest.Name)
-		}
-	}
-	userPreferences["interests"] = interestNames
+// 	// Add interests to preferences
+// 	interestNames := make([]string, 0, len(interests))
+// 	for _, interest := range interests {
+// 		if interest != nil {
+// 			interestNames = append(interestNames, interest.Name)
+// 		}
+// 	}
+// 	userPreferences["interests"] = interestNames
 
-	// Add tags to preferences
-	tagNames := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		if tag != nil {
-			tagNames = append(tagNames, tag.Name)
-		}
-	}
-	userPreferences["tags"] = tagNames
+// 	// Add tags to preferences
+// 	tagNames := make([]string, 0, len(tags))
+// 	for _, tag := range tags {
+// 		if tag != nil {
+// 			tagNames = append(tagNames, tag.Name)
+// 		}
+// 	}
+// 	userPreferences["tags"] = tagNames
 
-	// Search for relevant POIs (limit to 5 for context)
-	relevantPOIs, err := l.SearchRelevantPOIsForRAG(ctx, query, nil, 5)
-	if err != nil {
-		l.logger.WarnContext(ctx, "Failed to search relevant POIs, continuing without semantic context", slog.Any("error", err))
-		relevantPOIs = []types.POIDetail{} // Continue with empty context
-	}
+// 	// Search for relevant POIs (limit to 5 for context)
+// 	relevantPOIs, err := l.SearchRelevantPOIsForRAG(ctx, query, nil, 5)
+// 	if err != nil {
+// 		l.logger.WarnContext(ctx, "Failed to search relevant POIs, continuing without semantic context", slog.Any("error", err))
+// 		relevantPOIs = []types.POIDetail{} // Continue with empty context
+// 	}
 
-	// Build RAG context
-	ragContext := generativeAI.RAGContext{
-		Query:               query,
-		RelevantPOIs:        relevantPOIs,
-		UserPreferences:     userPreferences,
-		CityContext:         cityContext,
-		ConversationHistory: conversationHistory,
-	}
+// 	// Build RAG context
+// 	ragContext := generativeAI.RAGContext{
+// 		Query:               query,
+// 		RelevantPOIs:        relevantPOIs,
+// 		UserPreferences:     userPreferences,
+// 		CityContext:         cityContext,
+// 		ConversationHistory: conversationHistory,
+// 	}
 
-	// Generate RAG response
-	ragResponse, err := l.ragService.GenerateRAGResponse(ctx, ragContext)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to generate RAG response")
-		l.logger.ErrorContext(ctx, "Failed to generate RAG response", slog.Any("error", err))
-		return nil, fmt.Errorf("failed to generate RAG response: %w", err)
-	}
+// 	// Generate RAG response
+// 	ragResponse, err := l.ragService.GenerateRAGResponse(ctx, ragContext)
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to generate RAG response")
+// 		l.logger.ErrorContext(ctx, "Failed to generate RAG response", slog.Any("error", err))
+// 		return nil, fmt.Errorf("failed to generate RAG response: %w", err)
+// 	}
 
-	span.SetAttributes(
-		attribute.Float64("response.confidence", ragResponse.Confidence),
-		attribute.Int("response.suggestions.count", len(ragResponse.Suggestions)),
-		attribute.Int("source_pois.count", len(ragResponse.SourcePOIs)),
-	)
-	span.SetStatus(codes.Ok, "RAG response generated successfully")
+// 	span.SetAttributes(
+// 		attribute.Float64("response.confidence", ragResponse.Confidence),
+// 		attribute.Int("response.suggestions.count", len(ragResponse.Suggestions)),
+// 		attribute.Int("source_pois.count", len(ragResponse.SourcePOIs)),
+// 	)
+// 	span.SetStatus(codes.Ok, "RAG response generated successfully")
 
-	l.logger.InfoContext(ctx, "RAG response generated",
-		slog.Float64("confidence", ragResponse.Confidence),
-		slog.Int("source_pois", len(ragResponse.SourcePOIs)),
-		slog.Int("suggestions", len(ragResponse.Suggestions)))
+// 	l.logger.InfoContext(ctx, "RAG response generated",
+// 		slog.Float64("confidence", ragResponse.Confidence),
+// 		slog.Int("source_pois", len(ragResponse.SourcePOIs)),
+// 		slog.Int("suggestions", len(ragResponse.Suggestions)))
 
-	return ragResponse, nil
-}
+// 	return ragResponse, nil
+// }
 
-// EnhancePersonalizedPOIWithRAG enhances personalized POI generation with semantic context
-func (l *LlmInteractiontServiceImpl) EnhancePersonalizedPOIWithRAG(ctx context.Context, cityName string, userID, profileID uuid.UUID, cityID *uuid.UUID) ([]types.POIDetail, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "EnhancePersonalizedPOIWithRAG", trace.WithAttributes(
-		attribute.String("city.name", cityName),
-		attribute.String("user.id", userID.String()),
-		attribute.String("profile.id", profileID.String()),
-	))
-	defer span.End()
+// // EnhancePersonalizedPOIWithRAG enhances personalized POI generation with semantic context
+// func (l *LlmInteractiontServiceImpl) EnhancePersonalizedPOIWithRAG(ctx context.Context, cityName string, userID, profileID uuid.UUID, cityID *uuid.UUID) ([]types.POIDetail, error) {
+// 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "EnhancePersonalizedPOIWithRAG", trace.WithAttributes(
+// 		attribute.String("city.name", cityName),
+// 		attribute.String("user.id", userID.String()),
+// 		attribute.String("profile.id", profileID.String()),
+// 	))
+// 	defer span.End()
 
-	// Fetch user data
-	interests, searchProfile, tags, err := l.FetchUserData(ctx, userID, profileID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to fetch user data")
-		return nil, fmt.Errorf("failed to fetch user data: %w", err)
-	}
+// 	// Fetch user data
+// 	interests, searchProfile, tags, err := l.FetchUserData(ctx, userID, profileID)
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to fetch user data")
+// 		return nil, fmt.Errorf("failed to fetch user data: %w", err)
+// 	}
 
-	// Build search query from user interests and preferences
-	interestNames, tagsPromptPart, userPrefs := l.PreparePromptData(interests, tags, searchProfile)
+// 	// Build search query from user interests and preferences
+// 	interestNames, tagsPromptPart, userPrefs := l.PreparePromptData(interests, tags, searchProfile)
 
-	// Create a search query combining interests and city
-	searchQuery := fmt.Sprintf("%s in %s %s %s",
-		strings.Join(interestNames, " "),
-		cityName,
-		tagsPromptPart,
-		userPrefs)
+// 	// Create a search query combining interests and city
+// 	searchQuery := fmt.Sprintf("%s in %s %s %s",
+// 		strings.Join(interestNames, " "),
+// 		cityName,
+// 		tagsPromptPart,
+// 		userPrefs)
 
-	// Search for semantically similar POIs
-	var relevantPOIs []types.POIDetail
-	if cityID != nil {
-		relevantPOIs, err = l.SearchRelevantPOIsForRAG(ctx, searchQuery, cityID, 10)
-	} else {
-		relevantPOIs, err = l.SearchRelevantPOIsForRAG(ctx, searchQuery, nil, 10)
-	}
+// 	// Search for semantically similar POIs
+// 	var relevantPOIs []types.POIDetail
+// 	if cityID != nil {
+// 		relevantPOIs, err = l.SearchRelevantPOIsForRAG(ctx, searchQuery, cityID, 10)
+// 	} else {
+// 		relevantPOIs, err = l.SearchRelevantPOIsForRAG(ctx, searchQuery, nil, 10)
+// 	}
 
-	if err != nil {
-		l.logger.WarnContext(ctx, "Failed to search semantically similar POIs", slog.Any("error", err))
-		// Fall back to regular POI generation if semantic search fails
-		return nil, err
-	}
+// 	if err != nil {
+// 		l.logger.WarnContext(ctx, "Failed to search semantically similar POIs", slog.Any("error", err))
+// 		// Fall back to regular POI generation if semantic search fails
+// 		return nil, err
+// 	}
 
-	span.SetAttributes(
-		attribute.Int("semantic_pois.count", len(relevantPOIs)),
-		attribute.String("search_query", searchQuery[:min(100, len(searchQuery))]),
-	)
-	span.SetStatus(codes.Ok, "Enhanced personalized POIs with RAG")
+// 	span.SetAttributes(
+// 		attribute.Int("semantic_pois.count", len(relevantPOIs)),
+// 		attribute.String("search_query", searchQuery[:min(100, len(searchQuery))]),
+// 	)
+// 	span.SetStatus(codes.Ok, "Enhanced personalized POIs with RAG")
 
-	l.logger.InfoContext(ctx, "Enhanced personalized POIs with semantic search",
-		slog.Int("semantic_pois", len(relevantPOIs)),
-		slog.String("city", cityName))
+// 	l.logger.InfoContext(ctx, "Enhanced personalized POIs with semantic search",
+// 		slog.Int("semantic_pois", len(relevantPOIs)),
+// 		slog.String("city", cityName))
 
-	return relevantPOIs, nil
-}
+// 	return relevantPOIs, nil
+// }
 
-// GetRAGEnabledChatResponse generates a chat response using RAG for better context
-func (l *LlmInteractiontServiceImpl) GetRAGEnabledChatResponse(ctx context.Context, message string, userID, profileID uuid.UUID, sessionID uuid.UUID, cityContext string) (*generativeAI.RAGResponse, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetRAGEnabledChatResponse", trace.WithAttributes(
-		attribute.String("message", message[:min(100, len(message))]),
-		attribute.String("user.id", userID.String()),
-		attribute.String("session.id", sessionID.String()),
-	))
-	defer span.End()
+// // GetRAGEnabledChatResponse generates a chat response using RAG for better context
+// func (l *LlmInteractiontServiceImpl) GetRAGEnabledChatResponse(ctx context.Context, message string, userID, profileID uuid.UUID, sessionID uuid.UUID, cityContext string) (*generativeAI.RAGResponse, error) {
+// 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetRAGEnabledChatResponse", trace.WithAttributes(
+// 		attribute.String("message", message[:min(100, len(message))]),
+// 		attribute.String("user.id", userID.String()),
+// 		attribute.String("session.id", sessionID.String()),
+// 	))
+// 	defer span.End()
 
-	// TODO: Retrieve conversation history from session storage
-	// For now, we'll use an empty history
-	conversationHistory := []generativeAI.ConversationTurn{}
+// 	// TODO: Retrieve conversation history from session storage
+// 	// For now, we'll use an empty history
+// 	conversationHistory := []generativeAI.ConversationTurn{}
 
-	// Store the current user message
-	err := l.ragService.StoreConversationTurn(ctx, userID.String(), "user", message, map[string]interface{}{
-		"session_id": sessionID.String(),
-		"profile_id": profileID.String(),
-	})
-	if err != nil {
-		l.logger.WarnContext(ctx, "Failed to store conversation turn", slog.Any("error", err))
-	}
+// 	// Store the current user message
+// 	err := l.ragService.StoreConversationTurn(ctx, userID.String(), "user", message, map[string]interface{}{
+// 		"session_id": sessionID.String(),
+// 		"profile_id": profileID.String(),
+// 	})
+// 	if err != nil {
+// 		l.logger.WarnContext(ctx, "Failed to store conversation turn", slog.Any("error", err))
+// 	}
 
-	// Generate RAG response
-	ragResponse, err := l.GenerateRAGResponse(ctx, message, userID, profileID, cityContext, conversationHistory)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to generate RAG chat response")
-		return nil, fmt.Errorf("failed to generate RAG chat response: %w", err)
-	}
+// 	// Generate RAG response
+// 	ragResponse, err := l.GenerateRAGResponse(ctx, message, userID, profileID, cityContext, conversationHistory)
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to generate RAG chat response")
+// 		return nil, fmt.Errorf("failed to generate RAG chat response: %w", err)
+// 	}
 
-	// Store the assistant response
-	err = l.ragService.StoreConversationTurn(ctx, userID.String(), "assistant", ragResponse.Answer, map[string]interface{}{
-		"session_id":  sessionID.String(),
-		"profile_id":  profileID.String(),
-		"confidence":  ragResponse.Confidence,
-		"source_pois": len(ragResponse.SourcePOIs),
-	})
-	if err != nil {
-		l.logger.WarnContext(ctx, "Failed to store assistant response", slog.Any("error", err))
-	}
+// 	// Store the assistant response
+// 	err = l.ragService.StoreConversationTurn(ctx, userID.String(), "assistant", ragResponse.Answer, map[string]interface{}{
+// 		"session_id":  sessionID.String(),
+// 		"profile_id":  profileID.String(),
+// 		"confidence":  ragResponse.Confidence,
+// 		"source_pois": len(ragResponse.SourcePOIs),
+// 	})
+// 	if err != nil {
+// 		l.logger.WarnContext(ctx, "Failed to store assistant response", slog.Any("error", err))
+// 	}
 
-	span.SetStatus(codes.Ok, "RAG chat response generated")
-	l.logger.InfoContext(ctx, "RAG chat response generated",
-		slog.Float64("confidence", ragResponse.Confidence),
-		slog.Int("source_pois", len(ragResponse.SourcePOIs)))
+// 	span.SetStatus(codes.Ok, "RAG chat response generated")
+// 	l.logger.InfoContext(ctx, "RAG chat response generated",
+// 		slog.Float64("confidence", ragResponse.Confidence),
+// 		slog.Int("source_pois", len(ragResponse.SourcePOIs)))
 
-	return ragResponse, nil
-}
+// 	return ragResponse, nil
+// }
 
 func (l *LlmInteractiontServiceImpl) CollectResults(resultCh <-chan types.GenAIResponse) (itinerary types.AiCityResponse, llmInteractionID uuid.UUID, rawPersonalisedPOIs []types.POIDetail, errors []error) {
 	for res := range resultCh {

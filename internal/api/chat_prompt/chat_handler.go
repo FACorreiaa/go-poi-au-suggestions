@@ -58,20 +58,20 @@ type Handler interface {
 	ContinueChatSessionHandler(w http.ResponseWriter, r *http.Request)
 
 	// Context-aware chat handlers
-	StartHotelChatSession(w http.ResponseWriter, r *http.Request)
-	StartHotelChatSessionStream(w http.ResponseWriter, r *http.Request)
-	ContinueHotelChatSession(w http.ResponseWriter, r *http.Request)
-	ContinueHotelChatSessionStream(w http.ResponseWriter, r *http.Request)
+	// StartHotelChatSession(w http.ResponseWriter, r *http.Request)
+	// StartHotelChatSessionStream(w http.ResponseWriter, r *http.Request)
+	// ContinueHotelChatSession(w http.ResponseWriter, r *http.Request)
+	// ContinueHotelChatSessionStream(w http.ResponseWriter, r *http.Request)
 
-	StartRestaurantChatSession(w http.ResponseWriter, r *http.Request)
-	StartRestaurantChatSessionStream(w http.ResponseWriter, r *http.Request)
-	ContinueRestaurantChatSession(w http.ResponseWriter, r *http.Request)
-	ContinueRestaurantChatSessionStream(w http.ResponseWriter, r *http.Request)
+	// StartRestaurantChatSession(w http.ResponseWriter, r *http.Request)
+	// StartRestaurantChatSessionStream(w http.ResponseWriter, r *http.Request)
+	// ContinueRestaurantChatSession(w http.ResponseWriter, r *http.Request)
+	// ContinueRestaurantChatSessionStream(w http.ResponseWriter, r *http.Request)
 
-	StartItineraryChatSession(w http.ResponseWriter, r *http.Request)
-	StartItineraryChatSessionStream(w http.ResponseWriter, r *http.Request)
-	ContinueItineraryChatSession(w http.ResponseWriter, r *http.Request)
-	ContinueItineraryChatSessionStream(w http.ResponseWriter, r *http.Request)
+	// StartItineraryChatSession(w http.ResponseWriter, r *http.Request)
+	// StartItineraryChatSessionStream(w http.ResponseWriter, r *http.Request)
+	// ContinueItineraryChatSession(w http.ResponseWriter, r *http.Request)
+	// ContinueItineraryChatSessionStream(w http.ResponseWriter, r *http.Request)
 }
 type HandlerImpl struct {
 	llmInteractionService LlmInteractiontService
@@ -132,8 +132,8 @@ func (h *HandlerImpl) StartChatSessionHandler(w http.ResponseWriter, r *http.Req
 	span.SetAttributes(attribute.String("app.profile.id", profileID.String()))
 
 	userLocation := &types.UserLocation{
-		UserLat: 41.4848,
-		UserLon: 8.7641,
+		UserLat: 38.7223,
+		UserLon: -9.1393,
 	}
 
 	// Pass context type and initial message to service
@@ -1347,306 +1347,306 @@ func (HandlerImpl *HandlerImpl) GetNearbyRecommendations(w http.ResponseWriter, 
 // Context-aware chat handlers
 
 // Hotel Chat Handlers
-func (h *HandlerImpl) StartHotelChatSession(w http.ResponseWriter, r *http.Request) {
-	h.startContextualChatSession(w, r, types.ContextHotels)
-}
+// func (h *HandlerImpl) StartHotelChatSession(w http.ResponseWriter, r *http.Request) {
+// 	h.startContextualChatSession(w, r, types.ContextHotels)
+// }
 
-func (h *HandlerImpl) StartHotelChatSessionStream(w http.ResponseWriter, r *http.Request) {
-	h.startContextualChatSessionStream(w, r, types.ContextHotels)
-}
+// func (h *HandlerImpl) StartHotelChatSessionStream(w http.ResponseWriter, r *http.Request) {
+// 	h.startContextualChatSessionStream(w, r, types.ContextHotels)
+// }
 
-func (h *HandlerImpl) ContinueHotelChatSession(w http.ResponseWriter, r *http.Request) {
-	h.continueContextualChatSession(w, r, types.ContextHotels)
-}
+// func (h *HandlerImpl) ContinueHotelChatSession(w http.ResponseWriter, r *http.Request) {
+// 	h.continueContextualChatSession(w, r, types.ContextHotels)
+// }
 
-func (h *HandlerImpl) ContinueHotelChatSessionStream(w http.ResponseWriter, r *http.Request) {
-	h.continueContextualChatSessionStream(w, r, types.ContextHotels)
-}
+// func (h *HandlerImpl) ContinueHotelChatSessionStream(w http.ResponseWriter, r *http.Request) {
+// 	h.continueContextualChatSessionStream(w, r, types.ContextHotels)
+// }
 
-// Restaurant Chat Handlers
-func (h *HandlerImpl) StartRestaurantChatSession(w http.ResponseWriter, r *http.Request) {
-	h.startContextualChatSession(w, r, types.ContextRestaurants)
-}
+// // Restaurant Chat Handlers
+// func (h *HandlerImpl) StartRestaurantChatSession(w http.ResponseWriter, r *http.Request) {
+// 	h.startContextualChatSession(w, r, types.ContextRestaurants)
+// }
 
-func (h *HandlerImpl) StartRestaurantChatSessionStream(w http.ResponseWriter, r *http.Request) {
-	h.startContextualChatSessionStream(w, r, types.ContextRestaurants)
-}
+// func (h *HandlerImpl) StartRestaurantChatSessionStream(w http.ResponseWriter, r *http.Request) {
+// 	h.startContextualChatSessionStream(w, r, types.ContextRestaurants)
+// }
 
-func (h *HandlerImpl) ContinueRestaurantChatSession(w http.ResponseWriter, r *http.Request) {
-	h.continueContextualChatSession(w, r, types.ContextRestaurants)
-}
+// func (h *HandlerImpl) ContinueRestaurantChatSession(w http.ResponseWriter, r *http.Request) {
+// 	h.continueContextualChatSession(w, r, types.ContextRestaurants)
+// }
 
-func (h *HandlerImpl) ContinueRestaurantChatSessionStream(w http.ResponseWriter, r *http.Request) {
-	h.continueContextualChatSessionStream(w, r, types.ContextRestaurants)
-}
+// func (h *HandlerImpl) ContinueRestaurantChatSessionStream(w http.ResponseWriter, r *http.Request) {
+// 	h.continueContextualChatSessionStream(w, r, types.ContextRestaurants)
+// }
 
-// Itinerary Chat Handlers
-func (h *HandlerImpl) StartItineraryChatSession(w http.ResponseWriter, r *http.Request) {
-	h.startContextualChatSession(w, r, types.ContextItineraries)
-}
+// // Itinerary Chat Handlers
+// func (h *HandlerImpl) StartItineraryChatSession(w http.ResponseWriter, r *http.Request) {
+// 	h.startContextualChatSession(w, r, types.ContextItineraries)
+// }
 
-func (h *HandlerImpl) StartItineraryChatSessionStream(w http.ResponseWriter, r *http.Request) {
-	h.startContextualChatSessionStream(w, r, types.ContextItineraries)
-}
+// func (h *HandlerImpl) StartItineraryChatSessionStream(w http.ResponseWriter, r *http.Request) {
+// 	h.startContextualChatSessionStream(w, r, types.ContextItineraries)
+// }
 
-func (h *HandlerImpl) ContinueItineraryChatSession(w http.ResponseWriter, r *http.Request) {
-	h.continueContextualChatSession(w, r, types.ContextItineraries)
-}
+// func (h *HandlerImpl) ContinueItineraryChatSession(w http.ResponseWriter, r *http.Request) {
+// 	h.continueContextualChatSession(w, r, types.ContextItineraries)
+// }
 
-func (h *HandlerImpl) ContinueItineraryChatSessionStream(w http.ResponseWriter, r *http.Request) {
-	h.continueContextualChatSessionStream(w, r, types.ContextItineraries)
-}
+// func (h *HandlerImpl) ContinueItineraryChatSessionStream(w http.ResponseWriter, r *http.Request) {
+// 	h.continueContextualChatSessionStream(w, r, types.ContextItineraries)
+// }
 
 // Helper methods for contextual chat
-func (h *HandlerImpl) startContextualChatSession(w http.ResponseWriter, r *http.Request, contextType types.ChatContextType) {
-	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "StartContextualChatSession", trace.WithAttributes(
-		semconv.HTTPRequestMethodKey.String(r.Method),
-		attribute.String("context_type", string(contextType)),
-	))
-	defer span.End()
+// func (h *HandlerImpl) startContextualChatSession(w http.ResponseWriter, r *http.Request, contextType types.ChatContextType) {
+// 	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "StartContextualChatSession", trace.WithAttributes(
+// 		semconv.HTTPRequestMethodKey.String(r.Method),
+// 		attribute.String("context_type", string(contextType)),
+// 	))
+// 	defer span.End()
 
-	var req types.StartChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
-		return
-	}
+// 	var req types.StartChatRequest
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+// 		return
+// 	}
 
-	// Override context type with the specific one from the endpoint
-	req.ContextType = contextType
+// 	// Override context type with the specific one from the endpoint
+// 	req.ContextType = contextType
 
-	userIDStr, ok := auth.GetUserIDFromContext(ctx)
-	if !ok || userIDStr == "" {
-		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
-		return
-	}
+// 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+// 	if !ok || userIDStr == "" {
+// 		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+// 		return
+// 	}
+// 	userID, err := uuid.Parse(userIDStr)
+// 	if err != nil {
+// 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+// 		return
+// 	}
 
-	profileIDStr := chi.URLParam(r, "profileID")
-	profileID, err := uuid.Parse(profileIDStr)
-	if err != nil {
-		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid profile ID format")
-		return
-	}
+// 	profileIDStr := chi.URLParam(r, "profileID")
+// 	profileID, err := uuid.Parse(profileIDStr)
+// 	if err != nil {
+// 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid profile ID format")
+// 		return
+// 	}
 
-	userLocation := &types.UserLocation{
-		UserLat: 41.4848,
-		UserLon: 8.7641,
-	}
+// 	userLocation := &types.UserLocation{
+// 		UserLat: 38.7223,
+// 		UserLon: -9.1393,
+// 	}
 
-	prompt := req.InitialMessage
-	if prompt == "" {
-		prompt = getDefaultPromptForContext(req.ContextType, req.CityName)
-	}
+// 	prompt := req.InitialMessage
+// 	if prompt == "" {
+// 		prompt = getDefaultPromptForContext(req.ContextType, req.CityName)
+// 	}
 
-	sessionID, itinerary, err := h.llmInteractionService.StartNewSessionWithContext(ctx, userID, profileID, req.CityName, prompt, userLocation, req.ContextType)
-	if err != nil {
-		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to start session: "+err.Error())
-		return
-	}
+// 	sessionID, itinerary, err := h.llmInteractionService.StartNewSession(ctx, userID, profileID, req.CityName, prompt, userLocation, req.ContextType)
+// 	if err != nil {
+// 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to start session: "+err.Error())
+// 		return
+// 	}
 
-	response := struct {
-		SessionID uuid.UUID             `json:"session_id"`
-		Data      *types.AiCityResponse `json:"data"`
-	}{SessionID: sessionID, Data: itinerary}
+// 	response := struct {
+// 		SessionID uuid.UUID             `json:"session_id"`
+// 		Data      *types.AiCityResponse `json:"data"`
+// 	}{SessionID: sessionID, Data: itinerary}
 
-	api.WriteJSONResponse(w, r, http.StatusCreated, response)
-}
+// 	api.WriteJSONResponse(w, r, http.StatusCreated, response)
+// }
 
-func (h *HandlerImpl) continueContextualChatSession(w http.ResponseWriter, r *http.Request, contextType types.ChatContextType) {
-	ctx := r.Context()
-	sessionIDStr := chi.URLParam(r, "sessionID")
-	sessionID, err := uuid.Parse(sessionIDStr)
-	if err != nil {
-		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid session ID")
-		return
-	}
+// func (h *HandlerImpl) continueContextualChatSession(w http.ResponseWriter, r *http.Request, contextType types.ChatContextType) {
+// 	ctx := r.Context()
+// 	sessionIDStr := chi.URLParam(r, "sessionID")
+// 	sessionID, err := uuid.Parse(sessionIDStr)
+// 	if err != nil {
+// 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid session ID")
+// 		return
+// 	}
 
-	var req types.ContinueChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
-		return
-	}
+// 	var req types.ContinueChatRequest
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+// 		return
+// 	}
 
-	// Override context type with the specific one from the endpoint
-	req.ContextType = contextType
+// 	// Override context type with the specific one from the endpoint
+// 	req.ContextType = contextType
 
-	userLocation := &types.UserLocation{
-		UserLat: 41.3851,
-		UserLon: 2.1734,
-	}
+// 	userLocation := &types.UserLocation{
+// 		UserLat: 41.3851,
+// 		UserLon: 2.1734,
+// 	}
 
-	itinerary, err := h.llmInteractionService.ContinueSessionWithContext(ctx, sessionID, req.Message, userLocation, req.ContextType)
-	if err != nil {
-		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to continue session: "+err.Error())
-		return
-	}
+// 	itinerary, err := h.llmInteractionService.ContinueSessionWithContext(ctx, sessionID, req.Message, userLocation, req.ContextType)
+// 	if err != nil {
+// 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to continue session: "+err.Error())
+// 		return
+// 	}
 
-	response := struct {
-		Data *types.AiCityResponse `json:"data"`
-	}{Data: itinerary}
-	api.WriteJSONResponse(w, r, http.StatusOK, response)
-}
+// 	response := struct {
+// 		Data *types.AiCityResponse `json:"data"`
+// 	}{Data: itinerary}
+// 	api.WriteJSONResponse(w, r, http.StatusOK, response)
+// }
 
-func (h *HandlerImpl) startContextualChatSessionStream(w http.ResponseWriter, r *http.Request, contextType types.ChatContextType) {
-	// Set SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
+// func (h *HandlerImpl) startContextualChatSessionStream(w http.ResponseWriter, r *http.Request, contextType types.ChatContextType) {
+// 	// Set SSE headers
+// 	w.Header().Set("Content-Type", "text/event-stream")
+// 	w.Header().Set("Cache-Control", "no-cache")
+// 	w.Header().Set("Connection", "keep-alive")
+// 	w.Header().Set("X-Accel-Buffering", "no")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		api.ErrorResponse(w, r, http.StatusInternalServerError, "Streaming not supported")
-		return
-	}
+// 	flusher, ok := w.(http.Flusher)
+// 	if !ok {
+// 		api.ErrorResponse(w, r, http.StatusInternalServerError, "Streaming not supported")
+// 		return
+// 	}
 
-	ctx := r.Context()
+// 	ctx := r.Context()
 
-	userIDStr, ok := auth.GetUserIDFromContext(ctx)
-	if !ok || userIDStr == "" {
-		h.writeSSEError(w, "Authentication required")
-		return
-	}
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		h.writeSSEError(w, "Invalid user ID format")
-		return
-	}
+// 	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+// 	if !ok || userIDStr == "" {
+// 		h.writeSSEError(w, "Authentication required")
+// 		return
+// 	}
+// 	userID, err := uuid.Parse(userIDStr)
+// 	if err != nil {
+// 		h.writeSSEError(w, "Invalid user ID format")
+// 		return
+// 	}
 
-	profileIDStr := chi.URLParam(r, "profileID")
-	profileID, err := uuid.Parse(profileIDStr)
-	if err != nil {
-		h.writeSSEError(w, "Invalid profile ID format")
-		return
-	}
+// 	profileIDStr := chi.URLParam(r, "profileID")
+// 	profileID, err := uuid.Parse(profileIDStr)
+// 	if err != nil {
+// 		h.writeSSEError(w, "Invalid profile ID format")
+// 		return
+// 	}
 
-	var req types.StartChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeSSEError(w, "Invalid request body")
-		return
-	}
+// 	var req types.StartChatRequest
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		h.writeSSEError(w, "Invalid request body")
+// 		return
+// 	}
 
-	// Override context type
-	req.ContextType = contextType
+// 	// Override context type
+// 	req.ContextType = contextType
 
-	userLocation := &types.UserLocation{
-		UserLat: 41.3851,
-		UserLon: 2.1734,
-	}
+// 	userLocation := &types.UserLocation{
+// 		UserLat: 41.3851,
+// 		UserLon: 2.1734,
+// 	}
 
-	prompt := req.InitialMessage
-	if prompt == "" {
-		prompt = getDefaultPromptForContext(req.ContextType, req.CityName)
-	}
+// 	prompt := req.InitialMessage
+// 	if prompt == "" {
+// 		prompt = getDefaultPromptForContext(req.ContextType, req.CityName)
+// 	}
 
-	streamResp, err := h.llmInteractionService.StartNewSessionStreamedWithContext(ctx, userID, profileID, req.CityName, prompt, userLocation, req.ContextType)
-	if err != nil {
-		h.writeSSEError(w, fmt.Sprintf("Failed to start session: %v", err))
-		return
-	}
-	defer streamResp.Cancel()
+// 	streamResp, err := h.llmInteractionService.StartNewSessionStreamedWithContext(ctx, userID, profileID, req.CityName, prompt, userLocation, req.ContextType)
+// 	if err != nil {
+// 		h.writeSSEError(w, fmt.Sprintf("Failed to start session: %v", err))
+// 		return
+// 	}
+// 	defer streamResp.Cancel()
 
-	// Stream events
-	for {
-		select {
-		case event, ok := <-streamResp.Stream:
-			if !ok {
-				return
-			}
+// 	// Stream events
+// 	for {
+// 		select {
+// 		case event, ok := <-streamResp.Stream:
+// 			if !ok {
+// 				return
+// 			}
 
-			data, err := json.Marshal(event)
-			if err != nil {
-				continue
-			}
+// 			data, err := json.Marshal(event)
+// 			if err != nil {
+// 				continue
+// 			}
 
-			fmt.Fprintf(w, "id: %s\n", event.EventID)
-			fmt.Fprintf(w, "event: %s\n", event.Type)
-			fmt.Fprintf(w, "data: %s\n\n", data)
-			flusher.Flush()
+// 			fmt.Fprintf(w, "id: %s\n", event.EventID)
+// 			fmt.Fprintf(w, "event: %s\n", event.Type)
+// 			fmt.Fprintf(w, "data: %s\n\n", data)
+// 			flusher.Flush()
 
-		case <-ctx.Done():
-			return
-		}
-	}
-}
+// 		case <-ctx.Done():
+// 			return
+// 		}
+// 	}
+// }
 
-func (h *HandlerImpl) continueContextualChatSessionStream(w http.ResponseWriter, r *http.Request, contextType types.ChatContextType) {
-	// Set headers for SSE
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
+// func (h *HandlerImpl) continueContextualChatSessionStream(w http.ResponseWriter, r *http.Request, contextType types.ChatContextType) {
+// 	// Set headers for SSE
+// 	w.Header().Set("Content-Type", "text/event-stream")
+// 	w.Header().Set("Cache-Control", "no-cache")
+// 	w.Header().Set("Connection", "keep-alive")
+// 	w.Header().Set("X-Accel-Buffering", "no")
 
-	ctx := r.Context()
+// 	ctx := r.Context()
 
-	sessionIDStr := chi.URLParam(r, "sessionID")
-	sessionID, err := uuid.Parse(sessionIDStr)
-	if err != nil {
-		http.Error(w, "Invalid session ID", http.StatusBadRequest)
-		return
-	}
+// 	sessionIDStr := chi.URLParam(r, "sessionID")
+// 	sessionID, err := uuid.Parse(sessionIDStr)
+// 	if err != nil {
+// 		http.Error(w, "Invalid session ID", http.StatusBadRequest)
+// 		return
+// 	}
 
-	var req types.ContinueChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
+// 	var req types.ContinueChatRequest
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+// 		return
+// 	}
 
-	// Override context type
-	req.ContextType = contextType
+// 	// Override context type
+// 	req.ContextType = contextType
 
-	userLocation := &types.UserLocation{
-		UserLat: 41.3851,
-		UserLon: 2.1734,
-	}
+// 	userLocation := &types.UserLocation{
+// 		UserLat: 41.3851,
+// 		UserLon: 2.1734,
+// 	}
 
-	eventCh := make(chan types.StreamEvent)
-	defer close(eventCh)
+// 	eventCh := make(chan types.StreamEvent)
+// 	defer close(eventCh)
 
-	go func() {
-		err := h.llmInteractionService.ContinueSessionStreamedWithContext(ctx, sessionID, req.Message, userLocation, req.ContextType, eventCh)
-		if err != nil {
-			select {
-			case eventCh <- types.StreamEvent{
-				Type:      string(types.TypeError),
-				Error:     err.Error(),
-				IsFinal:   true,
-				EventID:   uuid.New().String(),
-				Timestamp: time.Now(),
-			}:
-			case <-ctx.Done():
-			}
-		}
-	}()
+// 	go func() {
+// 		err := h.llmInteractionService.ContinueSessionStreamedWithContext(ctx, sessionID, req.Message, userLocation, req.ContextType, eventCh)
+// 		if err != nil {
+// 			select {
+// 			case eventCh <- types.StreamEvent{
+// 				Type:      string(types.TypeError),
+// 				Error:     err.Error(),
+// 				IsFinal:   true,
+// 				EventID:   uuid.New().String(),
+// 				Timestamp: time.Now(),
+// 			}:
+// 			case <-ctx.Done():
+// 			}
+// 		}
+// 	}()
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
-		return
-	}
+// 	flusher, ok := w.(http.Flusher)
+// 	if !ok {
+// 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+// 		return
+// 	}
 
-	for {
-		select {
-		case event := <-eventCh:
-			data, err := json.Marshal(event)
-			if err != nil {
-				continue
-			}
+// 	for {
+// 		select {
+// 		case event := <-eventCh:
+// 			data, err := json.Marshal(event)
+// 			if err != nil {
+// 				continue
+// 			}
 
-			fmt.Fprintf(w, "event: %s\n", event.Type)
-			fmt.Fprintf(w, "data: %s\n\n", data)
-			flusher.Flush()
+// 			fmt.Fprintf(w, "event: %s\n", event.Type)
+// 			fmt.Fprintf(w, "data: %s\n\n", data)
+// 			flusher.Flush()
 
-			if event.IsFinal {
-				return
-			}
+// 			if event.IsFinal {
+// 				return
+// 			}
 
-		case <-ctx.Done():
-			return
-		}
-	}
-}
+// 		case <-ctx.Done():
+// 			return
+// 		}
+// 	}
+// }

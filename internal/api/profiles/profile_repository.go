@@ -2,6 +2,7 @@ package profiles
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -220,62 +221,65 @@ func (r *RepositoryImpl) CreateSearchProfile(ctx context.Context, userID uuid.UU
 	l := r.logger.With(slog.String("method", "CreateUserPreferenceProfile"), slog.String("userID", userID.String()))
 	l.DebugContext(ctx, "Creating user preference profile", slog.String("profileName", params.ProfileName))
 
-	// Set default values for optional parameters
+	// Set default values for optional parameters (as before)
 	isDefault := false
 	if params.IsDefault != nil {
 		isDefault = *params.IsDefault
 	}
-
 	searchRadiusKm := 5.0
 	if params.SearchRadiusKm != nil {
 		searchRadiusKm = *params.SearchRadiusKm
 	}
-
 	preferredTime := types.DayPreferenceAny
 	if params.PreferredTime != nil {
 		preferredTime = *params.PreferredTime
 	}
-
 	budgetLevel := 0
 	if params.BudgetLevel != nil {
 		budgetLevel = *params.BudgetLevel
 	}
-
 	preferredPace := types.SearchPaceAny
 	if params.PreferredPace != nil {
 		preferredPace = *params.PreferredPace
 	}
-
 	preferAccessiblePOIs := false
 	if params.PreferAccessiblePOIs != nil {
 		preferAccessiblePOIs = *params.PreferAccessiblePOIs
 	}
-
 	preferOutdoorSeating := false
 	if params.PreferOutdoorSeating != nil {
 		preferOutdoorSeating = *params.PreferOutdoorSeating
 	}
-
 	preferDogFriendly := false
 	if params.PreferDogFriendly != nil {
 		preferDogFriendly = *params.PreferDogFriendly
 	}
-
 	preferredVibes := params.PreferredVibes
 	if preferredVibes == nil {
 		preferredVibes = []string{}
 	}
-
 	preferredTransport := types.TransportPreferenceAny
 	if params.PreferredTransport != nil {
 		preferredTransport = *params.PreferredTransport
 	}
-
 	dietaryNeeds := params.DietaryNeeds
 	if dietaryNeeds == nil {
 		dietaryNeeds = []string{}
 	}
 
+	if isDefault {
+		query := "UPDATE user_preference_profiles SET is_default = FALSE WHERE user_id = $1 AND id != $2"
+		_, err := tx.Exec(ctx, query, userID, uuid.Nil) // uuid.Nil as placeholder; will be updated after insert
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to reset existing default profiles", slog.Any("error", err))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to reset defaults")
+			return nil, fmt.Errorf("failed to reset existing default profiles: %w", err)
+		}
+	}
+
+	// Insert base profile
+	var p types.UserPreferenceProfileResponse
 	query := `
         INSERT INTO user_preference_profiles (
             user_id, profile_name, is_default, search_radius_km, preferred_time, 
@@ -287,8 +291,6 @@ func (r *RepositoryImpl) CreateSearchProfile(ctx context.Context, userID uuid.UU
                    budget_level, preferred_pace, prefer_accessible_pois, prefer_outdoor_seating, 
                    prefer_dog_friendly, preferred_vibes, preferred_transport, dietary_needs, 
                    created_at, updated_at`
-
-	var p types.UserPreferenceProfileResponse
 	err = tx.QueryRow(ctx, query,
 		userID, params.ProfileName, isDefault, searchRadiusKm, preferredTime,
 		budgetLevel, preferredPace, preferAccessiblePOIs, preferOutdoorSeating,
@@ -313,6 +315,71 @@ func (r *RepositoryImpl) CreateSearchProfile(ctx context.Context, userID uuid.UU
 		return nil, fmt.Errorf("database error creating preference profile: %w", err)
 	}
 
+	// Insert domain-specific preferences if provided
+	if params.AccommodationPreferences != nil {
+		accommodationJSON, err := json.Marshal(params.AccommodationPreferences)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to marshal accommodation preferences", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to marshal accommodation preferences: %w", err)
+		}
+		query = `
+            INSERT INTO user_accommodation_preferences (user_preference_profile_id, accommodation_filters)
+            VALUES ($1, $2)`
+		_, err = tx.Exec(ctx, query, p.ID, accommodationJSON)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to insert accommodation preferences", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to insert accommodation preferences: %w", err)
+		}
+	}
+
+	if params.DiningPreferences != nil {
+		diningJSON, err := json.Marshal(params.DiningPreferences)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to marshal dining preferences", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to marshal dining preferences: %w", err)
+		}
+		query = `
+            INSERT INTO user_dining_preferences (user_preference_profile_id, dining_filters)
+            VALUES ($1, $2)`
+		_, err = tx.Exec(ctx, query, p.ID, diningJSON)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to insert dining preferences", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to insert dining preferences: %w", err)
+		}
+	}
+
+	if params.ActivityPreferences != nil {
+		activityJSON, err := json.Marshal(params.ActivityPreferences)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to marshal activity preferences", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to marshal activity preferences: %w", err)
+		}
+		query = `
+            INSERT INTO user_activity_preferences (user_preference_profile_id, activity_filters)
+            VALUES ($1, $2)`
+		_, err = tx.Exec(ctx, query, p.ID, activityJSON)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to insert activity preferences", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to insert activity preferences: %w", err)
+		}
+	}
+
+	if params.ItineraryPreferences != nil {
+		itineraryJSON, err := json.Marshal(params.ItineraryPreferences)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to marshal itinerary preferences", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to marshal itinerary preferences: %w", err)
+		}
+		query = `
+            INSERT INTO user_itinerary_preferences (user_preference_profile_id, itinerary_filters)
+            VALUES ($1, $2)`
+		_, err = tx.Exec(ctx, query, p.ID, itineraryJSON)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to insert itinerary preferences", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to insert itinerary preferences: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -335,9 +402,15 @@ func (r *RepositoryImpl) UpdateSearchProfile(ctx context.Context, userID, profil
 	l := r.logger.With(slog.String("method", "UpdateUserPreferenceProfile"), slog.String("profileID", profileID.String()))
 	l.DebugContext(ctx, "Updating user preference profile")
 
+	// Begin transaction to update profile and domain preferences atomically
+	tx, err := r.pgpool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	// Build the update query dynamically based on which fields are provided
 	var updates []string
-	// Build dynamic query
 	args := []interface{}{}
 	paramIdx := 1
 
@@ -413,54 +486,85 @@ func (r *RepositoryImpl) UpdateSearchProfile(ctx context.Context, userID, profil
 		paramIdx++
 	}
 
-	// Always update the updated_at timestamp
-	updates = append(updates, fmt.Sprintf("updated_at = $%d", paramIdx))
-	args = append(args, time.Now())
-	paramIdx++
+	// Update main profile if there are changes
+	if len(updates) > 0 {
+		// Always update the updated_at timestamp
+		updates = append(updates, fmt.Sprintf("updated_at = $%d", paramIdx))
+		args = append(args, time.Now())
+		paramIdx++
 
-	// If no updates were provided, return early
-	if len(updates) == 1 { // Only updated_at
-		l.DebugContext(ctx, "No fields to update")
-		return nil
-	}
+		args = append(args, profileID)
+		idPlaceholderNum := paramIdx
+		paramIdx++
 
-	args = append(args, profileID)
-	idPlaceholderNum := paramIdx
-	paramIdx++
+		args = append(args, userID)
+		userIDPlaceholderNum := paramIdx
 
-	args = append(args, userID)
-	userIDPlaceholderNum := paramIdx
+		query := fmt.Sprintf(`
+			UPDATE user_preference_profiles
+			SET %s
+			WHERE id = $%d AND user_id = $%d`, strings.Join(updates, ", "),
+			idPlaceholderNum, userIDPlaceholderNum)
 
-	query := fmt.Sprintf(`
-        UPDATE user_preference_profiles
-        SET %s
-        WHERE id = $%d AND user_id = $%d`, strings.Join(updates, ", "),
-		idPlaceholderNum, userIDPlaceholderNum)
-
-	tag, err := r.pgpool.Exec(ctx, query, args...)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // Unique violation
-			l.WarnContext(ctx, "Profile name already exists for this user", slog.Any("error", err))
+		tag, err := tx.Exec(ctx, query, args...)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" { // Unique violation
+				l.WarnContext(ctx, "Profile name already exists for this user", slog.Any("error", err))
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "Profile name conflict")
+				return fmt.Errorf("profile name already exists: %w", types.ErrConflict)
+			}
+			l.ErrorContext(ctx, "Failed to update user preference profile", slog.Any("error", err))
 			span.RecordError(err)
-			span.SetStatus(codes.Error, "Profile name conflict")
-			return fmt.Errorf("profile name already exists: %w", types.ErrConflict)
+			span.SetStatus(codes.Error, "DB UPDATE failed")
+			return fmt.Errorf("database error updating preference profile: %w", err)
 		}
-		l.ErrorContext(ctx, "Failed to update user preference profile", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "DB UPDATE failed")
-		return fmt.Errorf("database error updating preference profile: %w", err)
+
+		if tag.RowsAffected() == 0 {
+			err := fmt.Errorf("preference profile not found: %w", types.ErrNotFound)
+			l.WarnContext(ctx, "Attempted to update non-existent preference profile")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Profile not found")
+			return err
+		}
 	}
 
-	if tag.RowsAffected() == 0 {
-		err := fmt.Errorf("preference profile not found: %w", types.ErrNotFound)
-		l.WarnContext(ctx, "Attempted to update non-existent preference profile")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Profile not found")
-		return err
+	// Update domain-specific preferences if provided
+	if params.AccommodationPreferences != nil {
+		if err := r.updateAccommodationPreferencesInTx(ctx, tx, profileID, params.AccommodationPreferences); err != nil {
+			l.ErrorContext(ctx, "Failed to update accommodation preferences", slog.Any("error", err))
+			return fmt.Errorf("failed to update accommodation preferences: %w", err)
+		}
 	}
 
-	l.InfoContext(ctx, "User preference profile updated successfully")
+	if params.DiningPreferences != nil {
+		if err := r.updateDiningPreferencesInTx(ctx, tx, profileID, params.DiningPreferences); err != nil {
+			l.ErrorContext(ctx, "Failed to update dining preferences", slog.Any("error", err))
+			return fmt.Errorf("failed to update dining preferences: %w", err)
+		}
+	}
+
+	if params.ActivityPreferences != nil {
+		if err := r.updateActivityPreferencesInTx(ctx, tx, profileID, params.ActivityPreferences); err != nil {
+			l.ErrorContext(ctx, "Failed to update activity preferences", slog.Any("error", err))
+			return fmt.Errorf("failed to update activity preferences: %w", err)
+		}
+	}
+
+	if params.ItineraryPreferences != nil {
+		if err := r.updateItineraryPreferencesInTx(ctx, tx, profileID, params.ItineraryPreferences); err != nil {
+			l.ErrorContext(ctx, "Failed to update itinerary preferences", slog.Any("error", err))
+			return fmt.Errorf("failed to update itinerary preferences: %w", err)
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	l.InfoContext(ctx, "User preference profile and domain preferences updated successfully")
 	span.SetStatus(codes.Ok, "Preference profile updated")
 	return nil
 }

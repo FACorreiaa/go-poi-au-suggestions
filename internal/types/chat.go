@@ -244,3 +244,25 @@ type RestaurantDetailedInfo struct {
 	LlmInteractionID uuid.UUID `json:"llm_interaction_id"`
 	Err              error     `json:"-"`
 }
+
+// Context-aware chat types
+type ChatContextType string
+
+const (
+	ContextHotels      ChatContextType = "hotels"
+	ContextRestaurants ChatContextType = "restaurants"
+	ContextItineraries ChatContextType = "itineraries"
+	ContextGeneral     ChatContextType = "general"
+)
+
+type StartChatRequest struct {
+	CityName       string          `json:"city_name"`
+	ContextType    ChatContextType `json:"context_type"`
+	InitialMessage string          `json:"initial_message,omitempty"`
+}
+
+type ContinueChatRequest struct {
+	Message     string          `json:"message"`
+	CityName    string          `json:"city_name,omitempty"`
+	ContextType ChatContextType `json:"context_type"`
+}

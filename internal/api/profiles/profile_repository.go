@@ -267,6 +267,17 @@ func (r *RepositoryImpl) CreateSearchProfile(ctx context.Context, userID uuid.UU
 		dietaryNeeds = []string{}
 	}
 
+	if isDefault {
+		query := "UPDATE user_preference_profiles SET is_default = FALSE WHERE user_id = $1 AND id != $2"
+		_, err := tx.Exec(ctx, query, userID, uuid.Nil) // uuid.Nil as placeholder; will be updated after insert
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to reset existing default profiles", slog.Any("error", err))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to reset defaults")
+			return nil, fmt.Errorf("failed to reset existing default profiles: %w", err)
+		}
+	}
+
 	// Insert base profile
 	var p types.UserPreferenceProfileResponse
 	query := `

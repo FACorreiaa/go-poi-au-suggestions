@@ -63,12 +63,20 @@ func (h *HandlerImpl) StartChatSessionStream(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Support both legacy and new request formats
 	var req struct {
-		CityName string `json:"city_name"`
+		CityName       string                `json:"city_name"`
+		ContextType    types.ChatContextType `json:"context_type,omitempty"`
+		InitialMessage string                `json:"initial_message,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeSSEError(w, "Invalid request body")
 		return
+	}
+
+	// Default to general context for backward compatibility
+	if req.ContextType == "" {
+		req.ContextType = types.ContextGeneral
 	}
 
 	userLocation := &types.UserLocation{
@@ -76,11 +84,21 @@ func (h *HandlerImpl) StartChatSessionStream(w http.ResponseWriter, r *http.Requ
 		UserLon: 2.1734,
 	}
 
-	// Start streaming
-	streamResp, err := h.llmInteractionService.StartNewSessionStreamed(ctx, userID, profileID, req.CityName, "", userLocation)
+	// Prepare prompt
+	prompt := req.InitialMessage
+	if prompt == "" {
+		prompt = getDefaultPromptForContext(req.ContextType, req.CityName)
+	}
+
+	// Start streaming with context support
+	streamResp, err := h.llmInteractionService.StartNewSessionStreamedWithContext(ctx, userID, profileID, req.CityName, prompt, userLocation, req.ContextType)
 	if err != nil {
-		h.writeSSEError(w, fmt.Sprintf("Failed to start session: %v", err))
-		return
+		// Fallback to original method for backward compatibility
+		streamResp, err = h.llmInteractionService.StartNewSessionStreamed(ctx, userID, profileID, req.CityName, prompt, userLocation)
+		if err != nil {
+			h.writeSSEError(w, fmt.Sprintf("Failed to start session: %v", err))
+			return
+		}
 	}
 	defer streamResp.Cancel()
 
@@ -143,17 +161,24 @@ func (h *HandlerImpl) ContinueSessionStreamHandler(w http.ResponseWriter, r *htt
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // Disable buffering for some proxies
 
-	// Parse request body
+	// Parse request body with context support
 	var req struct {
-		SessionID    string              `json:"session_id"`
-		Message      string              `json:"message"`
-		UserLocation *types.UserLocation `json:"user_location"`
+		SessionID    string                `json:"session_id"`
+		Message      string                `json:"message"`
+		UserLocation *types.UserLocation   `json:"user_location"`
+		CityName     string                `json:"city_name,omitempty"`
+		ContextType  types.ChatContextType `json:"context_type,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.logger.ErrorContext(ctx, "Failed to decode request body", slog.Any("error", err))
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		span.RecordError(err)
 		return
+	}
+
+	// Default to general context for backward compatibility
+	if req.ContextType == "" {
+		req.ContextType = types.ContextGeneral
 	}
 
 	// Validate and parse sessionID
@@ -184,22 +209,27 @@ func (h *HandlerImpl) ContinueSessionStreamHandler(w http.ResponseWriter, r *htt
 	eventCh := make(chan types.StreamEvent)
 	defer close(eventCh) // Ensure channel is closed when handler exits
 
-	// Start the service in a goroutine
+	// Start the service in a goroutine with context support
 	go func() {
-		err := h.llmInteractionService.ContinueSessionStreamed(ctx, sessionID, req.Message, req.UserLocation, eventCh)
+		// Try context-aware method first, fallback for backward compatibility
+		err := h.llmInteractionService.ContinueSessionStreamedWithContext(ctx, sessionID, req.Message, req.UserLocation, req.ContextType, eventCh)
 		if err != nil {
-			h.logger.ErrorContext(ctx, "ContinueSessionStreamed failed", slog.Any("error", err))
-			span.RecordError(err)
-			// Send error event if the channel is still open
-			select {
-			case eventCh <- types.StreamEvent{
-				Type:      string(types.TypeError),
-				Error:     err.Error(),
-				IsFinal:   true,
-				EventID:   uuid.New().String(),
-				Timestamp: time.Now(),
-			}:
-			case <-ctx.Done():
+			// Fallback to original method
+			err = h.llmInteractionService.ContinueSessionStreamed(ctx, sessionID, req.Message, req.UserLocation, eventCh)
+			if err != nil {
+				h.logger.ErrorContext(ctx, "ContinueSessionStreamed failed", slog.Any("error", err))
+				span.RecordError(err)
+				// Send error event if the channel is still open
+				select {
+				case eventCh <- types.StreamEvent{
+					Type:      string(types.TypeError),
+					Error:     err.Error(),
+					IsFinal:   true,
+					EventID:   uuid.New().String(),
+					Timestamp: time.Now(),
+				}:
+				case <-ctx.Done():
+				}
 			}
 		}
 	}()

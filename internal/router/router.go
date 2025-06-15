@@ -165,32 +165,41 @@ func profilesRoutes(HandlerImpl *profiles.HandlerImpl) http.Handler {
 	r.Delete("/{profileID}", HandlerImpl.DeleteSearchProfile)          // DELETE http://localhost:8000/api/v1/user/search-profile/{profileID}
 	r.Get("/", HandlerImpl.GetSearchProfiles)                          // GET http://localhost:8000/api/v1/user/search-profile
 	r.Post("/", HandlerImpl.CreateSearchProfile)                       // POST http://localhost:8000/api/v1/user/search-profile
-
-	// Enhanced domain-specific preference routes
-	r.Get("/{profileID}/filters", HandlerImpl.GetCombinedFilters)                         // GET http://localhost:8000/api/v1/user/search-profile/{profileID}/filters?domain=accommodation
-	r.Get("/{profileID}/accommodation", HandlerImpl.GetAccommodationPreferences)         // GET http://localhost:8000/api/v1/user/search-profile/{profileID}/accommodation
-	r.Put("/{profileID}/accommodation", HandlerImpl.UpdateAccommodationPreferences)      // PUT http://localhost:8000/api/v1/user/search-profile/{profileID}/accommodation
-	r.Get("/{profileID}/dining", HandlerImpl.GetDiningPreferences)                       // GET http://localhost:8000/api/v1/user/search-profile/{profileID}/dining
-	r.Put("/{profileID}/dining", HandlerImpl.UpdateDiningPreferences)                    // PUT http://localhost:8000/api/v1/user/search-profile/{profileID}/dining
-	r.Get("/{profileID}/activities", HandlerImpl.GetActivityPreferences)                 // GET http://localhost:8000/api/v1/user/search-profile/{profileID}/activities
-	r.Put("/{profileID}/activities", HandlerImpl.UpdateActivityPreferences)              // PUT http://localhost:8000/api/v1/user/search-profile/{profileID}/activities
-	r.Get("/{profileID}/itinerary", HandlerImpl.GetItineraryPreferences)                 // GET http://localhost:8000/api/v1/user/search-profile/{profileID}/itinerary
-	r.Put("/{profileID}/itinerary", HandlerImpl.UpdateItineraryPreferences)              // PUT http://localhost:8000/api/v1/user/search-profile/{profileID}/itinerary
-
 	return r
 }
 
 func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
+
+	// Legacy chat endpoints (maintain backward compatibility)
 	r.Post("/prompt-response/chat/sessions/{profileID}", HandlerImpl.StartChatSession)
 	r.Post("/prompt-response/chat/sessions/stream/{profileID}", HandlerImpl.StartChatSessionStream)
-
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueChatSession)
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueSessionStreamHandler)
 
-	// RAG-enabled routes
-	r.Post("/prompt-response/rag/query/{profileID}", HandlerImpl.RAGEnabledChatQuery) // POST http://localhost:8000/api/v1/llm/prompt-response/rag/query/{profileID}
-	r.Get("/prompt-response/rag/search", HandlerImpl.SearchSimilarPOIs)               // GET http://localhost:8000/api/v1/llm/prompt-response/rag/search?query=...
+	// TODO
+
+	// // Context-aware hotel chat endpoints
+	// r.Post("/hotels/chat/sessions/{profileID}", HandlerImpl.StartHotelChatSession)
+	// r.Post("/hotels/chat/sessions/stream/{profileID}", HandlerImpl.StartHotelChatSessionStream)
+	// r.Post("/hotels/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueHotelChatSession)
+	// r.Post("/hotels/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueHotelChatSessionStream)
+
+	// // Context-aware restaurant chat endpoints
+	// r.Post("/restaurants/chat/sessions/{profileID}", HandlerImpl.StartRestaurantChatSession)
+	// r.Post("/restaurants/chat/sessions/stream/{profileID}", HandlerImpl.StartRestaurantChatSessionStream)
+	// r.Post("/restaurants/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueRestaurantChatSession)
+	// r.Post("/restaurants/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueRestaurantChatSessionStream)
+
+	// // Context-aware itinerary chat endpoints
+	// r.Post("/itineraries/chat/sessions/{profileID}", HandlerImpl.StartItineraryChatSession)
+	// r.Post("/itineraries/chat/sessions/stream/{profileID}", HandlerImpl.StartItineraryChatSessionStream)
+	// r.Post("/itineraries/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueItineraryChatSession)
+	// r.Post("/itineraries/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueItineraryChatSessionStream)
+
+	// // RAG-enabled routes
+	// r.Post("/prompt-response/rag/query/{profileID}", HandlerImpl.RAGEnabledChatQuery) // POST http://localhost:8000/api/v1/llm/prompt-response/rag/query/{profileID}
+	// r.Get("/prompt-response/rag/search", HandlerImpl.SearchSimilarPOIs)               // GET http://localhost:8000/api/v1/llm/prompt-response/rag/search?query=...
 
 	// LLM interaction routes
 	r.Post("/prompt-response/profile/{profileID}", HandlerImpl.GetPrompResponse)        // GET http://localhost:8000/api/v1/user/interests

@@ -48,27 +48,27 @@ type DomainDetector struct{}
 
 func (d *DomainDetector) DetectDomain(ctx context.Context, message string) types.DomainType {
 	message = strings.ToLower(message)
-	
+
 	// Accommodation domain keywords
 	if matched, _ := regexp.MatchString(`hotel|hostel|accommodation|stay|sleep|room|booking|airbnb|lodge|resort|guesthouse`, message); matched {
 		return types.DomainAccommodation
 	}
-	
+
 	// Dining domain keywords
 	if matched, _ := regexp.MatchString(`restaurant|food|eat|dine|meal|cuisine|drink|cafe|bar|lunch|dinner|breakfast|brunch`, message); matched {
 		return types.DomainDining
 	}
-	
+
 	// Activity domain keywords
 	if matched, _ := regexp.MatchString(`activity|museum|park|attraction|tour|visit|see|do|experience|adventure|shopping|nightlife`, message); matched {
 		return types.DomainActivities
 	}
-	
+
 	// Itinerary domain keywords
 	if matched, _ := regexp.MatchString(`itinerary|plan|schedule|trip|day|week|journey|route|organize|arrange`, message); matched {
 		return types.DomainItinerary
 	}
-	
+
 	// Default to general domain
 	return types.DomainGeneral
 }
@@ -115,6 +115,19 @@ type LlmInteractiontService interface {
 		eventCh chan<- types.StreamEvent, // Channel to send events back
 	) error
 
+	// Context-aware chat methods
+	StartNewSessionWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (uuid.UUID, *types.AiCityResponse, error)
+	ContinueSessionWithContext(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.AiCityResponse, error)
+	StartNewSessionStreamedWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.StreamingResponse, error)
+	ContinueSessionStreamedWithContext(
+		ctx context.Context,
+		sessionID uuid.UUID,
+		message string,
+		userLocation *types.UserLocation, // For distance sorting context
+		contextType types.ChatContextType,
+		eventCh chan<- types.StreamEvent, // Channel to send events back
+	) error
+
 	// RAG
 	GetRAGEnabledChatResponse(ctx context.Context, message string, userID, profileID uuid.UUID, sessionID uuid.UUID, cityContext string) (*generativeAI.RAGResponse, error)
 	SearchRelevantPOIsForRAG(ctx context.Context, query string, cityID *uuid.UUID, limit int) ([]types.POIDetail, error)
@@ -129,7 +142,7 @@ type LlmInteractiontServiceImpl struct {
 	logger             *slog.Logger
 	interestRepo       interests.Repository
 	searchProfileRepo  profiles.Repository
-	searchProfileSvc   profiles.Service  // Add service for enhanced methods
+	searchProfileSvc   profiles.Service // Add service for enhanced methods
 	tagsRepo           tags.Repository
 	aiClient           *generativeAI.AIClient
 	embeddingService   *generativeAI.EmbeddingService
@@ -594,28 +607,28 @@ func (l *LlmInteractiontServiceImpl) FetchUserData(ctx context.Context, userID, 
 }
 
 // FetchEnhancedUserData fetches user data including domain-specific preferences
-func (l *LlmInteractiontServiceImpl) FetchEnhancedUserData(ctx context.Context, userID, profileID uuid.UUID, domain types.DomainType) (*types.CombinedFilters, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "FetchEnhancedUserData", trace.WithAttributes(
-		attribute.String("profile.id", profileID.String()),
-		attribute.String("domain", string(domain)),
-	))
-	defer span.End()
+// func (l *LlmInteractiontServiceImpl) FetchEnhancedUserData(ctx context.Context, userID, profileID uuid.UUID, domain types.DomainType) (*types.CombinedFilters, error) {
+// 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "FetchEnhancedUserData", trace.WithAttributes(
+// 		attribute.String("profile.id", profileID.String()),
+// 		attribute.String("domain", string(domain)),
+// 	))
+// 	defer span.End()
 
-	l.logger.DebugContext(ctx, "Fetching enhanced user data", slog.String("profileID", profileID.String()), slog.String("domain", string(domain)))
+// 	l.logger.DebugContext(ctx, "Fetching enhanced user data", slog.String("profileID", profileID.String()), slog.String("domain", string(domain)))
 
-	// Get combined filters through the profile service
-	combinedFilters, err := l.searchProfileSvc.GetCombinedFilters(ctx, userID, profileID, domain)
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Failed to fetch combined filters", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to fetch combined filters")
-		return nil, fmt.Errorf("failed to fetch enhanced user data: %w", err)
-	}
+// 	// Get combined filters through the profile service
+// 	combinedFilters, err := l.searchProfileSvc.GetCombinedFilters(ctx, userID, profileID, domain)
+// 	if err != nil {
+// 		l.logger.ErrorContext(ctx, "Failed to fetch combined filters", slog.Any("error", err))
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to fetch combined filters")
+// 		return nil, fmt.Errorf("failed to fetch enhanced user data: %w", err)
+// 	}
 
-	l.logger.InfoContext(ctx, "Enhanced user data fetched successfully")
-	span.SetStatus(codes.Ok, "Enhanced user data fetched successfully")
-	return combinedFilters, nil
-}
+// 	l.logger.InfoContext(ctx, "Enhanced user data fetched successfully")
+// 	span.SetStatus(codes.Ok, "Enhanced user data fetched successfully")
+// 	return combinedFilters, nil
+// }
 
 func (l *LlmInteractiontServiceImpl) PreparePromptData(interests []*types.Interest, tags []*types.Tags, searchProfile *types.UserPreferenceProfileResponse) (interestNames []string, tagsPromptPart string, userPrefs string) {
 	if len(interests) == 0 {
@@ -1072,118 +1085,118 @@ func (l *LlmInteractiontServiceImpl) GetIteneraryResponse(ctx context.Context, c
 }
 
 // GetEnhancedIteneraryResponse generates an itinerary with enhanced domain-specific filtering
-func (l *LlmInteractiontServiceImpl) GetEnhancedIteneraryResponse(ctx context.Context, cityName, userMessage string, userID, profileID uuid.UUID, userLocation *types.UserLocation) (*types.AiCityResponse, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetEnhancedIteneraryResponse", trace.WithAttributes(
-		attribute.String("city.name", cityName),
-		attribute.String("user.id", userID.String()),
-		attribute.String("profile.id", profileID.String()),
-		attribute.String("user.message", userMessage),
-	))
-	defer span.End()
+// func (l *LlmInteractiontServiceImpl) GetEnhancedIteneraryResponse(ctx context.Context, cityName, userMessage string, userID, profileID uuid.UUID, userLocation *types.UserLocation) (*types.AiCityResponse, error) {
+// 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetEnhancedIteneraryResponse", trace.WithAttributes(
+// 		attribute.String("city.name", cityName),
+// 		attribute.String("user.id", userID.String()),
+// 		attribute.String("profile.id", profileID.String()),
+// 		attribute.String("user.message", userMessage),
+// 	))
+// 	defer span.End()
 
-	l.logger.DebugContext(ctx, "Starting enhanced itinerary generation", 
-		slog.String("cityName", cityName), 
-		slog.String("userID", userID.String()), 
-		slog.String("profileID", profileID.String()),
-		slog.String("userMessage", userMessage))
+// 	l.logger.DebugContext(ctx, "Starting enhanced itinerary generation",
+// 		slog.String("cityName", cityName),
+// 		slog.String("userID", userID.String()),
+// 		slog.String("profileID", profileID.String()),
+// 		slog.String("userMessage", userMessage))
 
-	// Detect domain from user message
-	domainDetector := &DomainDetector{}
-	detectedDomain := domainDetector.DetectDomain(ctx, userMessage)
-	l.logger.DebugContext(ctx, "Detected domain", slog.String("domain", string(detectedDomain)))
-	span.SetAttributes(attribute.String("detected.domain", string(detectedDomain)))
+// 	// Detect domain from user message
+// 	domainDetector := &DomainDetector{}
+// 	detectedDomain := domainDetector.DetectDomain(ctx, userMessage)
+// 	l.logger.DebugContext(ctx, "Detected domain", slog.String("domain", string(detectedDomain)))
+// 	span.SetAttributes(attribute.String("detected.domain", string(detectedDomain)))
 
-	// Fetch enhanced user data including domain-specific preferences
-	combinedFilters, err := l.FetchEnhancedUserData(ctx, userID, profileID, detectedDomain)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to fetch enhanced user data")
-		return nil, err
-	}
+// 	// Fetch enhanced user data including domain-specific preferences
+// 	combinedFilters, err := l.FetchEnhancedUserData(ctx, userID, profileID, detectedDomain)
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to fetch enhanced user data")
+// 		return nil, err
+// 	}
 
-	// Prepare enhanced prompt data with domain-specific filters
-	enhancedPromptData := l.PrepareEnhancedPromptData(combinedFilters, detectedDomain)
-	span.SetAttributes(
-		attribute.Int("base_interests.count", len(combinedFilters.BasePreferences.Interests)),
-		attribute.Bool("has_accommodation_prefs", combinedFilters.AccommodationPreferences != nil),
-		attribute.Bool("has_dining_prefs", combinedFilters.DiningPreferences != nil),
-		attribute.Bool("has_activity_prefs", combinedFilters.ActivityPreferences != nil),
-		attribute.Bool("has_itinerary_prefs", combinedFilters.ItineraryPreferences != nil),
-	)
+// 	// Prepare enhanced prompt data with domain-specific filters
+// 	enhancedPromptData := l.PrepareEnhancedPromptData(combinedFilters, detectedDomain)
+// 	span.SetAttributes(
+// 		attribute.Int("base_interests.count", len(combinedFilters.BasePreferences.Interests)),
+// 		attribute.Bool("has_accommodation_prefs", combinedFilters.AccommodationPreferences != nil),
+// 		attribute.Bool("has_dining_prefs", combinedFilters.DiningPreferences != nil),
+// 		attribute.Bool("has_activity_prefs", combinedFilters.ActivityPreferences != nil),
+// 		attribute.Bool("has_itinerary_prefs", combinedFilters.ItineraryPreferences != nil),
+// 	)
 
-	// Determine user location from profile if not provided
-	if userLocation == nil && combinedFilters.BasePreferences.UserLatitude != nil && combinedFilters.BasePreferences.UserLongitude != nil {
-		userLocation = &types.UserLocation{
-			UserLat: *combinedFilters.BasePreferences.UserLatitude,
-			UserLon: *combinedFilters.BasePreferences.UserLongitude,
-		}
-		span.SetAttributes(
-			attribute.Float64("user.latitude", *combinedFilters.BasePreferences.UserLatitude),
-			attribute.Float64("user.longitude", *combinedFilters.BasePreferences.UserLongitude),
-		)
-	}
+// 	// Determine user location from profile if not provided
+// 	if userLocation == nil && combinedFilters.BasePreferences.UserLatitude != nil && combinedFilters.BasePreferences.UserLongitude != nil {
+// 		userLocation = &types.UserLocation{
+// 			UserLat: *combinedFilters.BasePreferences.UserLatitude,
+// 			UserLon: *combinedFilters.BasePreferences.UserLongitude,
+// 		}
+// 		span.SetAttributes(
+// 			attribute.Float64("user.latitude", *combinedFilters.BasePreferences.UserLatitude),
+// 			attribute.Float64("user.longitude", *combinedFilters.BasePreferences.UserLongitude),
+// 		)
+// 	}
 
-	// Set up channels and wait group for fan-in fan-out
-	resultCh := make(chan types.GenAIResponse, 3)
-	var wg sync.WaitGroup
-	wg.Add(3)
+// 	// Set up channels and wait group for fan-in fan-out
+// 	resultCh := make(chan types.GenAIResponse, 3)
+// 	var wg sync.WaitGroup
+// 	wg.Add(3)
 
-	// Fan-out: Start workers with enhanced prompts
-	go l.GenerateCityDataWorker(&wg, ctx, cityName, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
-	go l.GenerateGeneralPOIWorker(&wg, ctx, cityName, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
-	go l.GenerateEnhancedPersonalisedPOIWorker(&wg, ctx, cityName, userID, profileID, resultCh, enhancedPromptData, detectedDomain, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+// 	// Fan-out: Start workers with enhanced prompts
+// 	go l.GenerateCityDataWorker(&wg, ctx, cityName, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+// 	go l.GenerateGeneralPOIWorker(&wg, ctx, cityName, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+// 	go l.GenerateEnhancedPersonalisedPOIWorker(&wg, ctx, cityName, userID, profileID, resultCh, enhancedPromptData, detectedDomain, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
 
-	// Close channel after workers complete
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
+// 	// Close channel after workers complete
+// 	go func() {
+// 		wg.Wait()
+// 		close(resultCh)
+// 	}()
 
-	// Fan-in: Collect results
-	itinerary, llmInteractionID, rawPersonalisedPOIs, errors := l.CollectResults(resultCh)
-	if len(errors) > 0 {
-		l.logger.ErrorContext(ctx, "Errors during enhanced itinerary generation", slog.Any("errors", errors))
-		for _, err := range errors {
-			span.RecordError(err)
-		}
-		span.SetStatus(codes.Error, "Failed to generate enhanced itinerary")
-		return nil, fmt.Errorf("failed to generate enhanced itinerary: %v", errors)
-	}
+// 	// Fan-in: Collect results
+// 	itinerary, llmInteractionID, rawPersonalisedPOIs, errors := l.CollectResults(resultCh)
+// 	if len(errors) > 0 {
+// 		l.logger.ErrorContext(ctx, "Errors during enhanced itinerary generation", slog.Any("errors", errors))
+// 		for _, err := range errors {
+// 			span.RecordError(err)
+// 		}
+// 		span.SetStatus(codes.Error, "Failed to generate enhanced itinerary")
+// 		return nil, fmt.Errorf("failed to generate enhanced itinerary: %v", errors)
+// 	}
 
-	// Handle city data
-	cityID, err := l.HandleCityData(ctx, itinerary.GeneralCityData)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to handle city data")
-		return nil, err
-	}
-	span.SetAttributes(attribute.String("city.id", cityID.String()))
+// 	// Handle city data
+// 	cityID, err := l.HandleCityData(ctx, itinerary.GeneralCityData)
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to handle city data")
+// 		return nil, err
+// 	}
+// 	span.SetAttributes(attribute.String("city.id", cityID.String()))
 
-	// Handle general POIs
-	l.HandleGeneralPOIs(ctx, itinerary.PointsOfInterest, cityID)
-	span.SetAttributes(attribute.Int("general_pois.count", len(itinerary.PointsOfInterest)))
+// 	// Handle general POIs
+// 	l.HandleGeneralPOIs(ctx, itinerary.PointsOfInterest, cityID)
+// 	span.SetAttributes(attribute.Int("general_pois.count", len(itinerary.PointsOfInterest)))
 
-	// Handle personalized POIs with domain-aware filtering
-	sortedPois, err := l.HandlePersonalisedPOIs(ctx, rawPersonalisedPOIs, cityID, userLocation, llmInteractionID, userID, profileID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to handle personalized POIs")
-		return nil, err
-	}
-	itinerary.AIItineraryResponse.PointsOfInterest = sortedPois
-	span.SetAttributes(
-		attribute.Int("personalized_pois.count", len(sortedPois)),
-		attribute.String("llm_interaction.id", llmInteractionID.String()),
-	)
+// 	// Handle personalized POIs with domain-aware filtering
+// 	sortedPois, err := l.HandlePersonalisedPOIs(ctx, rawPersonalisedPOIs, cityID, userLocation, llmInteractionID, userID, profileID)
+// 	if err != nil {
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Failed to handle personalized POIs")
+// 		return nil, err
+// 	}
+// 	itinerary.AIItineraryResponse.PointsOfInterest = sortedPois
+// 	span.SetAttributes(
+// 		attribute.Int("personalized_pois.count", len(sortedPois)),
+// 		attribute.String("llm_interaction.id", llmInteractionID.String()),
+// 	)
 
-	l.logger.InfoContext(ctx, "Enhanced itinerary ready",
-		slog.String("itinerary_name", itinerary.AIItineraryResponse.ItineraryName),
-		slog.Int("final_personalised_poi_count", len(itinerary.AIItineraryResponse.PointsOfInterest)),
-		slog.String("detected_domain", string(detectedDomain)))
+// 	l.logger.InfoContext(ctx, "Enhanced itinerary ready",
+// 		slog.String("itinerary_name", itinerary.AIItineraryResponse.ItineraryName),
+// 		slog.Int("final_personalised_poi_count", len(itinerary.AIItineraryResponse.PointsOfInterest)),
+// 		slog.String("detected_domain", string(detectedDomain)))
 
-	span.SetStatus(codes.Ok, "Enhanced itinerary generated successfully")
-	return &itinerary, nil
-}
+// 	span.SetStatus(codes.Ok, "Enhanced itinerary generated successfully")
+// 	return &itinerary, nil
+// }
 
 // PrepareEnhancedPromptData prepares prompt data with domain-specific filters
 func (l *LlmInteractiontServiceImpl) PrepareEnhancedPromptData(filters *types.CombinedFilters, domain types.DomainType) string {
@@ -1261,7 +1274,7 @@ func (l *LlmInteractiontServiceImpl) PrepareEnhancedPromptData(filters *types.Co
 // Domain-specific prompt generation methods
 func (l *LlmInteractiontServiceImpl) getAccommodationPreferencesPrompt(prefs *types.AccommodationPreferences) string {
 	var parts []string
-	
+
 	if len(prefs.AccommodationType) > 0 {
 		parts = append(parts, fmt.Sprintf("preferred accommodation types: %s", strings.Join(prefs.AccommodationType, ", ")))
 	}
@@ -1273,13 +1286,13 @@ func (l *LlmInteractiontServiceImpl) getAccommodationPreferencesPrompt(prefs *ty
 			parts = append(parts, fmt.Sprintf("star rating: %.0f-%.0f stars", *prefs.StarRating.Min, *prefs.StarRating.Max))
 		}
 	}
-	
+
 	return strings.Join(parts, "; ")
 }
 
 func (l *LlmInteractiontServiceImpl) getDiningPreferencesPrompt(prefs *types.DiningPreferences) string {
 	var parts []string
-	
+
 	if len(prefs.CuisineTypes) > 0 {
 		parts = append(parts, fmt.Sprintf("preferred cuisines: %s", strings.Join(prefs.CuisineTypes, ", ")))
 	}
@@ -1295,13 +1308,13 @@ func (l *LlmInteractiontServiceImpl) getDiningPreferencesPrompt(prefs *types.Din
 	if prefs.LocalRecommendations {
 		parts = append(parts, "prioritize local recommendations")
 	}
-	
+
 	return strings.Join(parts, "; ")
 }
 
 func (l *LlmInteractiontServiceImpl) getActivityPreferencesPrompt(prefs *types.ActivityPreferences) string {
 	var parts []string
-	
+
 	if len(prefs.ActivityCategories) > 0 {
 		parts = append(parts, fmt.Sprintf("preferred activities: %s", strings.Join(prefs.ActivityCategories, ", ")))
 	}
@@ -1317,13 +1330,13 @@ func (l *LlmInteractiontServiceImpl) getActivityPreferencesPrompt(prefs *types.A
 	if prefs.PhotoOpportunities {
 		parts = append(parts, "value photo opportunities")
 	}
-	
+
 	return strings.Join(parts, "; ")
 }
 
 func (l *LlmInteractiontServiceImpl) getItineraryPreferencesPrompt(prefs *types.ItineraryPreferences) string {
 	var parts []string
-	
+
 	if prefs.PlanningStyle != "" {
 		parts = append(parts, fmt.Sprintf("planning style: %s", prefs.PlanningStyle))
 	}
@@ -1339,7 +1352,7 @@ func (l *LlmInteractiontServiceImpl) getItineraryPreferencesPrompt(prefs *types.
 	if prefs.AvoidPeakSeason {
 		parts = append(parts, "avoid peak season")
 	}
-	
+
 	return strings.Join(parts, "; ")
 }
 
@@ -3630,4 +3643,208 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// Context-aware chat session methods
+
+// StartNewSessionWithContext starts a new chat session with context awareness
+func (l *LlmInteractiontServiceImpl) StartNewSessionWithContext(
+	ctx context.Context,
+	userID, profileID uuid.UUID,
+	cityName, message string,
+	userLocation *types.UserLocation,
+	contextType types.ChatContextType,
+) (uuid.UUID, *types.AiCityResponse, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "StartNewSessionWithContext", trace.WithAttributes(
+		attribute.String("city.name", cityName),
+		attribute.String("user.id", userID.String()),
+		attribute.String("profile.id", profileID.String()),
+		attribute.String("context.type", string(contextType)),
+	))
+	defer span.End()
+
+	l.logger.DebugContext(ctx, "Starting new context-aware session",
+		slog.String("cityName", cityName),
+		slog.String("userID", userID.String()),
+		slog.String("profileID", profileID.String()),
+		slog.String("contextType", string(contextType)),
+		slog.String("message", message))
+
+	// Modify the message based on context type if needed
+	contextualMessage := l.enhanceMessageWithContext(message, contextType, cityName)
+
+	// Use the base StartNewSession method with the enhanced message
+	sessionID, response, err := l.StartNewSession(ctx, userID, profileID, cityName, contextualMessage, userLocation)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to start context-aware session", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to start context-aware session")
+		return uuid.Nil, nil, fmt.Errorf("failed to start context-aware session: %w", err)
+	}
+
+	l.logger.InfoContext(ctx, "Context-aware session started successfully",
+		slog.String("sessionID", sessionID.String()),
+		slog.String("contextType", string(contextType)))
+	span.SetStatus(codes.Ok, "Context-aware session started successfully")
+	return sessionID, response, nil
+}
+
+// ContinueSessionWithContext continues a chat session with context awareness
+func (l *LlmInteractiontServiceImpl) ContinueSessionWithContext(
+	ctx context.Context,
+	sessionID uuid.UUID,
+	message string,
+	userLocation *types.UserLocation,
+	contextType types.ChatContextType,
+) (*types.AiCityResponse, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ContinueSessionWithContext", trace.WithAttributes(
+		attribute.String("session.id", sessionID.String()),
+		attribute.String("context.type", string(contextType)),
+	))
+	defer span.End()
+
+	l.logger.DebugContext(ctx, "Continuing context-aware session",
+		slog.String("sessionID", sessionID.String()),
+		slog.String("contextType", string(contextType)),
+		slog.String("message", message))
+
+	// Modify the message based on context type if needed
+	contextualMessage := l.enhanceMessageWithContext(message, contextType, "")
+
+	// Use the base ContinueSession method with the enhanced message
+	response, err := l.ContinueSession(ctx, sessionID, contextualMessage, userLocation)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to continue context-aware session", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to continue context-aware session")
+		return nil, fmt.Errorf("failed to continue context-aware session: %w", err)
+	}
+
+	l.logger.InfoContext(ctx, "Context-aware session continued successfully",
+		slog.String("sessionID", sessionID.String()),
+		slog.String("contextType", string(contextType)))
+	span.SetStatus(codes.Ok, "Context-aware session continued successfully")
+	return response, nil
+}
+
+// StartNewSessionStreamedWithContext starts a new streaming chat session with context awareness
+func (l *LlmInteractiontServiceImpl) StartNewSessionStreamedWithContext(
+	ctx context.Context,
+	userID, profileID uuid.UUID,
+	cityName, message string,
+	userLocation *types.UserLocation,
+	contextType types.ChatContextType,
+) (*types.StreamingResponse, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "StartNewSessionStreamedWithContext", trace.WithAttributes(
+		attribute.String("city.name", cityName),
+		attribute.String("user.id", userID.String()),
+		attribute.String("profile.id", profileID.String()),
+		attribute.String("context.type", string(contextType)),
+	))
+	defer span.End()
+
+	l.logger.DebugContext(ctx, "Starting new context-aware streaming session",
+		slog.String("cityName", cityName),
+		slog.String("userID", userID.String()),
+		slog.String("profileID", profileID.String()),
+		slog.String("contextType", string(contextType)),
+		slog.String("message", message))
+
+	// Modify the message based on context type if needed
+	contextualMessage := l.enhanceMessageWithContext(message, contextType, cityName)
+
+	// Use the base StartNewSessionStreamed method with the enhanced message
+	streamingResponse, err := l.StartNewSessionStreamed(ctx, userID, profileID, cityName, contextualMessage, userLocation)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to start context-aware streaming session", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to start context-aware streaming session")
+		return nil, fmt.Errorf("failed to start context-aware streaming session: %w", err)
+	}
+
+	l.logger.InfoContext(ctx, "Context-aware streaming session started successfully",
+		slog.String("sessionID", streamingResponse.SessionID.String()),
+		slog.String("contextType", string(contextType)))
+	span.SetStatus(codes.Ok, "Context-aware streaming session started successfully")
+	return streamingResponse, nil
+}
+
+// ContinueSessionStreamedWithContext continues a streaming chat session with context awareness
+func (l *LlmInteractiontServiceImpl) ContinueSessionStreamedWithContext(
+	ctx context.Context,
+	sessionID uuid.UUID,
+	message string,
+	userLocation *types.UserLocation,
+	contextType types.ChatContextType,
+	eventCh chan<- types.StreamEvent,
+) error {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ContinueSessionStreamedWithContext", trace.WithAttributes(
+		attribute.String("session.id", sessionID.String()),
+		attribute.String("context.type", string(contextType)),
+	))
+	defer span.End()
+
+	l.logger.DebugContext(ctx, "Continuing context-aware streaming session",
+		slog.String("sessionID", sessionID.String()),
+		slog.String("contextType", string(contextType)),
+		slog.String("message", message))
+
+	// Modify the message based on context type if needed
+	contextualMessage := l.enhanceMessageWithContext(message, contextType, "")
+
+	// Use the base ContinueSessionStreamed method with the enhanced message
+	err := l.ContinueSessionStreamed(ctx, sessionID, contextualMessage, userLocation, eventCh)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to continue context-aware streaming session", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to continue context-aware streaming session")
+		return fmt.Errorf("failed to continue context-aware streaming session: %w", err)
+	}
+
+	l.logger.InfoContext(ctx, "Context-aware streaming session continued successfully",
+		slog.String("sessionID", sessionID.String()),
+		slog.String("contextType", string(contextType)))
+	span.SetStatus(codes.Ok, "Context-aware streaming session continued successfully")
+	return nil
+}
+
+// enhanceMessageWithContext enhances the user message based on the context type
+func (l *LlmInteractiontServiceImpl) enhanceMessageWithContext(message string, contextType types.ChatContextType, cityName string) string {
+	// If message is empty, use default prompt for context
+	if message == "" {
+		switch contextType {
+		case types.ContextHotels:
+			if cityName != "" {
+				return fmt.Sprintf("Find hotels in %s", cityName)
+			}
+			return "Help me find hotels"
+		case types.ContextRestaurants:
+			if cityName != "" {
+				return fmt.Sprintf("Find restaurants in %s", cityName)
+			}
+			return "Help me find restaurants"
+		case types.ContextItineraries:
+			if cityName != "" {
+				return fmt.Sprintf("Create an itinerary for %s", cityName)
+			}
+			return "Help me create an itinerary"
+		default:
+			if cityName != "" {
+				return fmt.Sprintf("Tell me about %s", cityName)
+			}
+			return message
+		}
+	}
+
+	// For non-empty messages, add context-specific guidance
+	switch contextType {
+	case types.ContextHotels:
+		return fmt.Sprintf("%s (Focus on hotels and accommodation options)", message)
+	case types.ContextRestaurants:
+		return fmt.Sprintf("%s (Focus on restaurants and dining options)", message)
+	case types.ContextItineraries:
+		return fmt.Sprintf("%s (Focus on creating a detailed travel itinerary)", message)
+	default:
+		return message
+	}
 }

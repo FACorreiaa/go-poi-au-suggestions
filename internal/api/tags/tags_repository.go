@@ -79,7 +79,7 @@ func (r *RepositoryImpl) GetAll(ctx context.Context, userID uuid.UUID) ([]*types
             g.description,
             g.tag_type,
             'global' AS source, 
-			active,
+			CASE WHEN 'global' = 'global' THEN false ELSE g.active END AS active,
             g.created_at        
         FROM global_tags g
         WHERE g.active = TRUE

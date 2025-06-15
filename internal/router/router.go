@@ -14,7 +14,6 @@ import (
 	itineraryList "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/list"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/settings"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/tags"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 )
@@ -26,10 +25,8 @@ type Config struct {
 	Logger                  *slog.Logger
 	UserHandler             *user.HandlerImpl
 	InterestHandler         *interests.HandlerImpl
-	SettingsHandler         *settings.HandlerImpl
 	SearchProfileHandler    *profiles.HandlerImpl
 	TagsHandler             *tags.HandlerImpl
-	PreferencesHandler      *settings.HandlerImpl
 	LLMInteractionHandler   *llmChat.HandlerImpl
 	PointsOfInterestHandler *poi.HandlerImpl
 	ItineraryListHandler    *itineraryList.HandlerImpl
@@ -84,7 +81,6 @@ func SetupRouter(cfg *Config) chi.Router {
 			// Mount other protected resource routes
 			r.Mount("/user", UserRoutes(cfg.UserHandler)) // User routes
 			r.Mount("/user/interests", interestsRoutes(cfg.InterestHandler))
-			r.Mount("/user/preferences", UserPreferencesRoutes(cfg.SettingsHandler))
 			r.Mount("/user/search-profile", profilesRoutes(cfg.SearchProfileHandler))
 			r.Mount("/user/tags", tagsRoutes(cfg.TagsHandler))
 			r.Mount("/llm", LLMInteractionRoutes(cfg.LLMInteractionHandler))
@@ -160,17 +156,6 @@ func interestsRoutes(HandlerImpl *interests.HandlerImpl) http.Handler {
 	return r
 }
 
-// UserPreferencesRoutes ..
-func UserPreferencesRoutes(HandlerImpl *settings.HandlerImpl) http.Handler {
-	r := chi.NewRouter()
-	// User preferences routes
-
-	r.Get("/", HandlerImpl.Getsettings) // GET http://localhost:8000/api/v1/user/preferences
-	r.Put("/{profileID}", HandlerImpl.Updatesettings)
-
-	return r
-}
-
 func profilesRoutes(HandlerImpl *profiles.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/{profileID}", HandlerImpl.GetSearchProfile)
@@ -193,7 +178,7 @@ func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueSessionStreamHandler)
 
 	// RAG-enabled routes
-	r.Post("/prompt-response/rag/query/{profileID}", HandlerImpl.RAGEnabledChatQuery)  // POST http://localhost:8000/api/v1/llm/prompt-response/rag/query/{profileID}
+	r.Post("/prompt-response/rag/query/{profileID}", HandlerImpl.RAGEnabledChatQuery) // POST http://localhost:8000/api/v1/llm/prompt-response/rag/query/{profileID}
 	r.Get("/prompt-response/rag/search", HandlerImpl.SearchSimilarPOIs)               // GET http://localhost:8000/api/v1/llm/prompt-response/rag/search?query=...
 
 	// LLM interaction routes
@@ -223,22 +208,22 @@ func POIRoutes(HandlerImpl *poi.HandlerImpl) http.Handler {
 	r.Get("/itineraries", HandlerImpl.GetItineraries)                           // GET /api/v1/itineraries?page=1&page_size=20
 	r.Get("/itineraries/itinerary/{itinerary_id}", HandlerImpl.GetItinerary)    // GET /api/v1/itineraries/{uuid}
 	r.Put("/itineraries/itinerary/{itinerary_id}", HandlerImpl.UpdateItinerary) // PUT /api/v1/itineraries/{uuid}
-	
+
 	// Traditional search
 	r.Get("/search", HandlerImpl.GetPOIs) // GET http://localhost:8000/api/v1/pois/search
-	
+
 	// Semantic search routes
 	r.Route("/search", func(r chi.Router) {
-		r.Get("/semantic", HandlerImpl.SearchPOIsSemantic)           // GET http://localhost:8000/api/v1/pois/search/semantic?query=romantic%20restaurants
+		r.Get("/semantic", HandlerImpl.SearchPOIsSemantic)            // GET http://localhost:8000/api/v1/pois/search/semantic?query=romantic%20restaurants
 		r.Get("/semantic/city", HandlerImpl.SearchPOIsSemanticByCity) // GET http://localhost:8000/api/v1/pois/search/semantic/city?query=museums&city_id={uuid}
-		r.Get("/hybrid", HandlerImpl.SearchPOIsHybrid)               // GET http://localhost:8000/api/v1/pois/search/hybrid?query=outdoor%20activities&latitude=40.7128&longitude=-74.0060&radius=5.0
+		r.Get("/hybrid", HandlerImpl.SearchPOIsHybrid)                // GET http://localhost:8000/api/v1/pois/search/hybrid?query=outdoor%20activities&latitude=40.7128&longitude=-74.0060&radius=5.0
 	})
-	
+
 	// Embedding management routes (for admin/maintenance)
 	r.Route("/embeddings", func(r chi.Router) {
 		r.Post("/generate", HandlerImpl.GenerateEmbeddingsForPOIs) // POST http://localhost:8000/api/v1/pois/embeddings/generate?batch_size=20
 	})
-	
+
 	return r
 }
 
@@ -256,32 +241,3 @@ func ItineraryListRoutes(h *itineraryList.HandlerImpl) http.Handler {
 	r.Delete("/{itineraryID}/items/{poiID}", h.RemovePOIListItemHandler)         // Remove a POI from an itinerary
 	return r
 }
-
-// TODO
-//func UserPreferencesTags(HandlerImpl *user.HandlerImpl) http.HandlerImpl {
-//	r := chi.NewRouter()
-//	// User preferences routes
-//	r.Get("/preferences", HandlerImpl.GetUserPreferences) // GET http://localhost:8000/api/v1/user/preferences
-//
-//	return r
-//}
-
-// Example of how you might structure feature-specific routes (optional)
-// func AuthRoutes(HandlerImpl *auth.AuthHandlerImpl, authMiddleware func(http.HandlerImpl) http.HandlerImpl) http.HandlerImpl {
-// 	r := chi.NewRouter()
-// 	// Public auth routes
-// 	r.Post("/register", HandlerImpl.Register)
-// 	r.Post("/login", HandlerImpl.Login)
-//  r.Post("/refresh", HandlerImpl.RefreshSession)
-//
-// 	// Protected auth routes
-//  r.Group(func(r chi.Router){
-//      r.Use(authMiddleware)
-// 		r.Post("/logout", HandlerImpl.Logout)
-//      // ... other protected auth routes
-//  })
-// 	return r
-// }
-
-// Note: You still need to implement the actual logic within your HandlerImpl methods
-// (e.g., AuthHandlerImpl.Login, AuthHandlerImpl.Register, etc.)

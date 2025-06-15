@@ -16,7 +16,6 @@ import (
 	itineraryList "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/list"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/settings"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/tags"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 )
@@ -29,7 +28,6 @@ type Container struct {
 	AuthHandler               *auth.HandlerImpl
 	UserHandler               *user.HandlerImpl
 	InterestHandler           *interests.HandlerImpl
-	SettingsHandler           *settings.HandlerImpl
 	TagsHandler               *tags.HandlerImpl
 	SearchProfileHandler      *profiles.HandlerImpl
 	LLMInteractionHandlerImpl *llmChat.HandlerImpl
@@ -71,10 +69,6 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	interestsService := interests.NewinterestsService(interestsRepo, logger)
 	HandlerImpl := interests.NewHandlerImpl(interestsService, logger)
 
-	settingsRepo := settings.NewPostgressettingsRepo(pool, logger)
-	settingsService := settings.NewsettingsService(settingsRepo, logger)
-	settingsHandler := settings.NewHandlerImpl(settingsService, logger)
-
 	tagsRepo := tags.NewRepositoryImpl(pool, logger)
 	tagsService := tags.NewtagsService(tagsRepo, logger)
 	tagsHandler := tags.NewHandlerImpl(tagsService, logger)
@@ -114,7 +108,6 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 		AuthHandler:               authHandlerImpl,
 		UserHandler:               userHandlerImpl,
 		InterestHandler:           HandlerImpl,
-		SettingsHandler:           settingsHandler,
 		TagsHandler:               tagsHandler,
 		SearchProfileHandler:      profilessHandlerImpl,
 		LLMInteractionHandlerImpl: llmInteractionHandlerImpl,

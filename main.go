@@ -138,7 +138,6 @@ func main() {
 		AuthHandler:             c.AuthHandler,
 		UserHandler:             c.UserHandler,
 		InterestHandler:         c.InterestHandler,
-		SettingsHandler:         c.SettingsHandler,
 		SearchProfileHandler:    c.SearchProfileHandler,
 		TagsHandler:             c.TagsHandler,
 		LLMInteractionHandler:   c.LLMInteractionHandlerImpl,

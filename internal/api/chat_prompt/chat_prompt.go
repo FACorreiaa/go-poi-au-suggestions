@@ -59,12 +59,12 @@ BASIC PREFERENCES:
 		basePrefs += `
 
 ACCOMMODATION PREFERENCES:`
-		
+
 		if len(accom.AccommodationType) > 0 {
 			basePrefs += fmt.Sprintf(`
     - Accommodation Types: [%s]`, strings.Join(accom.AccommodationType, ", "))
 		}
-		
+
 		if accom.StarRating != nil {
 			minStar := "any"
 			maxStar := "any"
@@ -77,7 +77,7 @@ ACCOMMODATION PREFERENCES:`
 			basePrefs += fmt.Sprintf(`
     - Star Rating: %s - %s stars`, minStar, maxStar)
 		}
-		
+
 		if accom.PriceRangePerNight != nil {
 			minPrice := "any"
 			maxPrice := "any"
@@ -90,17 +90,17 @@ ACCOMMODATION PREFERENCES:`
 			basePrefs += fmt.Sprintf(`
     - Price Range Per Night: %s - %s`, minPrice, maxPrice)
 		}
-		
+
 		if len(accom.Amenities) > 0 {
 			basePrefs += fmt.Sprintf(`
     - Required Amenities: [%s]`, strings.Join(accom.Amenities, ", "))
 		}
-		
+
 		if len(accom.RoomType) > 0 {
 			basePrefs += fmt.Sprintf(`
     - Room Types: [%s]`, strings.Join(accom.RoomType, ", "))
 		}
-		
+
 		if accom.ChainPreference != "" {
 			basePrefs += fmt.Sprintf(`
     - Chain Preference: %s`, accom.ChainPreference)
@@ -113,22 +113,22 @@ ACCOMMODATION PREFERENCES:`
 		basePrefs += `
 
 DINING PREFERENCES:`
-		
+
 		if len(dining.CuisineTypes) > 0 {
 			basePrefs += fmt.Sprintf(`
     - Cuisine Types: [%s]`, strings.Join(dining.CuisineTypes, ", "))
 		}
-		
+
 		if len(dining.MealTypes) > 0 {
 			basePrefs += fmt.Sprintf(`
     - Meal Types: [%s]`, strings.Join(dining.MealTypes, ", "))
 		}
-		
+
 		if len(dining.ServiceStyle) > 0 {
 			basePrefs += fmt.Sprintf(`
     - Service Style: [%s]`, strings.Join(dining.ServiceStyle, ", "))
 		}
-		
+
 		if dining.PriceRangePerPerson != nil {
 			minPrice := "any"
 			maxPrice := "any"
@@ -141,32 +141,32 @@ DINING PREFERENCES:`
 			basePrefs += fmt.Sprintf(`
     - Price Range Per Person: %s - %s`, minPrice, maxPrice)
 		}
-		
+
 		if len(dining.AllergenFree) > 0 {
 			basePrefs += fmt.Sprintf(`
     - Allergen Free: [%s]`, strings.Join(dining.AllergenFree, ", "))
 		}
-		
+
 		if dining.MichelinRated {
 			basePrefs += `
     - Michelin Rated: Preferred`
 		}
-		
+
 		if dining.LocalRecommendations {
 			basePrefs += `
     - Local Recommendations: Preferred`
 		}
-		
+
 		if dining.ChainVsLocal != "" {
 			basePrefs += fmt.Sprintf(`
     - Chain vs Local: %s`, dining.ChainVsLocal)
 		}
-		
+
 		if dining.OrganicPreference {
 			basePrefs += `
     - Organic Preference: Yes`
 		}
-		
+
 		if dining.OutdoorSeatingPref {
 			basePrefs += `
     - Outdoor Seating: Preferred`
@@ -179,52 +179,52 @@ DINING PREFERENCES:`
 		basePrefs += `
 
 ACTIVITY PREFERENCES:`
-		
+
 		if len(activity.ActivityCategories) > 0 {
 			basePrefs += fmt.Sprintf(`
     - Activity Categories: [%s]`, strings.Join(activity.ActivityCategories, ", "))
 		}
-		
+
 		if activity.PhysicalActivityLevel != "" {
 			basePrefs += fmt.Sprintf(`
     - Physical Activity Level: %s`, activity.PhysicalActivityLevel)
 		}
-		
+
 		if activity.IndoorOutdoorPref != "" {
 			basePrefs += fmt.Sprintf(`
     - Indoor/Outdoor Preference: %s`, activity.IndoorOutdoorPref)
 		}
-		
+
 		if activity.CulturalImmersionLevel != "" {
 			basePrefs += fmt.Sprintf(`
     - Cultural Immersion Level: %s`, activity.CulturalImmersionLevel)
 		}
-		
+
 		if activity.MustSeeVsHiddenGems != "" {
 			basePrefs += fmt.Sprintf(`
     - Must-See vs Hidden Gems: %s`, activity.MustSeeVsHiddenGems)
 		}
-		
+
 		if activity.EducationalPreference {
 			basePrefs += `
     - Educational Preference: Yes`
 		}
-		
+
 		if activity.PhotoOpportunities {
 			basePrefs += `
     - Photography Opportunities: Important`
 		}
-		
+
 		if len(activity.SeasonSpecific) > 0 {
 			basePrefs += fmt.Sprintf(`
     - Season Specific: [%s]`, strings.Join(activity.SeasonSpecific, ", "))
 		}
-		
+
 		if activity.AvoidCrowds {
 			basePrefs += `
     - Avoid Crowds: Yes`
 		}
-		
+
 		if len(activity.LocalEventsInterest) > 0 {
 			basePrefs += fmt.Sprintf(`
     - Local Events Interest: [%s]`, strings.Join(activity.LocalEventsInterest, ", "))
@@ -237,42 +237,42 @@ ACTIVITY PREFERENCES:`
 		basePrefs += `
 
 ITINERARY PREFERENCES:`
-		
+
 		if itinerary.PlanningStyle != "" {
 			basePrefs += fmt.Sprintf(`
     - Planning Style: %s`, itinerary.PlanningStyle)
 		}
-		
+
 		if itinerary.TimeFlexibility != "" {
 			basePrefs += fmt.Sprintf(`
     - Time Flexibility: %s`, itinerary.TimeFlexibility)
 		}
-		
+
 		if itinerary.MorningVsEvening != "" {
 			basePrefs += fmt.Sprintf(`
     - Morning vs Evening: %s`, itinerary.MorningVsEvening)
 		}
-		
+
 		if itinerary.WeekendVsWeekday != "" {
 			basePrefs += fmt.Sprintf(`
     - Weekend vs Weekday: %s`, itinerary.WeekendVsWeekday)
 		}
-		
+
 		if len(itinerary.PreferredSeasons) > 0 {
 			basePrefs += fmt.Sprintf(`
     - Preferred Seasons: [%s]`, strings.Join(itinerary.PreferredSeasons, ", "))
 		}
-		
+
 		if itinerary.AvoidPeakSeason {
 			basePrefs += `
     - Avoid Peak Season: Yes`
 		}
-		
+
 		if itinerary.AdventureVsRelaxation != "" {
 			basePrefs += fmt.Sprintf(`
     - Adventure vs Relaxation: %s`, itinerary.AdventureVsRelaxation)
 		}
-		
+
 		if itinerary.SpontaneousVsPlanned != "" {
 			basePrefs += fmt.Sprintf(`
     - Spontaneous vs Planned: %s`, itinerary.SpontaneousVsPlanned)
@@ -467,10 +467,12 @@ func getGeneralPOIPrompt(cityName string) string {
                 {
                     "name": "POI name",
                     "category": "Category (e.g., Historical Site, Museum)",
-                    "coordinates": {
-                        "latitude": float64,
-                        "longitude": float64
-                    }
+                    "latitude": float64,
+                    "longitude": float64,
+                    "description_poi": "Brief description of the POI",
+                    "address": "Complete address",
+                    "website": "Official website URL (if available)",
+                    "opening_hours": "Operating hours or schedule (if available)"
                 }
             ]
         }

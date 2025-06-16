@@ -223,16 +223,6 @@ func (ai *AIClient) GenerateContentStream(
 	))
 	defer span.End()
 
-	client, err := genai.NewClient(ctx, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	chat, err := client.Chats.Create(ctx, *model, config, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	if ai.client == nil {
 		err := fmt.Errorf("AIClient's internal genai.Client is not initialized")
 		span.RecordError(err)
@@ -240,19 +230,19 @@ func (ai *AIClient) GenerateContentStream(
 		return nil, err
 	}
 
-	for result, err := range chat.SendMessageStream(ctx, p...) {
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("Result text: %s\n", result.Text())
+	// Create a chat session
+	chat, err := ai.client.Chats.Create(ctx, ai.model, config, nil)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to create chat for stream")
+		return nil, fmt.Errorf("failed to create chat: %w", err)
 	}
 
+	// Create the prompt part
 	part := genai.Part{Text: prompt}
-	p := make([]genai.Part, 1)
-	p[0] = part
 
-	// Assuming the genai library has a method like this; adjust as needed
-	stream := ai.client.Models.GenerateContentStream(ctx, ai.model, genai.Text(prompt), config)
+	// Use the chat session to send message stream
+	stream := chat.SendMessageStream(ctx, part)
 
 	span.SetStatus(codes.Ok, "Content stream initiated")
 	return stream, nil

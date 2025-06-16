@@ -151,7 +151,11 @@ func (r *RepositoryImpl) FindPoiByNameAndCity(ctx context.Context, name string, 
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	// Log the successful retrieval
-	r.logger.Info("POI found successfully", slog.String("name", poi.Name), slog.String("cityID", cityID.String()))
+	r.logger.Info("POI found successfully",
+		slog.String("name", poi.Name),
+		slog.Float64("latitude", poi.Latitude),
+		slog.Float64("longitude", poi.Longitude),
+		slog.String("cityID", cityID.String()))
 
 	return &poi, nil
 }
@@ -1282,8 +1286,8 @@ func (r *RepositoryImpl) FindSimilarPOIs(ctx context.Context, queryEmbedding []f
         LIMIT $2
     `
 
-	l.DebugContext(ctx, "Executing similarity search query", 
-		slog.String("query", query), 
+	l.DebugContext(ctx, "Executing similarity search query",
+		slog.String("query", query),
 		slog.Int("embedding_dim", len(queryEmbedding)),
 		slog.Int("limit", limit))
 
@@ -1375,7 +1379,7 @@ func (r *RepositoryImpl) FindSimilarPOIsByCity(ctx context.Context, queryEmbeddi
         LIMIT $3
     `
 
-	l.DebugContext(ctx, "Executing city-specific similarity search", 
+	l.DebugContext(ctx, "Executing city-specific similarity search",
 		slog.String("city_id", cityID.String()),
 		slog.Int("embedding_dim", len(queryEmbedding)),
 		slog.Int("limit", limit))
@@ -1426,7 +1430,7 @@ func (r *RepositoryImpl) FindSimilarPOIsByCity(ctx context.Context, queryEmbeddi
 		return nil, fmt.Errorf("error iterating similar POI rows: %w", err)
 	}
 
-	l.InfoContext(ctx, "Similar POIs by city found", 
+	l.InfoContext(ctx, "Similar POIs by city found",
 		slog.String("city_id", cityID.String()),
 		slog.Int("count", len(pois)))
 	span.SetAttributes(
@@ -1509,14 +1513,14 @@ func (r *RepositoryImpl) SearchPOIsHybrid(ctx context.Context, filter types.POIF
 	}
 
 	// Add semantic weight and embedding (adjust indexes based on whether category was added)
-	args = append(args, semanticWeight)    // semantic weight
-	args = append(args, embeddingStr)      // embedding
+	args = append(args, semanticWeight) // semantic weight
+	args = append(args, embeddingStr)   // embedding
 
 	// Order by hybrid score (descending)
 	query += ` ORDER BY hybrid_score DESC`
 
-	l.DebugContext(ctx, "Executing hybrid search query", 
-		slog.String("query", query), 
+	l.DebugContext(ctx, "Executing hybrid search query",
+		slog.String("query", query),
 		slog.Any("args_count", len(args)),
 		slog.Float64("semantic_weight", semanticWeight))
 
@@ -1568,7 +1572,7 @@ func (r *RepositoryImpl) SearchPOIsHybrid(ctx context.Context, filter types.POIF
 		return nil, fmt.Errorf("error iterating hybrid search POI rows: %w", err)
 	}
 
-	l.InfoContext(ctx, "Hybrid search POIs found", 
+	l.InfoContext(ctx, "Hybrid search POIs found",
 		slog.Int("count", len(pois)),
 		slog.Float64("semantic_weight", semanticWeight))
 	span.SetAttributes(
@@ -1607,7 +1611,7 @@ func (r *RepositoryImpl) UpdatePOIEmbedding(ctx context.Context, poiID uuid.UUID
 
 	result, err := r.pgpool.Exec(ctx, query, embeddingStr, poiID)
 	if err != nil {
-		l.ErrorContext(ctx, "Failed to update POI embedding", 
+		l.ErrorContext(ctx, "Failed to update POI embedding",
 			slog.Any("error", err),
 			slog.String("poi_id", poiID.String()))
 		span.RecordError(err)
@@ -1623,7 +1627,7 @@ func (r *RepositoryImpl) UpdatePOIEmbedding(ctx context.Context, poiID uuid.UUID
 		return err
 	}
 
-	l.InfoContext(ctx, "POI embedding updated successfully", 
+	l.InfoContext(ctx, "POI embedding updated successfully",
 		slog.String("poi_id", poiID.String()),
 		slog.Int("embedding_dimension", len(embedding)))
 	span.SetAttributes(

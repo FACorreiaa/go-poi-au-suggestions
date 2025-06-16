@@ -20,19 +20,36 @@ func generateRestaurantCacheKey(city string, lat, lon float64, userID uuid.UUID)
 }
 
 func cleanJSONResponse(response string) string {
-	// Remove ```json and ``` markers
 	response = strings.TrimSpace(response)
+	
+	// Remove markdown code block markers
 	if strings.HasPrefix(response, "```json") {
 		response = strings.TrimPrefix(response, "```json")
 	} else if strings.HasPrefix(response, "```") {
 		response = strings.TrimPrefix(response, "```")
 	}
-
+	
 	if strings.HasSuffix(response, "```") {
 		response = strings.TrimSuffix(response, "```")
 	}
-
-	return strings.TrimSpace(response)
+	
+	response = strings.TrimSpace(response)
+	
+	// Extract JSON from response that might contain explanatory text
+	// Look for the first { and last } to extract the JSON object
+	firstBrace := strings.Index(response, "{")
+	if firstBrace == -1 {
+		return response // No JSON found, return as is
+	}
+	
+	lastBrace := strings.LastIndex(response, "}")
+	if lastBrace == -1 || lastBrace <= firstBrace {
+		return response // No valid JSON structure found
+	}
+	
+	// Extract the JSON portion
+	jsonPortion := response[firstBrace : lastBrace+1]
+	return strings.TrimSpace(jsonPortion)
 }
 
 // extractPOIName extracts the full POI name from the message

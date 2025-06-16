@@ -216,8 +216,8 @@ func (h *HandlerImpl) StartChatSessionStream(w http.ResponseWriter, r *http.Requ
 
 	// User location (hardcoded for now)
 	userLocation := &types.UserLocation{
-		UserLat: 41.3851,
-		UserLon: 2.1734,
+		UserLat: 38.7223,
+		UserLon: -9.1393,
 	}
 
 	// Start the streaming session
@@ -294,8 +294,8 @@ func (h *HandlerImpl) ContinueChatSessionHandler(w http.ResponseWriter, r *http.
 	}
 
 	userLocation := &types.UserLocation{
-		UserLat: 41.3851,
-		UserLon: 2.1734,
+		UserLat: 38.7223,
+		UserLon: -9.1393,
 	}
 
 	// Try context-aware method first, fallback to original for backward compatibility

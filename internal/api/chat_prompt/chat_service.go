@@ -570,12 +570,10 @@ func (l *LlmInteractiontServiceImpl) getPersonalizedPOIWithSemanticContext(inter
             "points_of_interest": [
                 {
                     "name": "POI name",
+                    "latitude": latitude_as_number,
+                    "longitude": longitude_as_number,
                     "category": "Category",
-                    "coordinates": {
-                        "latitude": float64,
-                        "longitude": float64
-                    },
-                    "description": "Detailed description explaining semantic relevance to user interests and why this matches their preferences"
+                    "description_poi": "Detailed description explaining semantic relevance to user interests and why this matches their preferences"
                 }
             ]
         }`

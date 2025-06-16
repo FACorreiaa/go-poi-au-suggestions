@@ -795,19 +795,27 @@ func (l *RepositoryImpl) CalculateDistancePostGIS(ctx context.Context, userLat, 
 func parsePOIsFromResponse(responseText string, logger *slog.Logger) ([]types.POIDetail, error) {
 	cleanedResponse := cleanJSONResponse(responseText)
 
+	// First try to parse as a full AiCityResponse (for full itinerary responses)
 	var parsedResponse types.AiCityResponse
 	err := json.Unmarshal([]byte(cleanedResponse), &parsedResponse)
-	if err != nil {
-		logger.Error("parsePOIsFromResponse: Failed to unmarshal LLM response", "error", err, "cleanedResponseLength", len(cleanedResponse))
-		return nil, fmt.Errorf("parsePOIsFromResponse: failed to unmarshal LLM response: %w", err)
+	if err == nil && parsedResponse.PointsOfInterest != nil {
+		return parsedResponse.PointsOfInterest, nil
 	}
 
-	if parsedResponse.PointsOfInterest == nil {
-		logger.Warn("parsePOIsFromResponse: No points_of_interest found in itinerary_response", "responseStructure", fmt.Sprintf("%+v", parsedResponse))
-		return []types.POIDetail{}, nil
+	// If that fails, try to parse as a single POI (for individual POI additions)
+	var singlePOI types.POIDetail
+	err = json.Unmarshal([]byte(cleanedResponse), &singlePOI)
+	if err == nil && singlePOI.Name != "" {
+		logger.Debug("parsePOIsFromResponse: Parsed as single POI", "poiName", singlePOI.Name)
+		return []types.POIDetail{singlePOI}, nil
 	}
 
-	return parsedResponse.PointsOfInterest, nil
+	// If both fail, log the error and return empty
+	logger.Warn("parsePOIsFromResponse: Could not parse response as AiCityResponse or single POI", 
+		"error", err, 
+		"cleanedResponseLength", len(cleanedResponse),
+		"responsePreview", cleanedResponse[:min(200, len(cleanedResponse))])
+	return []types.POIDetail{}, nil
 }
 
 func (r *RepositoryImpl) GetOrCreatePOI(ctx context.Context, tx pgx.Tx, poiDetail types.POIDetail, cityID uuid.UUID, sourceInteractionID uuid.UUID) (uuid.UUID, error) {

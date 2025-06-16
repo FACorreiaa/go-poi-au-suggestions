@@ -115,6 +115,8 @@ type LlmInteractiontService interface {
 		eventCh chan<- types.StreamEvent, // Channel to send events back
 	) error
 
+	ProcessUnifiedChatMessage(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (interface{}, error)
+
 	// // Context-aware chat methods
 	// StartNewSessionWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (uuid.UUID, *types.AiCityResponse, error)
 	// ContinueSessionWithContext(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.AiCityResponse, error)
@@ -3643,3 +3645,98 @@ func min(a, b int) int {
 	return b
 }
 
+func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessage(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (interface{}, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ProcessUnifiedChatMessage", trace.WithAttributes(
+		attribute.String("message", message),
+		attribute.String("city.name", cityName),
+	))
+	defer span.End()
+
+	// --- Step 1: Detect Domain ---
+	domainDetector := &DomainDetector{}
+	domain := domainDetector.DetectDomain(ctx, message)
+	span.SetAttributes(attribute.String("detected.domain", string(domain)))
+	l.logger.InfoContext(ctx, "Detected domain for unified chat", slog.String("domain", string(domain)))
+
+	// --- Step 2: Gather Context (User Profile) ---
+	_, searchProfile, _, err := l.FetchUserData(ctx, userID, profileID)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to fetch user data for unified chat: %w", err)
+	}
+
+	// Use default location from profile if not provided
+	if userLocation == nil && searchProfile.UserLatitude != nil && searchProfile.UserLongitude != nil {
+		userLocation = &types.UserLocation{
+			UserLat: *searchProfile.UserLatitude,
+			UserLon: *searchProfile.UserLongitude,
+		}
+	}
+	// Handle case where location is still nil
+	var lat, lon float64
+	if userLocation != nil {
+		lat, lon = userLocation.UserLat, userLocation.UserLon
+	}
+
+	// --- Step 3: Build the Correct Prompt ---
+	// Your GetUnifiedChatPrompt function is perfect for this
+	prompt := GetUnifiedChatPrompt(string(domain), cityName, lat, lon, searchProfile)
+
+	// --- Step 4: Call LLM API ---
+	// NOTE: This part needs a slight refactor. Instead of separate workers for each type,
+	// you have one generic worker that takes a prompt and returns JSON.
+	response, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{
+		Temperature: genai.Ptr[float32](defaultTemperature),
+	})
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to generate unified chat response from LLM: %w", err)
+	}
+
+	var rawResponseText string
+	for _, cand := range response.Candidates {
+		if cand.Content != nil {
+			for _, part := range cand.Content.Parts {
+				if part.Text != "" {
+					rawResponseText += string(part.Text)
+				}
+			}
+		}
+	}
+
+	// --- Step 5: Parse Response Based on Original Domain ---
+	// The response needs to be unmarshalled into the correct struct.
+	cleanTxt := cleanJSONResponse(rawResponseText)
+	var finalResponseData interface{}
+
+	switch domain {
+	case types.DomainItinerary, types.DomainGeneral:
+		var itineraryResponse types.AiCityResponse // Assuming this is the expected struct
+		if err := json.Unmarshal([]byte(cleanTxt), &itineraryResponse); err != nil {
+			return nil, fmt.Errorf("failed to parse itinerary response JSON: %w", err)
+		}
+		finalResponseData = itineraryResponse
+	case types.DomainAccommodation:
+		var hotelResponse struct {
+			Hotels []types.HotelDetailedInfo `json:"hotels"`
+		}
+		if err := json.Unmarshal([]byte(cleanTxt), &hotelResponse); err != nil {
+			return nil, fmt.Errorf("failed to parse hotel response JSON: %w", err)
+		}
+		finalResponseData = hotelResponse
+	case types.DomainDining:
+		var restaurantResponse struct {
+			Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
+		}
+		if err := json.Unmarshal([]byte(cleanTxt), &restaurantResponse); err != nil {
+			return nil, fmt.Errorf("failed to parse restaurant response JSON: %w", err)
+		}
+		finalResponseData = restaurantResponse
+	default:
+		return nil, fmt.Errorf("unhandled domain type: %s", domain)
+	}
+
+	// TODO: Save the LLM interaction to your database here.
+
+	return finalResponseData, nil
+}

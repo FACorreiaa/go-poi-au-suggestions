@@ -181,30 +181,6 @@ func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	r.Post("/prompt-response/chat/sessions/unified-chat/{profileID}", HandlerImpl.ProcessUnifiedChatMessage)
 	r.Post("/prompt-response/chat/sessions/unified-chat/stream/{profileID}", HandlerImpl.ProcessUnifiedChatMessageStream)
 
-	// TODO
-
-	// // Context-aware hotel chat endpoints
-	// r.Post("/hotels/chat/sessions/{profileID}", HandlerImpl.StartHotelChatSession)
-	// r.Post("/hotels/chat/sessions/stream/{profileID}", HandlerImpl.StartHotelChatSessionStream)
-	// r.Post("/hotels/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueHotelChatSession)
-	// r.Post("/hotels/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueHotelChatSessionStream)
-
-	// // Context-aware restaurant chat endpoints
-	// r.Post("/restaurants/chat/sessions/{profileID}", HandlerImpl.StartRestaurantChatSession)
-	// r.Post("/restaurants/chat/sessions/stream/{profileID}", HandlerImpl.StartRestaurantChatSessionStream)
-	// r.Post("/restaurants/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueRestaurantChatSession)
-	// r.Post("/restaurants/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueRestaurantChatSessionStream)
-
-	// // Context-aware itinerary chat endpoints
-	// r.Post("/itineraries/chat/sessions/{profileID}", HandlerImpl.StartItineraryChatSession)
-	// r.Post("/itineraries/chat/sessions/stream/{profileID}", HandlerImpl.StartItineraryChatSessionStream)
-	// r.Post("/itineraries/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueItineraryChatSession)
-	// r.Post("/itineraries/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueItineraryChatSessionStream)
-
-	// // RAG-enabled routes
-	// r.Post("/prompt-response/rag/query/{profileID}", HandlerImpl.RAGEnabledChatQuery) // POST http://localhost:8000/api/v1/llm/prompt-response/rag/query/{profileID}
-	// r.Get("/prompt-response/rag/search", HandlerImpl.SearchSimilarPOIs)               // GET http://localhost:8000/api/v1/llm/prompt-response/rag/search?query=...
-
 	// LLM interaction routes
 	//r.Post("/prompt-response/profile/{profileID}", HandlerImpl.GetPrompResponse)        // GET http://localhost:8000/api/v1/user/interests
 	r.Get("/prompt-response/poi/details", HandlerImpl.GetPOIDetails)                    // GET http://localhost:8000/api/v1/llm/prompt-response/{interactionID}

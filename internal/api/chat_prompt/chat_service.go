@@ -208,6 +208,26 @@ func NewLlmInteractiontService(interestRepo interests.Repository,
 	return service
 }
 
+// sendEventSimple sends events without retries for optimal performance (Google GenAI pattern)
+func (l *LlmInteractiontServiceImpl) sendEventSimple(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent) {
+	if event.EventID == "" {
+		event.EventID = uuid.New().String()
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+
+	select {
+	case ch <- event:
+		return
+	case <-ctx.Done():
+		return
+	default:
+		// Non-blocking drop if channel full - prioritize speed over delivery guarantee
+		return
+	}
+}
+
 func (l *LlmInteractiontServiceImpl) GenerateCityDataWorker(wg *sync.WaitGroup,
 	ctx context.Context,
 	cityName string,
@@ -3909,9 +3929,9 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessage(ctx context.Conte
 	return finalResponseData, nil
 }
 
-// ProcessUnifiedChatMessageStream handles unified chat with streaming response
-func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ProcessUnifiedChatMessageStream", trace.WithAttributes(
+// ProcessUnifiedChatMessageStreamOptimized handles unified chat with optimized streaming based on Google GenAI patterns
+func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStreamOptimized(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ProcessUnifiedChatMessageStreamOptimized", trace.WithAttributes(
 		attribute.String("message", message),
 	))
 	defer span.End()
@@ -3920,11 +3940,9 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context
 	cityName, cleanedMessage, err := l.extractCityFromMessage(ctx, message)
 	if err != nil {
 		span.RecordError(err)
-		l.sendEvent(ctx, eventCh, types.StreamEvent{
-			Type:      types.EventTypeError,
-			Error:     fmt.Sprintf("failed to parse message: %v", err),
-			Timestamp: time.Now(),
-			EventID:   uuid.New().String(),
+		l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+			Type:  types.EventTypeError,
+			Error: fmt.Sprintf("failed to parse message: %v", err),
 		})
 		return fmt.Errorf("failed to parse message: %w", err)
 	}
@@ -3933,36 +3951,21 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context
 		attribute.String("extracted.city", cityName),
 		attribute.String("cleaned.message", cleanedMessage),
 	)
-	l.logger.InfoContext(ctx, "Extracted city from message for stream",
-		slog.String("original_message", message),
-		slog.String("city", cityName),
-		slog.String("cleaned_message", cleanedMessage))
 
 	// --- Step 2: Detect Domain ---
 	domainDetector := &DomainDetector{}
 	domain := domainDetector.DetectDomain(ctx, cleanedMessage)
 	span.SetAttributes(attribute.String("detected.domain", string(domain)))
-	l.logger.InfoContext(ctx, "Detected domain for unified chat stream", slog.String("domain", string(domain)))
 
-	// Send domain detection event
-	l.sendEvent(ctx, eventCh, types.StreamEvent{
-		Type:      types.EventTypeDomainDetected,
-		Data:      map[string]string{"domain": string(domain)},
-		Timestamp: time.Now(),
-		EventID:   uuid.New().String(),
-	})
-
-	// --- Step 2: Gather Context (User Profile) ---
+	// --- Step 3: Gather Context (User Profile) QUICKLY ---
 	_, searchProfile, _, err := l.FetchUserData(ctx, userID, profileID)
 	if err != nil {
 		span.RecordError(err)
-		l.sendEvent(ctx, eventCh, types.StreamEvent{
-			Type:      types.EventTypeError,
-			Error:     fmt.Sprintf("failed to fetch user data: %v", err),
-			Timestamp: time.Now(),
-			EventID:   uuid.New().String(),
+		l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+			Type:  types.EventTypeError,
+			Error: fmt.Sprintf("failed to fetch user data: %v", err),
 		})
-		return fmt.Errorf("failed to fetch user data for unified chat stream: %w", err)
+		return fmt.Errorf("failed to fetch user data: %w", err)
 	}
 
 	// Use default location from profile if not provided
@@ -3977,80 +3980,60 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context
 		lat, lon = userLocation.UserLat, userLocation.UserLon
 	}
 
-	// --- Step 3: Build the Correct Prompt ---
+	// --- Step 4: Build the Optimized Prompt ---
 	prompt := GetUnifiedChatPrompt(string(domain), cityName, lat, lon, searchProfile)
 
-	// Send prompt preparation event
-	l.sendEvent(ctx, eventCh, types.StreamEvent{
-		Type:      types.EventTypePromptGenerated,
-		Data:      map[string]string{"prompt_length": fmt.Sprintf("%d", len(prompt))},
-		Timestamp: time.Now(),
-		EventID:   uuid.New().String(),
-	})
-
-	// --- Step 4: Call LLM API with Streaming ---
+	// --- Step 5: Direct Streaming (Google GenAI pattern) ---
 	startTime := time.Now()
 	var responseText strings.Builder
 
-	// Try streaming first
+	// Send start event once
+	l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+		Type: types.EventTypeStart,
+		Data: map[string]interface{}{
+			"domain": string(domain),
+			"city":   cityName,
+		},
+	})
+
+	// Direct streaming approach - fail fast
 	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
-	if err == nil {
-		// Handle streaming response
-		for resp, err := range iter {
-			if err != nil {
-				span.RecordError(err)
-				l.sendEvent(ctx, eventCh, types.StreamEvent{
-					Type:      types.EventTypeError,
-					Error:     fmt.Sprintf("streaming error: %v", err),
-					Timestamp: time.Now(),
-					EventID:   uuid.New().String(),
-				})
-				return fmt.Errorf("streaming error: %w", err)
-			}
-			for _, cand := range resp.Candidates {
-				if cand.Content != nil {
-					for _, part := range cand.Content.Parts {
-						if part.Text != "" {
-							responseText.WriteString(string(part.Text))
-							// Send streaming text event based on domain
-							eventType := types.EventTypeUnifiedChat
-							switch domain {
-							case types.DomainItinerary, types.DomainGeneral:
-								eventType = types.EventTypeItinerary
-							case types.DomainAccommodation:
-								eventType = types.EventTypeHotels
-							case types.DomainDining:
-								eventType = types.EventTypeRestaurants
-							}
-							l.sendEvent(ctx, eventCh, types.StreamEvent{
-								Type:      eventType,
-								Data:      map[string]string{"partial_response": responseText.String()},
-								Timestamp: time.Now(),
-								EventID:   uuid.New().String(),
-							})
-						}
-					}
-				}
-			}
-		}
-	} else {
-		// Fallback to non-streaming
-		response, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	if err != nil {
+		span.RecordError(err)
+		l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+			Type:  types.EventTypeError,
+			Error: fmt.Sprintf("failed to start streaming: %v", err),
+		})
+		return fmt.Errorf("failed to start streaming: %w", err)
+	}
+
+	// Simple iteration following Google's pattern
+	for resp, err := range iter {
 		if err != nil {
 			span.RecordError(err)
-			l.sendEvent(ctx, eventCh, types.StreamEvent{
-				Type:      types.EventTypeError,
-				Error:     fmt.Sprintf("failed to generate response: %v", err),
-				Timestamp: time.Now(),
-				EventID:   uuid.New().String(),
+			l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+				Type:  types.EventTypeError,
+				Error: fmt.Sprintf("streaming error: %v", err),
 			})
-			return fmt.Errorf("failed to generate unified chat response: %w", err)
+			return fmt.Errorf("streaming error: %w", err)
 		}
-		for _, cand := range response.Candidates {
+
+		// Process each chunk immediately
+		for _, cand := range resp.Candidates {
 			if cand.Content != nil {
 				for _, part := range cand.Content.Parts {
 					if part.Text != "" {
-						responseText.WriteString(string(part.Text))
+						chunkText := string(part.Text)
+						responseText.WriteString(chunkText)
+						
+						// Send chunk immediately without complex event management
+						l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+							Type: types.EventTypeChunk,
+							Data: map[string]interface{}{
+								"chunk":  chunkText,
+								"domain": string(domain),
+							},
+						})
 					}
 				}
 			}
@@ -4061,68 +4044,55 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context
 	rawResponseText := responseText.String()
 
 	if rawResponseText == "" {
-		err := fmt.Errorf("empty response from AI for unified chat stream")
+		err := fmt.Errorf("empty response from AI")
 		span.RecordError(err)
-		l.sendEvent(ctx, eventCh, types.StreamEvent{
-			Type:      types.EventTypeError,
-			Error:     "empty response from AI",
-			Timestamp: time.Now(),
-			EventID:   uuid.New().String(),
+		l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+			Type:  types.EventTypeError,
+			Error: "empty response from AI",
 		})
 		return err
 	}
 
-	// --- Step 5: Parse Response Based on Original Domain ---
+	// --- Step 6: Save LLM interaction to database (async to not block streaming) ---
+	go func() {
+		asyncCtx := context.Background() // Use background context for async operation
+		sessionID := uuid.New()
+		interaction := types.LlmInteraction{
+			ID:           uuid.New(),
+			SessionID:    sessionID,
+			UserID:       userID,
+			ProfileID:    profileID,
+			CityName:     cityName,
+			Prompt:       fmt.Sprintf("Unified Chat Stream Optimized - Domain: %s, Message: %s", domain, cleanedMessage),
+			ResponseText: rawResponseText,
+			ModelUsed:    model,
+			LatencyMs:    latencyMs,
+			Timestamp:    time.Now(),
+		}
+
+		_, err := l.llmInteractionRepo.SaveInteraction(asyncCtx, interaction)
+		if err != nil {
+			l.logger.ErrorContext(asyncCtx, "Failed to save unified chat stream interaction (async)", slog.Any("error", err))
+		}
+	}()
+
+	// Send final complete response
 	cleanTxt := cleanJSONResponse(rawResponseText)
-
-	// Send parsing event
-	l.sendEvent(ctx, eventCh, types.StreamEvent{
-		Type:      types.EventTypeParsingResponse,
-		Data:      map[string]string{"domain": string(domain)},
-		Timestamp: time.Now(),
-		EventID:   uuid.New().String(),
+	l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+		Type: types.EventTypeComplete,
+		Data: map[string]interface{}{
+			"response": cleanTxt,
+			"domain":   string(domain),
+			"latency":  latencyMs,
+		},
 	})
 
-	// --- Step 6: Save LLM interaction to database ---
-	sessionID := uuid.New()
-	interaction := types.LlmInteraction{
-		ID:           uuid.New(),
-		SessionID:    sessionID,
-		UserID:       userID,
-		ProfileID:    profileID,
-		CityName:     cityName,
-		Prompt:       fmt.Sprintf("Unified Chat Stream - Domain: %s, Message: %s", domain, cleanedMessage),
-		ResponseText: rawResponseText,
-		ModelUsed:    model,
-		LatencyMs:    latencyMs,
-		Timestamp:    time.Now(),
-	}
-
-	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Failed to save unified chat stream LLM interaction", slog.Any("error", err))
-		span.RecordError(err)
-		l.sendEvent(ctx, eventCh, types.StreamEvent{
-			Type:      types.EventTypeError,
-			Error:     fmt.Sprintf("failed to save interaction: %v", err),
-			Timestamp: time.Now(),
-			EventID:   uuid.New().String(),
-		})
-	} else {
-		span.SetAttributes(attribute.String("llm_interaction.id", savedInteractionID.String()))
-		l.logger.InfoContext(ctx, "Saved unified chat stream LLM interaction",
-			slog.String("interaction_id", savedInteractionID.String()),
-			slog.String("domain", string(domain)))
-	}
-
-	// Send completion event
-	l.sendEvent(ctx, eventCh, types.StreamEvent{
-		Type:      types.EventTypeComplete,
-		Data:      map[string]string{"response": cleanTxt, "domain": string(domain)},
-		Timestamp: time.Now(),
-		EventID:   uuid.New().String(),
-	})
-
-	span.SetStatus(codes.Ok, "Unified chat stream processed successfully")
+	span.SetStatus(codes.Ok, "Optimized unified chat stream completed")
 	return nil
+}
+
+// Legacy function for backward compatibility
+func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
+	// Use the optimized version
+	return l.ProcessUnifiedChatMessageStreamOptimized(ctx, userID, profileID, cityName, message, userLocation, eventCh)
 }

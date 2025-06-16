@@ -205,6 +205,7 @@ const (
 	EventTypeUnifiedChat       = "unified_chat"
 	EventTypeHotels            = "hotels"
 	EventTypeRestaurants       = "restaurants"
+	EventTypeChunk             = "chunk" // For immediate text chunks (Google GenAI pattern)
 )
 
 // StreamingResponse wraps the streaming channel and metadata

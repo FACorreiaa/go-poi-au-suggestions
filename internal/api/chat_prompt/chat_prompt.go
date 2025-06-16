@@ -458,27 +458,6 @@ func getCityDescriptionPrompt(cityName string) string {
     `, cityName, cityName)
 }
 
-// getGeneralPOI generates a prompt for general POIs
-func getGeneralPOIPrompt(cityName string) string {
-	return fmt.Sprintf(`
-        Provide a list of 6 general points of interest for %s in JSON format with the following structure:
-        {
-            "points_of_interest": [
-                {
-                    "name": "POI name",
-                    "category": "Category (e.g., Historical Site, Museum)",
-                    "latitude": float64,
-                    "longitude": float64,
-                    "description_poi": "Brief description of the POI",
-                    "address": "Complete address",
-                    "website": "Official website URL (if available)",
-                    "opening_hours": "Operating hours or schedule (if available)"
-                }
-            ]
-        }
-    `, cityName)
-}
-
 // GetUnifiedChatPrompt generates context-based prompts for the unified chat system
 func GetUnifiedChatPrompt(context, cityName string, lat, lon float64, searchProfile *types.UserPreferenceProfileResponse) string {
 	basePreferences := ""
@@ -646,4 +625,157 @@ Consider the user's physical activity level, cultural interests, and accessibili
 		// Default to itinerary if context is not recognized
 		return GetUnifiedChatPrompt("traveling", cityName, lat, lon, searchProfile)
 	}
+}
+
+/*
+  Testing Fan in Fan out prompt
+*/
+
+func getCityDataPrompt(cityName string) string {
+	return fmt.Sprintf(`
+You are a travel assistant. Provide general information about %s.
+Respond with JSON:
+{
+    "city": "%s",
+    "country": "Country name",
+    "state_province": "State/Province if applicable",
+    "description": "Detailed city description (100-150 words)",
+    "center_latitude": <float>,
+    "center_longitude": <float>,
+    "population": "",
+    "area": "",
+    "timezone": "",
+    "language": "",
+    "weather": "",
+    "attractions": "",
+    "history": ""
+}`, cityName, cityName)
+}
+
+func getGeneralPOIPrompt(cityName string) string {
+	return fmt.Sprintf(`
+You are a travel assistant. List general points of interest in %s.
+Respond with JSON:
+{
+    "points_of_interest": [
+        {
+            "name": "POI Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Category (e.g., Museum, Historical Site)",
+            "description_poi": "",
+            "address": "",
+            "website": "",
+            "opening_hours": ""
+        }
+    ]
+}`, cityName)
+}
+
+func getPersonalizedItineraryPrompt(cityName, basePreferences string) string {
+	return fmt.Sprintf(`
+You are a travel planning assistant. Create a personalized itinerary for %s based on user preferences.
+USER PREFERENCES:
+%s
+Respond with JSON:
+{
+    "itinerary_name": "Creative itinerary name",
+    "overall_description": "Detailed description (100-150 words)",
+    "points_of_interest": [
+        {
+            "name": "POI Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "",
+            "description_poi": "",
+            "address": "",
+            "website": "",
+            "opening_hours": ""
+        }
+    ]
+}`, cityName, basePreferences)
+}
+
+func getAccommodationPrompt(cityName string, lat, lon float64, basePreferences string) string {
+	return fmt.Sprintf(`
+You are a hotel recommendation assistant. Find suitable accommodation in %s near coordinates %.4f, %.4f.
+USER PREFERENCES:
+%s
+Respond with JSON:
+{
+    "hotels": [
+        {
+            "city": "%s",
+            "name": "Hotel Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Hotel|Hostel|Guesthouse|Apartment",
+            "description": "Description matching preferences",
+            "address": "",
+            "phone_number": null,
+            "website": null,
+            "opening_hours": null,
+            "price_range": null,
+            "rating": 0,
+            "tags": null,
+            "images": null
+        }
+    ]
+}`, cityName, lat, lon, basePreferences, cityName)
+}
+
+func getDiningPrompt(cityName string, lat, lon float64, basePreferences string) string {
+	return fmt.Sprintf(`
+You are a restaurant recommendation assistant. Find dining options in %s near coordinates %.4f, %.4f.
+USER PREFERENCES:
+%s
+Respond with JSON:
+{
+    "restaurants": [
+        {
+            "city": "%s",
+            "name": "Restaurant Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Fine Dining|Casual Dining|Fast Food|Cafe|Bar",
+            "description": "Description matching preferences",
+            "address": "",
+            "website": "",
+            "phone_number": "",
+            "opening_hours": "",
+            "price_level": "$|$$|$$$|$$$$",
+            "cuisine_type": "",
+            "tags": [],
+            "images": [],
+            "rating": 0
+        }
+    ]
+}`, cityName, lat, lon, basePreferences, cityName)
+}
+
+func getActivitiesPrompt(cityName string, lat, lon float64, basePreferences string) string {
+	return fmt.Sprintf(`
+You are an activity recommendation assistant. Find activities in %s near coordinates %.4f, %.4f.
+USER PREFERENCES:
+%s
+Respond with JSON:
+{
+    "activities": [
+        {
+            "city": "%s",
+            "name": "Activity Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Museum|Outdoor Activity|Entertainment|Cultural|Sports",
+            "description": "Description matching preferences",
+            "address": "",
+            "website": "",
+            "opening_hours": "",
+            "price_range": "Free|$|$$|$$$",
+            "rating": 0,
+            "tags": [],
+            "images": []
+        }
+    ]
+}`, cityName, lat, lon, basePreferences, cityName)
 }

@@ -29,50 +29,6 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 )
 
-type SimpleIntentClassifier struct{}
-
-func (c *SimpleIntentClassifier) Classify(ctx context.Context, message string) (types.IntentType, error) {
-	message = strings.ToLower(message)
-	if matched, _ := regexp.MatchString(`add|include|visit`, message); matched {
-		return types.IntentAddPOI, nil
-	} else if matched, _ := regexp.MatchString(`remove|delete|skip`, message); matched {
-		return types.IntentRemovePOI, nil
-	} else if matched, _ := regexp.MatchString(`what|where|how|why|when`, message); matched {
-		return types.IntentAskQuestion, nil
-	}
-	return types.IntentModifyItinerary, nil // Default intent
-}
-
-// DomainDetector detects the primary domain from user queries
-type DomainDetector struct{}
-
-func (d *DomainDetector) DetectDomain(ctx context.Context, message string) types.DomainType {
-	message = strings.ToLower(message)
-
-	// Accommodation domain keywords
-	if matched, _ := regexp.MatchString(`hotel|hostel|accommodation|stay|sleep|room|booking|airbnb|lodge|resort|guesthouse`, message); matched {
-		return types.DomainAccommodation
-	}
-
-	// Dining domain keywords
-	if matched, _ := regexp.MatchString(`restaurant|food|eat|dine|meal|cuisine|drink|cafe|bar|lunch|dinner|breakfast|brunch`, message); matched {
-		return types.DomainDining
-	}
-
-	// Activity domain keywords
-	if matched, _ := regexp.MatchString(`activity|museum|park|attraction|tour|visit|see|do|experience|adventure|shopping|nightlife`, message); matched {
-		return types.DomainActivities
-	}
-
-	// Itinerary domain keywords
-	if matched, _ := regexp.MatchString(`itinerary|plan|schedule|trip|day|week|journey|route|organize|arrange`, message); matched {
-		return types.DomainItinerary
-	}
-
-	// Default to general domain
-	return types.DomainGeneral
-}
-
 const (
 	model              = "gemini-2.0-flash"
 	defaultTemperature = 0.5
@@ -202,30 +158,10 @@ func NewLlmInteractiontService(interestRepo interests.Repository,
 		poiRepo:            poiRepo,
 		cache:              cache,
 		deadLetterCh:       make(chan types.StreamEvent, 100),
-		intentClassifier:   &SimpleIntentClassifier{},
+		intentClassifier:   &types.SimpleIntentClassifier{},
 	}
 	go service.processDeadLetterQueue()
 	return service
-}
-
-// sendEventSimple sends events without retries for optimal performance (Google GenAI pattern)
-func (l *LlmInteractiontServiceImpl) sendEventSimple(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent) {
-	if event.EventID == "" {
-		event.EventID = uuid.New().String()
-	}
-	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now()
-	}
-
-	select {
-	case ch <- event:
-		return
-	case <-ctx.Done():
-		return
-	default:
-		// Non-blocking drop if channel full - prioritize speed over delivery guarantee
-		return
-	}
 }
 
 func (l *LlmInteractiontServiceImpl) GenerateCityDataWorker(wg *sync.WaitGroup,
@@ -1828,793 +1764,6 @@ func (l *LlmInteractiontServiceImpl) GetPOIDetailsResponse(ctx context.Context, 
 	return poiResult, nil
 }
 
-// var cacheHitCounter = metric.NewCounter("cache_hits", metric.WithDescription("Number of cache hits"))
-// var dbHitCounter = metric.NewCounter("db_hits", metric.WithDescription("Number of database hits"))
-// var aiCallCounter = metric.NewCounter("ai_calls", metric.WithDescription("Number of AI calls"))
-
-func (l *LlmInteractiontServiceImpl) getHotelsByPreferenceDetails(wg *sync.WaitGroup, ctx context.Context,
-	city string, lat float64, lon float64, userID uuid.UUID, userPreferences types.HotelUserPreferences,
-	resultCh chan<- []types.HotelDetailedInfo, config *genai.GenerateContentConfig) {
-	defer wg.Done()
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "getHotelsByPreferenceDetails", trace.WithAttributes(
-		attribute.String("city.name", city),
-		attribute.Float64("latitude", lat),
-		attribute.Float64("longitude", lon),
-	))
-	defer span.End()
-
-	if city == "" || lat == 0 || lon == 0 {
-		resultCh <- []types.HotelDetailedInfo{{Err: fmt.Errorf("invalid input: city, lat, or lon is empty")}}
-		span.SetStatus(codes.Error, "Invalid input")
-		return
-	}
-
-	startTime := time.Now()
-
-	prompt := getHotelsByPreferencesPrompt(city, lat, lon, userPreferences)
-	span.SetAttributes(attribute.Int("prompt.length", len(prompt)))
-	response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to generate hotel details")
-		resultCh <- []types.HotelDetailedInfo{{Err: fmt.Errorf("failed to generate hotel details: %w", err)}}
-		return
-	}
-
-	var txt string
-	for _, candidate := range response.Candidates {
-		if candidate.Content != nil && len(candidate.Content.Parts) > 0 {
-			txt = candidate.Content.Parts[0].Text
-			break
-		}
-	}
-	if txt == "" {
-		err := fmt.Errorf("no valid hotel details content from AI")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Empty response from AI")
-		resultCh <- []types.HotelDetailedInfo{{Err: err}}
-		return
-	}
-
-	span.SetAttributes(attribute.Int("response.length", len(txt)))
-	cleanTxt := cleanJSONResponse(txt)
-	var hotelResponse struct {
-		Hotels []types.HotelDetailedInfo `json:"hotels"`
-	}
-	if err := json.Unmarshal([]byte(cleanTxt), &hotelResponse); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to parse hotel details JSON")
-		resultCh <- []types.HotelDetailedInfo{{Err: fmt.Errorf("failed to parse hotel details JSON: %w", err)}}
-		return
-	}
-
-	if len(hotelResponse.Hotels) == 0 {
-		err := fmt.Errorf("no hotels returned from AI")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "No hotels found")
-		resultCh <- []types.HotelDetailedInfo{{Err: err}}
-		return
-	}
-
-	latencyMs := int(time.Since(startTime).Milliseconds())
-	span.SetAttributes(attribute.Int("response.latency_ms", latencyMs))
-
-	interaction := types.LlmInteraction{
-		UserID:       userID,
-		Prompt:       prompt,
-		ResponseText: txt,
-		ModelUsed:    model, // Adjust based on AI client
-		LatencyMs:    latencyMs,
-		CityName:     city,
-	}
-	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to save LLM interaction")
-		resultCh <- []types.HotelDetailedInfo{{Err: fmt.Errorf("failed to save LLM interaction: %w", err)}}
-		return
-	}
-
-	for i := range hotelResponse.Hotels {
-		hotelResponse.Hotels[i].ID = uuid.New()
-		hotelResponse.Hotels[i].City = city
-		hotelResponse.Hotels[i].LlmInteractionID = savedInteractionID
-	}
-
-	resultCh <- hotelResponse.Hotels
-	span.SetAttributes(attribute.String("llm_interaction.id", savedInteractionID.String()))
-	span.SetStatus(codes.Ok, "Hotel details generated and saved successfully")
-}
-
-func (l *LlmInteractiontServiceImpl) GetHotelsByPreferenceResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64, userPreferences types.HotelUserPreferences) ([]types.HotelDetailedInfo, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetHotelsByPreferenceResponse", trace.WithAttributes(
-		attribute.String("city.name", city),
-		attribute.Float64("latitude", lat),
-		attribute.Float64("longitude", lon),
-		attribute.String("user.id", userID.String()),
-	))
-	defer span.End()
-
-	l.logger.DebugContext(ctx, "Starting hotel details generation by preferences",
-		slog.String("city", city), slog.Float64("latitude", lat), slog.Float64("longitude", lon), slog.String("userID", userID.String()))
-
-	// Generate cache key
-	cacheKey := generateHotelCacheKey(city, lat, lon, userID)
-	span.SetAttributes(attribute.String("cache.key", cacheKey))
-
-	// Check cache
-	if cached, found := l.cache.Get(cacheKey); found {
-		if hotels, ok := cached.([]types.HotelDetailedInfo); ok {
-			l.logger.InfoContext(ctx, "Cache hit for hotel details", slog.String("cache_key", cacheKey))
-			span.AddEvent("Cache hit")
-			span.SetStatus(codes.Ok, "Hotel details served from cache")
-			return hotels, nil
-		}
-	}
-
-	// Find city ID
-	cityData, err := l.cityRepo.FindCityByNameAndCountry(ctx, city, "")
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Failed to find city", slog.Any("error", err))
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to find city: %w", err)
-	}
-	if cityData == nil {
-		l.logger.WarnContext(ctx, "City not found", slog.String("city", city))
-		span.SetStatus(codes.Error, "City not found")
-		return nil, fmt.Errorf("city %s not found", city)
-	}
-	cityID := cityData.ID
-
-	// Check database
-	hotels, err := l.poiRepo.FindHotelDetails(ctx, cityID, lat, lon, 1000.0) // 1km tolerance
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Failed to query hotel details from database", slog.Any("error", err))
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to query hotel details: %w", err)
-	}
-	if len(hotels) > 0 {
-		for i := range hotels {
-			hotels[i].City = city
-		}
-		l.cache.Set(cacheKey, hotels, cache.DefaultExpiration)
-		l.logger.InfoContext(ctx, "Database hit for hotel details", slog.String("cache_key", cacheKey))
-		span.AddEvent("Database hit")
-		span.SetStatus(codes.Ok, "Hotel details served from database")
-		return hotels, nil
-	}
-
-	// Cache and database miss: fetch from AI
-	l.logger.DebugContext(ctx, "Cache and database miss, fetching hotel details from AI", slog.String("cache_key", cacheKey))
-	span.AddEvent("Cache and database miss")
-
-	resultCh := make(chan []types.HotelDetailedInfo, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go l.getHotelsByPreferenceDetails(&wg, ctx, city, lat, lon, userID, userPreferences, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
-
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	var hotelResults []types.HotelDetailedInfo
-	for res := range resultCh {
-		if res[0].Err != nil {
-			l.logger.ErrorContext(ctx, "Error generating hotel details", slog.Any("error", res[0].Err))
-			span.RecordError(res[0].Err)
-			span.SetStatus(codes.Error, "Failed to generate hotel details")
-			return nil, res[0].Err
-		}
-		hotelResults = res
-		break
-	}
-
-	if len(hotelResults) == 0 {
-		l.logger.WarnContext(ctx, "No hotels received for hotel details")
-		span.SetStatus(codes.Error, "No hotels received")
-		return nil, fmt.Errorf("no hotels received for hotel details")
-	}
-
-	// Save to database
-	for _, hotel := range hotelResults {
-		_, err = l.poiRepo.SaveHotelDetails(ctx, hotel, cityID)
-		if err != nil {
-			l.logger.WarnContext(ctx, "Failed to save hotel details to database", slog.Any("error", err))
-			span.RecordError(err)
-			// Continue despite error
-		}
-	}
-
-	// Store in cache
-	l.cache.Set(cacheKey, hotelResults, cache.DefaultExpiration)
-	l.logger.DebugContext(ctx, "Stored hotel details in cache", slog.String("cache_key", cacheKey))
-	span.AddEvent("Stored in cache")
-
-	span.SetStatus(codes.Ok, "Hotel details generated and cached successfully")
-	return hotelResults, nil
-}
-
-func (l *LlmInteractiontServiceImpl) getHotelsNearby(wg *sync.WaitGroup, ctx context.Context,
-	city string, lat float64, lon float64, userID uuid.UUID,
-	resultCh chan<- []types.HotelDetailedInfo, config *genai.GenerateContentConfig) {
-	defer wg.Done()
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "getHotelsNearby", trace.WithAttributes(
-		attribute.String("city.name", city),
-		attribute.Float64("latitude", lat),
-		attribute.Float64("longitude", lon),
-	))
-	defer span.End()
-
-	if city == "" || lat == 0 || lon == 0 {
-		resultCh <- []types.HotelDetailedInfo{{Err: fmt.Errorf("invalid input: city, lat, or lon is empty")}}
-		span.SetStatus(codes.Error, "Invalid input")
-		return
-	}
-
-	startTime := time.Now()
-
-	userLocation := types.UserLocation{
-		UserLat: lat,
-		UserLon: lon,
-	}
-	prompt := getHotelsNeabyPrompt(city, userLocation)
-	span.SetAttributes(attribute.Int("prompt.length", len(prompt)))
-	response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to generate hotel details")
-		resultCh <- []types.HotelDetailedInfo{{Err: fmt.Errorf("failed to generate hotel details: %w", err)}}
-		return
-	}
-
-	var txt string
-	for _, candidate := range response.Candidates {
-		if candidate.Content != nil && len(candidate.Content.Parts) > 0 {
-			txt = candidate.Content.Parts[0].Text
-			break
-		}
-	}
-	if txt == "" {
-		err := fmt.Errorf("no valid hotel details content from AI")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Empty response from AI")
-		resultCh <- []types.HotelDetailedInfo{{Err: err}}
-		return
-	}
-
-	span.SetAttributes(attribute.Int("response.length", len(txt)))
-	cleanTxt := cleanJSONResponse(txt)
-	var hotelResponse struct {
-		Hotels []types.HotelDetailedInfo `json:"hotels"`
-	}
-	if err := json.Unmarshal([]byte(cleanTxt), &hotelResponse); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to parse hotel details JSON")
-		resultCh <- []types.HotelDetailedInfo{{Err: fmt.Errorf("failed to parse hotel details JSON: %w", err)}}
-		return
-	}
-
-	if len(hotelResponse.Hotels) == 0 {
-		err := fmt.Errorf("no hotels returned from AI")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "No hotels found")
-		resultCh <- []types.HotelDetailedInfo{{Err: err}}
-		return
-	}
-
-	latencyMs := int(time.Since(startTime).Milliseconds())
-	span.SetAttributes(attribute.Int("response.latency_ms", latencyMs))
-
-	interaction := types.LlmInteraction{
-		UserID:       userID,
-		Prompt:       prompt,
-		ResponseText: txt,
-		ModelUsed:    model, // Adjust based on AI client
-		LatencyMs:    latencyMs,
-		CityName:     city,
-	}
-	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to save LLM interaction")
-		resultCh <- []types.HotelDetailedInfo{{Err: fmt.Errorf("failed to save LLM interaction: %w", err)}}
-		return
-	}
-
-	for i := range hotelResponse.Hotels {
-		hotelResponse.Hotels[i].ID = uuid.New()
-		hotelResponse.Hotels[i].City = city
-		hotelResponse.Hotels[i].LlmInteractionID = savedInteractionID
-	}
-
-	resultCh <- hotelResponse.Hotels
-	span.SetAttributes(attribute.String("llm_interaction.id", savedInteractionID.String()))
-	span.SetStatus(codes.Ok, "Hotel details generated and saved successfully")
-}
-
-func (l *LlmInteractiontServiceImpl) GetHotelsNearbyResponse(ctx context.Context, userID uuid.UUID, city string, userLocation *types.UserLocation) ([]types.HotelDetailedInfo, error) {
-	lat := userLocation.UserLat
-	lon := userLocation.UserLon
-	distance := userLocation.SearchRadiusKm
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetHotelsByPreferenceResponse", trace.WithAttributes(
-		attribute.String("city.name", city),
-		attribute.Float64("latitude", lat),
-		attribute.Float64("longitude", lon),
-		attribute.String("user.id", userID.String()),
-	))
-	defer span.End()
-
-	l.logger.DebugContext(ctx, "Starting hotel details generation by preferences",
-		slog.String("city", city), slog.Float64("latitude", lat), slog.Float64("longitude", lon), slog.String("userID", userID.String()))
-
-	// Generate cache key
-	cacheKey := generateHotelCacheKey(city, lat, lon, userID)
-	span.SetAttributes(attribute.String("cache.key", cacheKey))
-
-	// Check cache
-	if cached, found := l.cache.Get(cacheKey); found {
-		if hotels, ok := cached.([]types.HotelDetailedInfo); ok {
-			l.logger.InfoContext(ctx, "Cache hit for hotel details", slog.String("cache_key", cacheKey))
-			span.AddEvent("Cache hit")
-			span.SetStatus(codes.Ok, "Hotel details served from cache")
-			return hotels, nil
-		}
-	}
-
-	// Find city ID
-	cityData, err := l.cityRepo.FindCityByNameAndCountry(ctx, city, "")
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Failed to find city", slog.Any("error", err))
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to find city: %w", err)
-	}
-	if cityData == nil {
-		l.logger.WarnContext(ctx, "City not found", slog.String("city", city))
-		span.SetStatus(codes.Error, "City not found")
-		return nil, fmt.Errorf("city %s not found", city)
-	}
-	cityID := cityData.ID
-
-	// Check database
-	hotels, err := l.poiRepo.FindHotelDetails(ctx, cityID, lat, lon, distance) // 1km tolerance
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Failed to query hotel details from database", slog.Any("error", err))
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to query hotel details: %w", err)
-	}
-	if len(hotels) > 0 {
-		for i := range hotels {
-			hotels[i].City = city
-		}
-		l.cache.Set(cacheKey, hotels, cache.DefaultExpiration)
-		l.logger.InfoContext(ctx, "Database hit for hotel details", slog.String("cache_key", cacheKey))
-		span.AddEvent("Database hit")
-		span.SetStatus(codes.Ok, "Hotel details served from database")
-		return hotels, nil
-	}
-
-	// Cache and database miss: fetch from AI
-	l.logger.DebugContext(ctx, "Cache and database miss, fetching hotel details from AI", slog.String("cache_key", cacheKey))
-	span.AddEvent("Cache and database miss")
-
-	resultCh := make(chan []types.HotelDetailedInfo, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go l.getHotelsNearby(&wg, ctx, city, lat, lon, userID, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
-
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	var hotelResults []types.HotelDetailedInfo
-	for res := range resultCh {
-		if res[0].Err != nil {
-			l.logger.ErrorContext(ctx, "Error generating hotel details", slog.Any("error", res[0].Err))
-			span.RecordError(res[0].Err)
-			span.SetStatus(codes.Error, "Failed to generate hotel details")
-			return nil, res[0].Err
-		}
-		hotelResults = res
-		break
-	}
-
-	if len(hotelResults) == 0 {
-		l.logger.WarnContext(ctx, "No hotels received for hotel details")
-		span.SetStatus(codes.Error, "No hotels received")
-		return nil, fmt.Errorf("no hotels received for hotel details")
-	}
-
-	// Save to database
-	for _, hotel := range hotelResults {
-		_, err = l.poiRepo.SaveHotelDetails(ctx, hotel, cityID)
-		if err != nil {
-			l.logger.WarnContext(ctx, "Failed to save hotel details to database", slog.Any("error", err))
-			span.RecordError(err)
-			// Continue despite error
-		}
-	}
-
-	// Store in cache
-	l.cache.Set(cacheKey, hotelResults, cache.DefaultExpiration)
-	l.logger.DebugContext(ctx, "Stored hotel details in cache", slog.String("cache_key", cacheKey))
-	span.AddEvent("Stored in cache")
-
-	span.SetStatus(codes.Ok, "Hotel details generated and cached successfully")
-	return hotelResults, nil
-}
-
-func (s *LlmInteractiontServiceImpl) GetHotelByIDResponse(ctx context.Context, hotelID uuid.UUID) (*types.HotelDetailedInfo, error) {
-	hotel, err := s.poiRepo.GetHotelByID(ctx, hotelID)
-	if err != nil {
-		s.logger.Error("failed to get hotel by ID", "error", err)
-		return nil, err
-	}
-	return hotel, nil
-}
-
-func (l *LlmInteractiontServiceImpl) getRestaurantsByPreferences(wg *sync.WaitGroup, ctx context.Context,
-	city string, lat, lon float64, userID uuid.UUID, preferences types.RestaurantUserPreferences,
-	resultCh chan<- []types.RestaurantDetailedInfo, config *genai.GenerateContentConfig) {
-	defer wg.Done()
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "getRestaurantsByPreferences")
-	defer span.End()
-
-	if city == "" || lat == 0 || lon == 0 {
-		resultCh <- []types.RestaurantDetailedInfo{{Err: fmt.Errorf("invalid input: city, lat, or lon is empty")}}
-		span.SetStatus(codes.Error, "Invalid input")
-		return
-	}
-
-	startTime := time.Now()
-	prompt := getRestaurantsByPreferencesPrompt(city, lat, lon, preferences)
-	response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
-	if err != nil {
-		span.RecordError(err)
-		resultCh <- []types.RestaurantDetailedInfo{{Err: fmt.Errorf("failed to generate restaurant details: %w", err)}}
-		return
-	}
-
-	var txt string
-	for _, candidate := range response.Candidates {
-		if candidate.Content != nil && len(candidate.Content.Parts) > 0 {
-			txt = candidate.Content.Parts[0].Text
-			break
-		}
-	}
-	if txt == "" {
-		err := fmt.Errorf("no valid restaurant details from AI")
-		span.RecordError(err)
-		resultCh <- []types.RestaurantDetailedInfo{{Err: err}}
-		return
-	}
-
-	cleanTxt := cleanJSONResponse(txt)
-	var restaurantResponse struct {
-		Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
-	}
-	if err := json.Unmarshal([]byte(cleanTxt), &restaurantResponse); err != nil {
-		span.RecordError(err)
-		resultCh <- []types.RestaurantDetailedInfo{{Err: fmt.Errorf("failed to parse restaurant JSON: %w", err)}}
-		return
-	}
-
-	interaction := types.LlmInteraction{
-		UserID:       userID,
-		Prompt:       prompt,
-		ResponseText: txt,
-		ModelUsed:    "model_name", // Adjust as needed
-		LatencyMs:    int(time.Since(startTime).Milliseconds()),
-		CityName:     city,
-	}
-	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
-	if err != nil {
-		span.RecordError(err)
-		resultCh <- []types.RestaurantDetailedInfo{{Err: fmt.Errorf("failed to save LLM interaction: %w", err)}}
-		return
-	}
-
-	for i := range restaurantResponse.Restaurants {
-		restaurantResponse.Restaurants[i].ID = uuid.New()
-		restaurantResponse.Restaurants[i].LlmInteractionID = savedInteractionID
-	}
-	resultCh <- restaurantResponse.Restaurants
-	span.SetStatus(codes.Ok, "Restaurants generated successfully")
-}
-
-func (l *LlmInteractiontServiceImpl) GetRestaurantsByPreferencesResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64, preferences types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetRestaurantsByPreferencesResponse")
-	defer span.End()
-
-	cacheKey := generateRestaurantCacheKey(city, lat, lon, userID)
-	span.SetAttributes(attribute.String("cache.key", cacheKey))
-
-	if cached, found := l.cache.Get(cacheKey); found {
-		if restaurants, ok := cached.([]types.RestaurantDetailedInfo); ok {
-			span.SetStatus(codes.Ok, "Served from cache")
-			return restaurants, nil
-		}
-	}
-
-	cityData, err := l.cityRepo.FindCityByNameAndCountry(ctx, city, "")
-	if err != nil || cityData == nil {
-		span.RecordError(err)
-		return nil, fmt.Errorf("city %s not found: %w", city, err)
-	}
-	cityID := cityData.ID
-
-	restaurants, err := l.poiRepo.FindRestaurantDetails(ctx, cityData.ID, lat, lon, 5000.0, &preferences) // 5km tolerance
-	if err != nil {
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to query restaurants: %w", err)
-	}
-	if len(restaurants) > 0 {
-		l.cache.Set(cacheKey, restaurants, cache.DefaultExpiration)
-		span.SetStatus(codes.Ok, "Served from database")
-		return restaurants, nil
-	}
-
-	resultCh := make(chan []types.RestaurantDetailedInfo, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go l.getRestaurantsByPreferences(&wg, ctx, city, lat, lon, userID, preferences, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.7)})
-	wg.Wait()
-	close(resultCh)
-
-	restaurants = <-resultCh
-	if restaurants[0].Err != nil {
-		span.RecordError(restaurants[0].Err)
-		return nil, restaurants[0].Err
-	}
-
-	for _, r := range restaurants {
-		_, err := l.poiRepo.SaveRestaurantDetails(ctx, r, cityID)
-		if err != nil {
-			l.logger.WarnContext(ctx, "Failed to save restaurant details to database", slog.Any("error", err), slog.String("restaurant_name", r.Name))
-			span.RecordError(err)
-			// Continue despite error
-		}
-	}
-	l.cache.Set(cacheKey, restaurants, cache.DefaultExpiration)
-	span.SetStatus(codes.Ok, "Restaurants generated and cached")
-	return restaurants, nil
-}
-
-func (l *LlmInteractiontServiceImpl) getRestaurantsNearby(wg *sync.WaitGroup, ctx context.Context,
-	city string, lat float64, lon float64, userID uuid.UUID, resultCh chan<- []types.RestaurantDetailedInfo, config *genai.GenerateContentConfig) {
-	defer wg.Done()
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "getRestaurantsNearby")
-	defer span.End()
-
-	// Validate input parameters
-	if city == "" || lat == 0 || lon == 0 {
-		resultCh <- []types.RestaurantDetailedInfo{{Err: fmt.Errorf("invalid input: city, lat, or lon is empty")}}
-		span.SetStatus(codes.Error, "Invalid input")
-		return
-	}
-
-	// Define user location with a default search radius of 5.0 km
-	userLocation := types.UserLocation{UserLat: lat, UserLon: lon, SearchRadiusKm: 5.0}
-	prompt := getRestaurantsNearbyPrompt(city, userLocation)
-	span.SetAttributes(attribute.Int("prompt.length", len(prompt)))
-
-	// Record the start time for latency calculation
-	startTime := time.Now()
-
-	// Generate response from the AI client
-	response, err := l.aiClient.GenerateResponse(ctx, prompt, config)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to generate restaurant details")
-		resultCh <- []types.RestaurantDetailedInfo{{Err: fmt.Errorf("failed to generate restaurant details: %w", err)}}
-		return
-	}
-
-	// Extract text content from the AI response
-	var txt string
-	for _, candidate := range response.Candidates {
-		if candidate.Content != nil && len(candidate.Content.Parts) > 0 {
-			txt = candidate.Content.Parts[0].Text
-			break
-		}
-	}
-	if txt == "" {
-		err := fmt.Errorf("no valid restaurant details content from AI")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Empty response from AI")
-		resultCh <- []types.RestaurantDetailedInfo{{Err: err}}
-		return
-	}
-
-	// Log response length
-	span.SetAttributes(attribute.Int("response.length", len(txt)))
-
-	// Parse the JSON response
-	cleanTxt := cleanJSONResponse(txt)
-	var restaurantResponse struct {
-		Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
-	}
-	if err := json.Unmarshal([]byte(cleanTxt), &restaurantResponse); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to parse restaurant details JSON")
-		resultCh <- []types.RestaurantDetailedInfo{{Err: fmt.Errorf("failed to parse restaurant details JSON: %w", err)}}
-		return
-	}
-
-	// Check if any restaurants were returned
-	if len(restaurantResponse.Restaurants) == 0 {
-		err := fmt.Errorf("no restaurants returned from AI")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "No restaurants found")
-		resultCh <- []types.RestaurantDetailedInfo{{Err: err}}
-		return
-	}
-
-	// Calculate latency
-	latencyMs := int(time.Since(startTime).Milliseconds())
-	span.SetAttributes(attribute.Int("response.latency_ms", latencyMs))
-
-	// Save interaction details
-	interaction := types.LlmInteraction{
-		UserID:       userID,
-		Prompt:       prompt,
-		ResponseText: txt,
-		ModelUsed:    "default-model", // Replace with actual model name from your AI client
-		LatencyMs:    latencyMs,
-		CityName:     city,
-	}
-	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to save LLM interaction")
-		resultCh <- []types.RestaurantDetailedInfo{{Err: fmt.Errorf("failed to save LLM interaction: %w", err)}}
-		return
-	}
-
-	// Assign IDs and city to each restaurant
-	for i := range restaurantResponse.Restaurants {
-		restaurantResponse.Restaurants[i].ID = uuid.New()
-		restaurantResponse.Restaurants[i].City = city
-		restaurantResponse.Restaurants[i].LlmInteractionID = savedInteractionID
-	}
-
-	// Send results to the channel
-	resultCh <- restaurantResponse.Restaurants
-	span.SetStatus(codes.Ok, "Restaurant details generated successfully")
-}
-
-func (l *LlmInteractiontServiceImpl) GetRestaurantsNearbyResponse(ctx context.Context, userID uuid.UUID, city string, userLocation types.UserLocation) ([]types.RestaurantDetailedInfo, error) {
-	lat := userLocation.UserLat
-	lon := userLocation.UserLon
-	distance := userLocation.SearchRadiusKm
-	if distance == 0 {
-		distance = 5.0 // Default to 5km
-	}
-
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetRestaurantsNearbyResponse")
-	defer span.End()
-
-	l.logger.DebugContext(ctx, "Starting nearby restaurant details generation",
-		slog.String("city", city), slog.Float64("latitude", lat), slog.Float64("longitude", lon), slog.String("userID", userID.String()))
-
-	// Generate cache key
-	cacheKey := fmt.Sprintf("restaurants:nearby:%s:%.6f:%.6f:%s", city, lat, lon, userID.String())
-	span.SetAttributes(attribute.String("cache.key", cacheKey))
-
-	// Check cache
-	if cached, found := l.cache.Get(cacheKey); found {
-		if restaurants, ok := cached.([]types.RestaurantDetailedInfo); ok {
-			l.logger.InfoContext(ctx, "Cache hit for nearby restaurant details", slog.String("cache_key", cacheKey))
-			span.AddEvent("Cache hit")
-			span.SetStatus(codes.Ok, "Restaurant details served from cache")
-			return restaurants, nil
-		}
-	}
-
-	// Find city ID
-	cityData, err := l.cityRepo.FindCityByNameAndCountry(ctx, city, "")
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Failed to find city", slog.Any("error", err))
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to find city: %w", err)
-	}
-	if cityData == nil {
-		l.logger.WarnContext(ctx, "City not found", slog.String("city", city))
-		span.SetStatus(codes.Error, "City not found")
-		return nil, fmt.Errorf("city %s not found", city)
-	}
-	cityID := cityData.ID
-
-	// Check database
-	restaurants, err := l.poiRepo.FindRestaurantDetails(ctx, cityID, lat, lon, distance*1000, nil) // Convert km to meters
-	if err != nil {
-		l.logger.ErrorContext(ctx, "Failed to query restaurant details from database", slog.Any("error", err))
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to query restaurant details: %w", err)
-	}
-	if len(restaurants) > 0 {
-		for i := range restaurants {
-			restaurants[i].City = city
-		}
-		l.cache.Set(cacheKey, restaurants, cache.DefaultExpiration)
-		l.logger.InfoContext(ctx, "Database hit for nearby restaurant details", slog.String("cache_key", cacheKey))
-		span.AddEvent("Database hit")
-		span.SetStatus(codes.Ok, "Restaurant details served from database")
-		return restaurants, nil
-	}
-
-	// Cache and database miss: fetch from AI
-	l.logger.DebugContext(ctx, "Cache and database miss, fetching nearby restaurant details from AI", slog.String("cache_key", cacheKey))
-	span.AddEvent("Cache and database miss")
-
-	resultCh := make(chan []types.RestaurantDetailedInfo, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go l.getRestaurantsNearby(&wg, ctx, city, lat, lon, userID, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.7)})
-
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	var restaurantResults []types.RestaurantDetailedInfo
-	for res := range resultCh {
-		if res[0].Err != nil {
-			l.logger.ErrorContext(ctx, "Error generating nearby restaurant details", slog.Any("error", res[0].Err))
-			span.RecordError(res[0].Err)
-			span.SetStatus(codes.Error, "Failed to generate restaurant details")
-			return nil, res[0].Err
-		}
-		restaurantResults = res
-		break
-	}
-
-	if len(restaurantResults) == 0 {
-		l.logger.WarnContext(ctx, "No restaurants received for nearby details")
-		span.SetStatus(codes.Error, "No restaurants received")
-		return nil, fmt.Errorf("no restaurants received for nearby details")
-	}
-
-	// Save to database
-	for _, restaurant := range restaurantResults {
-		_, err = l.poiRepo.SaveRestaurantDetails(ctx, restaurant, cityID)
-		if err != nil {
-			l.logger.WarnContext(ctx, "Failed to save restaurant details to database", slog.Any("error", err))
-			span.RecordError(err)
-			// Continue despite error
-		}
-	}
-
-	// Cache the results
-	l.cache.Set(cacheKey, restaurantResults, cache.DefaultExpiration)
-	l.logger.DebugContext(ctx, "Stored nearby restaurant details in cache", slog.String("cache_key", cacheKey))
-	span.AddEvent("Stored in cache")
-
-	span.SetStatus(codes.Ok, "Nearby restaurant details generated and cached successfully")
-	return restaurantResults, nil
-}
-
-func (l *LlmInteractiontServiceImpl) GetRestaurantDetailsResponse(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetRestaurantDetailsResponse")
-	defer span.End()
-
-	restaurant, err := l.poiRepo.GetRestaurantByID(ctx, restaurantID)
-	if err != nil {
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to get restaurant: %w", err)
-	}
-	if restaurant != nil {
-		span.SetStatus(codes.Ok, "Restaurant found")
-		return restaurant, nil
-	}
-	// AI generation logic can be added here if needed
-	return nil, fmt.Errorf("restaurant not found")
-}
-
 func (l *LlmInteractiontServiceImpl) getGeneralPOIByDistance(wg *sync.WaitGroup,
 	ctx context.Context,
 	userID uuid.UUID,
@@ -3735,83 +2884,276 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessage(ctx context.Conte
 	))
 	defer span.End()
 
-	// --- Step 1: Extract City and Intent from Natural Language ---
-	cityName, cleanedMessage, err := l.extractCityFromMessage(ctx, message)
+	// Step 1: Extract city and clean message
+	extractedCity, cleanedMessage, err := l.extractCityFromMessage(ctx, message)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to parse message: %w", err)
 	}
-
+	if extractedCity != "" {
+		cityName = extractedCity
+	}
 	span.SetAttributes(
 		attribute.String("extracted.city", cityName),
 		attribute.String("cleaned.message", cleanedMessage),
 	)
-	l.logger.InfoContext(ctx, "Extracted city from message",
-		slog.String("original_message", message),
-		slog.String("city", cityName),
-		slog.String("cleaned_message", cleanedMessage))
+	l.logger.InfoContext(ctx, "Extracted city from message", slog.String("city", cityName), slog.String("cleaned_message", cleanedMessage))
 
-	// --- Step 2: Detect Domain ---
-	domainDetector := &DomainDetector{}
+	// Step 2: Detect domain
+	domainDetector := &types.DomainDetector{}
 	domain := domainDetector.DetectDomain(ctx, cleanedMessage)
 	span.SetAttributes(attribute.String("detected.domain", string(domain)))
-	l.logger.InfoContext(ctx, "Detected domain for unified chat", slog.String("domain", string(domain)))
+	l.logger.InfoContext(ctx, "Detected domain", slog.String("domain", string(domain)))
 
-	// --- Step 2: Gather Context (User Profile) ---
+	// Step 3: Fetch user data
 	_, searchProfile, _, err := l.FetchUserData(ctx, userID, profileID)
 	if err != nil {
 		span.RecordError(err)
-		return nil, fmt.Errorf("failed to fetch user data for unified chat: %w", err)
+		return nil, fmt.Errorf("failed to fetch user data: %w", err)
 	}
+	basePreferences := getUserPreferencesPrompt(searchProfile)
 
 	// Use default location from profile if not provided
+	var lat, lon float64
 	if userLocation == nil && searchProfile.UserLatitude != nil && searchProfile.UserLongitude != nil {
 		userLocation = &types.UserLocation{
 			UserLat: *searchProfile.UserLatitude,
 			UserLon: *searchProfile.UserLongitude,
 		}
 	}
-	// Handle case where location is still nil
-	var lat, lon float64
 	if userLocation != nil {
 		lat, lon = userLocation.UserLat, userLocation.UserLon
 	}
 
-	// --- Step 3: Build the Correct Prompt ---
-	// Your GetUnifiedChatPrompt function is perfect for this
-	prompt := GetUnifiedChatPrompt(string(domain), cityName, lat, lon, searchProfile)
+	// Step 4: Fan-in Fan-out Setup
+	type workerResult struct {
+		Data interface{}
+		Err  error
+	}
+	resultCh := make(chan workerResult)
+	var wg sync.WaitGroup
 
-	// --- Step 4: Call LLM API ---
-	startTime := time.Now()
-	response, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{
-		Temperature: genai.Ptr[float32](defaultTemperature),
-	})
-	latencyMs := int(time.Since(startTime).Milliseconds())
-	if err != nil {
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to generate unified chat response from LLM: %w", err)
+	// Step 5: Spawn workers based on domain
+	switch domain {
+	case types.DomainItinerary, types.DomainGeneral:
+		wg.Add(3) // Three workers: city data, general POIs, personalized itinerary
+
+		// Worker 1: General City Data
+		go func() {
+			defer wg.Done()
+			prompt := getCityDataPrompt(cityName)
+			resp, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+			if err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("city data worker failed: %w", err)}
+				return
+			}
+			txt := extractTextFromResponse(resp)
+			cleanTxt := cleanJSONResponse(txt)
+			var cityData types.GeneralCityData
+			if err := json.Unmarshal([]byte(cleanTxt), &cityData); err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("failed to parse city data: %w", err)}
+				return
+			}
+			resultCh <- workerResult{Data: cityData}
+		}()
+
+		// Worker 2: General Points of Interest
+		go func() {
+			defer wg.Done()
+			prompt := getGeneralPOIPrompt(cityName)
+			resp, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+			if err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("general POI worker failed: %w", err)}
+				return
+			}
+			txt := extractTextFromResponse(resp)
+			cleanTxt := cleanJSONResponse(txt)
+			var poiData struct {
+				PointsOfInterest []types.POIDetail `json:"points_of_interest"`
+			}
+			if err := json.Unmarshal([]byte(cleanTxt), &poiData); err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("failed to parse general POIs: %w", err)}
+				return
+			}
+			resultCh <- workerResult{Data: poiData.PointsOfInterest}
+		}()
+
+		// Worker 3: Personalized Itinerary
+		go func() {
+			defer wg.Done()
+			prompt := getPersonalizedItineraryPrompt(cityName, basePreferences)
+			resp, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+			if err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("itinerary worker failed: %w", err)}
+				return
+			}
+			txt := extractTextFromResponse(resp)
+			cleanTxt := cleanJSONResponse(txt)
+			var itinerary types.AIItineraryResponse
+			if err := json.Unmarshal([]byte(cleanTxt), &itinerary); err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("failed to parse itinerary: %w", err)}
+				return
+			}
+			resultCh <- workerResult{Data: itinerary}
+		}()
+
+	case types.DomainAccommodation:
+		wg.Add(1) // One worker for hotels
+		go func() {
+			defer wg.Done()
+			prompt := getAccommodationPrompt(cityName, lat, lon, basePreferences)
+			resp, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+			if err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("accommodation worker failed: %w", err)}
+				return
+			}
+			txt := extractTextFromResponse(resp)
+			cleanTxt := cleanJSONResponse(txt)
+			var hotelResponse struct {
+				Hotels []types.HotelDetailedInfo `json:"hotels"`
+			}
+			if err := json.Unmarshal([]byte(cleanTxt), &hotelResponse); err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("failed to parse hotels: %w", err)}
+				return
+			}
+			resultCh <- workerResult{Data: hotelResponse}
+		}()
+
+	case types.DomainDining:
+		wg.Add(1) // One worker for restaurants
+		go func() {
+			defer wg.Done()
+			prompt := getDiningPrompt(cityName, lat, lon, basePreferences)
+			resp, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+			if err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("dining worker failed: %w", err)}
+				return
+			}
+			txt := extractTextFromResponse(resp)
+			cleanTxt := cleanJSONResponse(txt)
+			var restaurantResponse struct {
+				Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
+			}
+			if err := json.Unmarshal([]byte(cleanTxt), &restaurantResponse); err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("failed to parse restaurants: %w", err)}
+				return
+			}
+			resultCh <- workerResult{Data: restaurantResponse}
+		}()
+
+	case types.DomainActivities:
+		wg.Add(1) // One worker for activities
+		go func() {
+			defer wg.Done()
+			prompt := getActivitiesPrompt(cityName, lat, lon, basePreferences)
+			resp, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+			if err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("activities worker failed: %w", err)}
+				return
+			}
+			txt := extractTextFromResponse(resp)
+			cleanTxt := cleanJSONResponse(txt)
+			var activityResponse struct {
+				Activities []types.POIDetailedInfo `json:"activities"`
+			}
+			if err := json.Unmarshal([]byte(cleanTxt), &activityResponse); err != nil {
+				resultCh <- workerResult{Err: fmt.Errorf("failed to parse activities: %w", err)}
+				return
+			}
+			resultCh <- workerResult{Data: activityResponse}
+		}()
+
+	default:
+		return nil, fmt.Errorf("unhandled domain type: %s", domain)
 	}
 
-	var rawResponseText string
-	for _, cand := range response.Candidates {
-		if cand.Content != nil {
-			for _, part := range cand.Content.Parts {
-				if part.Text != "" {
-					rawResponseText += string(part.Text)
-				}
+	// Close result channel after all workers complete
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	// Step 6: Collect Results
+	var finalResponse interface{}
+	var errors []error
+	sessionID := uuid.New()
+
+	switch domain {
+	case types.DomainItinerary, types.DomainGeneral:
+		itinerary := types.AiCityResponse{SessionID: sessionID}
+		for result := range resultCh {
+			if result.Err != nil {
+				errors = append(errors, result.Err)
+				continue
 			}
+			switch data := result.Data.(type) {
+			case types.GeneralCityData:
+				itinerary.GeneralCityData = data
+			case []types.POIDetail:
+				itinerary.PointsOfInterest = data
+			case types.AIItineraryResponse:
+				itinerary.AIItineraryResponse = data
+			}
+		}
+		if len(errors) > 0 {
+			span.RecordError(errors[0])
+			return nil, fmt.Errorf("itinerary processing errors: %v", errors)
+		}
+		finalResponse = itinerary
+
+	case types.DomainAccommodation:
+		for result := range resultCh {
+			if result.Err != nil {
+				errors = append(errors, result.Err)
+				continue
+			}
+			if hotelResponse, ok := result.Data.(struct {
+				Hotels []types.HotelDetailedInfo `json:"hotels"`
+			}); ok {
+				finalResponse = hotelResponse
+			}
+		}
+		if len(errors) > 0 {
+			span.RecordError(errors[0])
+			return nil, fmt.Errorf("accommodation processing errors: %v", errors)
+		}
+
+	case types.DomainDining:
+		for result := range resultCh {
+			if result.Err != nil {
+				errors = append(errors, result.Err)
+				continue
+			}
+			if restaurantResponse, ok := result.Data.(struct {
+				Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
+			}); ok {
+				finalResponse = restaurantResponse
+			}
+		}
+		if len(errors) > 0 {
+			span.RecordError(errors[0])
+			return nil, fmt.Errorf("dining processing errors: %v", errors)
+		}
+
+	case types.DomainActivities:
+		for result := range resultCh {
+			if result.Err != nil {
+				errors = append(errors, result.Err)
+				continue
+			}
+			if activityResponse, ok := result.Data.(struct {
+				Activities []types.POIDetailedInfo `json:"activities"`
+			}); ok {
+				finalResponse = activityResponse
+			}
+		}
+		if len(errors) > 0 {
+			span.RecordError(errors[0])
+			return nil, fmt.Errorf("activities processing errors: %v", errors)
 		}
 	}
 
-	if rawResponseText == "" {
-		err := fmt.Errorf("empty response from AI for unified chat")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Empty response from AI")
-		return nil, err
-	}
-
-	// --- Step 5: Save LLM interaction to database first ---
-	sessionID := uuid.New() // Generate new session ID for this interaction
+	// Step 7: Save Interaction
 	interaction := types.LlmInteraction{
 		ID:           uuid.New(),
 		SessionID:    sessionID,
@@ -3819,218 +3161,256 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessage(ctx context.Conte
 		ProfileID:    profileID,
 		CityName:     cityName,
 		Prompt:       fmt.Sprintf("Unified Chat - Domain: %s, Message: %s", domain, cleanedMessage),
-		ResponseText: rawResponseText,
+		ResponseText: fmt.Sprintf("%v", finalResponse), // Simplified; ideally serialize to JSON
 		ModelUsed:    model,
-		LatencyMs:    latencyMs,
+		LatencyMs:    int(time.Since(time.Now()).Milliseconds()), // Adjust timing
 		Timestamp:    time.Now(),
 	}
-
 	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
 	if err != nil {
-		l.logger.ErrorContext(ctx, "Failed to save unified chat LLM interaction", slog.Any("error", err))
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to save LLM interaction")
-		// Continue execution despite save failure
-		savedInteractionID = uuid.New() // Use a fallback ID
-	} else {
-		span.SetAttributes(attribute.String("llm_interaction.id", savedInteractionID.String()))
-		l.logger.InfoContext(ctx, "Saved unified chat LLM interaction",
-			slog.String("interaction_id", savedInteractionID.String()),
-			slog.String("domain", string(domain)))
+		l.logger.WarnContext(ctx, "Failed to save interaction", slog.Any("error", err))
 	}
 
-	// --- Step 6: Parse Response Based on Original Domain ---
-	cleanTxt := cleanJSONResponse(rawResponseText)
-	var finalResponseData interface{}
-
-	switch domain {
-	case types.DomainItinerary, types.DomainGeneral:
-		// Try to parse unified chat response format with "data" wrapper
-		var unifiedResponse struct {
-			Data types.AiCityResponse `json:"data"`
-		}
-		if err := json.Unmarshal([]byte(cleanTxt), &unifiedResponse); err != nil {
-			// If that fails, try direct AiCityResponse for backward compatibility
-			var itineraryResponse types.AiCityResponse
-			if err := json.Unmarshal([]byte(cleanTxt), &itineraryResponse); err != nil {
-				span.RecordError(err)
-				return nil, fmt.Errorf("failed to parse itinerary response JSON (tried both unified and direct formats): %w", err)
-			}
-			unifiedResponse.Data = itineraryResponse
-		}
-
-		// Generate session_id and IDs for POIs
-		unifiedResponse.Data.SessionID = sessionID
-
-		for i := range unifiedResponse.Data.PointsOfInterest {
-			unifiedResponse.Data.PointsOfInterest[i].ID = uuid.New()
-			unifiedResponse.Data.PointsOfInterest[i].LlmInteractionID = savedInteractionID
-		}
-		for i := range unifiedResponse.Data.AIItineraryResponse.PointsOfInterest {
-			unifiedResponse.Data.AIItineraryResponse.PointsOfInterest[i].ID = uuid.New()
-			unifiedResponse.Data.AIItineraryResponse.PointsOfInterest[i].LlmInteractionID = savedInteractionID
-		}
-
-		finalResponseData = unifiedResponse.Data
-	case types.DomainAccommodation:
-		var hotelResponse struct {
-			Hotels []types.HotelDetailedInfo `json:"hotels"`
-		}
-		if err := json.Unmarshal([]byte(cleanTxt), &hotelResponse); err != nil {
-			span.RecordError(err)
-			return nil, fmt.Errorf("failed to parse hotel response JSON: %w", err)
-		}
-
-		// Generate IDs for hotels
-		for i := range hotelResponse.Hotels {
-			hotelResponse.Hotels[i].ID = uuid.New()
-			hotelResponse.Hotels[i].LlmInteractionID = savedInteractionID
-		}
-
-		finalResponseData = hotelResponse
-	case types.DomainDining:
-		var restaurantResponse struct {
-			Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
-		}
-		if err := json.Unmarshal([]byte(cleanTxt), &restaurantResponse); err != nil {
-			span.RecordError(err)
-			return nil, fmt.Errorf("failed to parse restaurant response JSON: %w", err)
-		}
-
-		// Generate IDs for restaurants
-		for i := range restaurantResponse.Restaurants {
-			restaurantResponse.Restaurants[i].ID = uuid.New()
-			restaurantResponse.Restaurants[i].LlmInteractionID = savedInteractionID
-		}
-
-		finalResponseData = restaurantResponse
-	case types.DomainActivities:
-		var activityResponse struct {
-			Activities []types.POIDetailedInfo `json:"activities"`
-		}
-		if err := json.Unmarshal([]byte(cleanTxt), &activityResponse); err != nil {
-			span.RecordError(err)
-			return nil, fmt.Errorf("failed to parse activity response JSON: %w", err)
-		}
-
-		// Generate IDs for activities
-		for i := range activityResponse.Activities {
-			activityResponse.Activities[i].ID = uuid.New()
-			activityResponse.Activities[i].LlmInteractionID = savedInteractionID
-		}
-
-		finalResponseData = activityResponse
-	default:
-		span.RecordError(fmt.Errorf("unhandled domain type: %s", domain))
-		return nil, fmt.Errorf("unhandled domain type: %s", domain)
-	}
+	// Assign IDs to response items
+	assignIDs(finalResponse, savedInteractionID)
 
 	span.SetStatus(codes.Ok, "Unified chat message processed successfully")
-	return finalResponseData, nil
+	return finalResponse, nil
 }
 
-// ProcessUnifiedChatMessageStreamOptimized handles unified chat with optimized streaming based on Google GenAI patterns
-func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStreamOptimized(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ProcessUnifiedChatMessageStreamOptimized", trace.WithAttributes(
+// extractTextFromResponse extracts text from the AI response
+func extractTextFromResponse(resp *genai.GenerateContentResponse) string {
+	var txt string
+	for _, candidate := range resp.Candidates {
+		if candidate.Content != nil && len(candidate.Content.Parts) > 0 {
+			txt = candidate.Content.Parts[0].Text
+			break
+		}
+	}
+	return txt
+}
+
+// assignIDs assigns UUIDs and interaction IDs to response items
+func assignIDs(response interface{}, interactionID uuid.UUID) {
+	switch r := response.(type) {
+	case types.AiCityResponse:
+		for i := range r.PointsOfInterest {
+			r.PointsOfInterest[i].ID = uuid.New()
+			r.PointsOfInterest[i].LlmInteractionID = interactionID
+		}
+		for i := range r.AIItineraryResponse.PointsOfInterest {
+			r.AIItineraryResponse.PointsOfInterest[i].ID = uuid.New()
+			r.AIItineraryResponse.PointsOfInterest[i].LlmInteractionID = interactionID
+		}
+	case struct {
+		Hotels []types.HotelDetailedInfo `json:"hotels"`
+	}:
+		for i := range r.Hotels {
+			r.Hotels[i].ID = uuid.New()
+			r.Hotels[i].LlmInteractionID = interactionID
+		}
+	case struct {
+		Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
+	}:
+		for i := range r.Restaurants {
+			r.Restaurants[i].ID = uuid.New()
+			r.Restaurants[i].LlmInteractionID = interactionID
+		}
+	case struct {
+		Activities []types.POIDetailedInfo `json:"activities"`
+	}:
+		for i := range r.Activities {
+			r.Activities[i].ID = uuid.New()
+			r.Activities[i].LlmInteractionID = interactionID
+		}
+	}
+}
+
+// ProcessUnifiedChatMessageStream handles unified chat with optimized streaming based on Google GenAI patterns
+func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ProcessUnifiedChatMessageStream", trace.WithAttributes(
 		attribute.String("message", message),
 	))
 	defer span.End()
 
-	// --- Step 1: Extract City and Intent from Natural Language ---
-	cityName, cleanedMessage, err := l.extractCityFromMessage(ctx, message)
+	// Extract city and clean message
+	extractedCity, cleanedMessage, err := l.extractCityFromMessage(ctx, message)
 	if err != nil {
 		span.RecordError(err)
-		l.sendEventSimple(ctx, eventCh, types.StreamEvent{
-			Type:  types.EventTypeError,
-			Error: fmt.Sprintf("failed to parse message: %v", err),
-		})
+		l.sendEventSimple(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: err.Error()})
 		return fmt.Errorf("failed to parse message: %w", err)
 	}
+	if extractedCity != "" {
+		cityName = extractedCity
+	}
+	span.SetAttributes(attribute.String("extracted.city", cityName), attribute.String("cleaned.message", cleanedMessage))
 
-	span.SetAttributes(
-		attribute.String("extracted.city", cityName),
-		attribute.String("cleaned.message", cleanedMessage),
-	)
-
-	// --- Step 2: Detect Domain ---
-	domainDetector := &DomainDetector{}
+	// Detect domain
+	domainDetector := &types.DomainDetector{}
 	domain := domainDetector.DetectDomain(ctx, cleanedMessage)
 	span.SetAttributes(attribute.String("detected.domain", string(domain)))
 
-	// --- Step 3: Gather Context (User Profile) QUICKLY ---
+	// Step 3: Fetch user data
 	_, searchProfile, _, err := l.FetchUserData(ctx, userID, profileID)
 	if err != nil {
 		span.RecordError(err)
-		l.sendEventSimple(ctx, eventCh, types.StreamEvent{
-			Type:  types.EventTypeError,
-			Error: fmt.Sprintf("failed to fetch user data: %v", err),
-		})
+		l.sendEventSimple(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: err.Error()})
 		return fmt.Errorf("failed to fetch user data: %w", err)
 	}
+	basePreferences := getUserPreferencesPrompt(searchProfile)
 
-	// Use default location from profile if not provided
+	// Use default location if not provided
+	var lat, lon float64
 	if userLocation == nil && searchProfile.UserLatitude != nil && searchProfile.UserLongitude != nil {
 		userLocation = &types.UserLocation{
 			UserLat: *searchProfile.UserLatitude,
 			UserLon: *searchProfile.UserLongitude,
 		}
 	}
-	var lat, lon float64
 	if userLocation != nil {
 		lat, lon = userLocation.UserLat, userLocation.UserLon
 	}
 
-	// --- Step 4: Build the Optimized Prompt ---
-	prompt := GetUnifiedChatPrompt(string(domain), cityName, lat, lon, searchProfile)
+	// Step 4: Fan-in Fan-out Setup
+	var wg sync.WaitGroup
+	var closeOnce sync.Once
 
-	// --- Step 5: Direct Streaming (Google GenAI pattern) ---
-	startTime := time.Now()
-	var responseText strings.Builder
-
-	// Send start event once
+	sessionID := uuid.New()
 	l.sendEventSimple(ctx, eventCh, types.StreamEvent{
 		Type: types.EventTypeStart,
-		Data: map[string]interface{}{
-			"domain": string(domain),
-			"city":   cityName,
-		},
+		Data: map[string]interface{}{"domain": string(domain), "city": cityName, "session_id": sessionID.String()},
 	})
 
-	// Direct streaming approach - fail fast
-	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
-	if err != nil {
-		span.RecordError(err)
-		l.sendEventSimple(ctx, eventCh, types.StreamEvent{
-			Type:  types.EventTypeError,
-			Error: fmt.Sprintf("failed to start streaming: %v", err),
-		})
-		return fmt.Errorf("failed to start streaming: %w", err)
+	// Step 5: Spawn streaming workers based on domain
+	switch domain {
+	case types.DomainItinerary, types.DomainGeneral:
+		wg.Add(3)
+
+		// Worker 1: Stream City Data
+		go func() {
+			defer wg.Done()
+			prompt := getCityDataPrompt(cityName)
+			l.streamWorker(ctx, prompt, "city_data", eventCh, domain)
+		}()
+
+		// Worker 2: Stream General POIs
+		go func() {
+			defer wg.Done()
+			prompt := getGeneralPOIPrompt(cityName)
+			l.streamWorker(ctx, prompt, "general_pois", eventCh, domain)
+		}()
+
+		// Worker 3: Stream Personalized Itinerary
+		go func() {
+			defer wg.Done()
+			prompt := getPersonalizedItineraryPrompt(cityName, basePreferences)
+			l.streamWorker(ctx, prompt, "itinerary", eventCh, domain)
+		}()
+
+	case types.DomainAccommodation:
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			prompt := getAccommodationPrompt(cityName, lat, lon, basePreferences)
+			l.streamWorker(ctx, prompt, "hotels", eventCh, domain)
+		}()
+
+	case types.DomainDining:
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			prompt := getDiningPrompt(cityName, lat, lon, basePreferences)
+			l.streamWorker(ctx, prompt, "restaurants", eventCh, domain)
+		}()
+
+	case types.DomainActivities:
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			prompt := getActivitiesPrompt(cityName, lat, lon, basePreferences)
+			l.streamWorker(ctx, prompt, "activities", eventCh, domain)
+		}()
+
+	default:
+		l.sendEventSimple(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: fmt.Sprintf("unhandled domain: %s", domain)})
+		return fmt.Errorf("unhandled domain type: %s", domain)
 	}
 
-	// Simple iteration following Google's pattern
-	for resp, err := range iter {
-		if err != nil {
-			span.RecordError(err)
+	// Step 6: Completion goroutine with sync.Once for channel closure
+	go func() {
+		wg.Wait()             // Wait for all workers to complete
+		if ctx.Err() == nil { // Only send completion event if context is still active
+			l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+				Type: types.EventTypeComplete,
+				Data: map[string]interface{}{"session_id": sessionID.String()},
+			})
+		}
+		closeOnce.Do(func() {
+			close(eventCh) // Close the channel only once
+			l.logger.InfoContext(ctx, "Event channel closed by completion goroutine")
+		})
+	}()
+
+	// Step 7: Save interaction asynchronously
+	go func() {
+		asyncCtx := context.Background()
+		interaction := types.LlmInteraction{
+			ID:        uuid.New(),
+			SessionID: sessionID,
+			UserID:    userID,
+			ProfileID: profileID,
+			CityName:  cityName,
+			Prompt:    fmt.Sprintf("Unified Chat Stream - Domain: %s, Message: %s", domain, cleanedMessage),
+			ModelUsed: model,
+			Timestamp: time.Now(),
+		}
+		if _, err := l.llmInteractionRepo.SaveInteraction(asyncCtx, interaction); err != nil {
+			l.logger.ErrorContext(asyncCtx, "Failed to save stream interaction", slog.Any("error", err))
+		}
+	}()
+
+	span.SetStatus(codes.Ok, "Unified chat stream processed successfully")
+	return nil
+}
+
+// streamWorker handles streaming for a single worker with context checks
+func (l *LlmInteractiontServiceImpl) streamWorker(ctx context.Context, prompt, partType string, eventCh chan<- types.StreamEvent, domain types.DomainType) {
+	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	if err != nil {
+		if ctx.Err() == nil {
 			l.sendEventSimple(ctx, eventCh, types.StreamEvent{
 				Type:  types.EventTypeError,
-				Error: fmt.Sprintf("streaming error: %v", err),
+				Error: fmt.Sprintf("%s worker failed: %v", partType, err),
 			})
-			return fmt.Errorf("streaming error: %w", err)
 		}
+		return
+	}
 
-		// Process each chunk immediately
+	var fullResponse strings.Builder
+	for resp, err := range iter {
+		if ctx.Err() != nil {
+			return // Stop if context is canceled
+		}
+		if err != nil {
+			if ctx.Err() == nil {
+				l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+					Type:  types.EventTypeError,
+					Error: fmt.Sprintf("%s streaming error: %v", partType, err),
+				})
+			}
+			return
+		}
 		for _, cand := range resp.Candidates {
 			if cand.Content != nil {
 				for _, part := range cand.Content.Parts {
 					if part.Text != "" {
-						chunkText := string(part.Text)
-						responseText.WriteString(chunkText)
-						
-						// Send chunk immediately without complex event management
+						chunk := string(part.Text)
+						fullResponse.WriteString(chunk)
 						l.sendEventSimple(ctx, eventCh, types.StreamEvent{
 							Type: types.EventTypeChunk,
 							Data: map[string]interface{}{
-								"chunk":  chunkText,
+								"part":   partType,
+								"chunk":  chunk,
 								"domain": string(domain),
 							},
 						})
@@ -4039,60 +3419,38 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStreamOptimized(ct
 			}
 		}
 	}
-
-	latencyMs := int(time.Since(startTime).Milliseconds())
-	rawResponseText := responseText.String()
-
-	if rawResponseText == "" {
-		err := fmt.Errorf("empty response from AI")
-		span.RecordError(err)
-		l.sendEventSimple(ctx, eventCh, types.StreamEvent{
-			Type:  types.EventTypeError,
-			Error: "empty response from AI",
-		})
-		return err
-	}
-
-	// --- Step 6: Save LLM interaction to database (async to not block streaming) ---
-	go func() {
-		asyncCtx := context.Background() // Use background context for async operation
-		sessionID := uuid.New()
-		interaction := types.LlmInteraction{
-			ID:           uuid.New(),
-			SessionID:    sessionID,
-			UserID:       userID,
-			ProfileID:    profileID,
-			CityName:     cityName,
-			Prompt:       fmt.Sprintf("Unified Chat Stream Optimized - Domain: %s, Message: %s", domain, cleanedMessage),
-			ResponseText: rawResponseText,
-			ModelUsed:    model,
-			LatencyMs:    latencyMs,
-			Timestamp:    time.Now(),
-		}
-
-		_, err := l.llmInteractionRepo.SaveInteraction(asyncCtx, interaction)
-		if err != nil {
-			l.logger.ErrorContext(asyncCtx, "Failed to save unified chat stream interaction (async)", slog.Any("error", err))
-		}
-	}()
-
-	// Send final complete response
-	cleanTxt := cleanJSONResponse(rawResponseText)
-	l.sendEventSimple(ctx, eventCh, types.StreamEvent{
-		Type: types.EventTypeComplete,
-		Data: map[string]interface{}{
-			"response": cleanTxt,
-			"domain":   string(domain),
-			"latency":  latencyMs,
-		},
-	})
-
-	span.SetStatus(codes.Ok, "Optimized unified chat stream completed")
-	return nil
 }
 
-// Legacy function for backward compatibility
-func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
-	// Use the optimized version
-	return l.ProcessUnifiedChatMessageStreamOptimized(ctx, userID, profileID, cityName, message, userLocation, eventCh)
+func extractTextFromGenAIResponse(resp *genai.GenerateContentResponse) string {
+	var text strings.Builder
+	for _, cand := range resp.Candidates {
+		if cand.Content != nil {
+			for _, part := range cand.Content.Parts {
+				if part.Text != "" {
+					text.WriteString(string(part.Text))
+				}
+			}
+		}
+	}
+	return text.String()
+}
+
+// sendEventSimple sends events with context check
+func (l *LlmInteractiontServiceImpl) sendEventSimple(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent) {
+	if ctx.Err() != nil {
+		return // Skip send if context is canceled
+	}
+	if event.EventID == "" {
+		event.EventID = uuid.New().String()
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+
+	select {
+	case ch <- event:
+		// Sent successfully
+	case <-ctx.Done():
+		// Context canceled, do not send
+	}
 }

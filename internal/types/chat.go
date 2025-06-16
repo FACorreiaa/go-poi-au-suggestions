@@ -1,8 +1,11 @@
 package types
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -265,4 +268,50 @@ type ContinueChatRequest struct {
 	Message     string          `json:"message"`
 	CityName    string          `json:"city_name,omitempty"`
 	ContextType ChatContextType `json:"context_type"`
+}
+
+//
+
+type SimpleIntentClassifier struct{}
+
+func (c *SimpleIntentClassifier) Classify(ctx context.Context, message string) (IntentType, error) {
+	message = strings.ToLower(message)
+	if matched, _ := regexp.MatchString(`add|include|visit`, message); matched {
+		return IntentAddPOI, nil
+	} else if matched, _ := regexp.MatchString(`remove|delete|skip`, message); matched {
+		return IntentRemovePOI, nil
+	} else if matched, _ := regexp.MatchString(`what|where|how|why|when`, message); matched {
+		return IntentAskQuestion, nil
+	}
+	return IntentModifyItinerary, nil // Default intent
+}
+
+// DomainDetector detects the primary domain from user queries
+type DomainDetector struct{}
+
+func (d *DomainDetector) DetectDomain(ctx context.Context, message string) DomainType {
+	message = strings.ToLower(message)
+
+	// Accommodation domain keywords
+	if matched, _ := regexp.MatchString(`hotel|hostel|accommodation|stay|sleep|room|booking|airbnb|lodge|resort|guesthouse`, message); matched {
+		return DomainAccommodation
+	}
+
+	// Dining domain keywords
+	if matched, _ := regexp.MatchString(`restaurant|food|eat|dine|meal|cuisine|drink|cafe|bar|lunch|dinner|breakfast|brunch`, message); matched {
+		return DomainDining
+	}
+
+	// Activity domain keywords
+	if matched, _ := regexp.MatchString(`activity|museum|park|attraction|tour|visit|see|do|experience|adventure|shopping|nightlife`, message); matched {
+		return DomainActivities
+	}
+
+	// Itinerary domain keywords
+	if matched, _ := regexp.MatchString(`itinerary|plan|schedule|trip|day|week|journey|route|organize|arrange`, message); matched {
+		return DomainItinerary
+	}
+
+	// Default to general domain
+	return DomainGeneral
 }

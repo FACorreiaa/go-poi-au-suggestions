@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -1307,87 +1306,94 @@ func (h *HandlerImpl) ProcessUnifiedChatMessageStream(w http.ResponseWriter, r *
 
 	// Create event channel
 	eventCh := make(chan types.StreamEvent, 100)
-	
+
 	userLocation := &types.UserLocation{
 		UserLat: 38.7223,
 		UserLon: -9.1393,
 	}
 
-	// Channel for coordinating shutdown
-	doneCh := make(chan struct{})
-	var once sync.Once
-
 	// Start processing in a goroutine
-	go func() {
-		defer func() {
-			// Signal completion and close channel exactly once
-			once.Do(func() {
-				close(eventCh)
-				close(doneCh)
-			})
-		}()
-		
-		err := h.llmInteractionService.ProcessUnifiedChatMessageStream(ctx, userID, profileID, "", req.Message, userLocation, eventCh)
-		if err != nil {
-			l.ErrorContext(ctx, "Failed to process unified chat message stream", slog.Any("error", err))
-			span.RecordError(err)
-			
-			// Safely send error event, check if context is still active
-			select {
-			case eventCh <- types.StreamEvent{
-				Type:      types.EventTypeError,
-				Error:     err.Error(),
-				Timestamp: time.Now(),
-				EventID:   uuid.New().String(),
-			}:
-				// Event sent successfully
-			case <-ctx.Done():
-				// Context cancelled, don't send event
-				return
-			}
-		}
-	}()
+	// go func() {
+	// 	err := h.llmInteractionService.ProcessUnifiedChatMessageStream(ctx, userID, profileID, "", req.Message, userLocation, eventCh)
+	// 	if err != nil {
+	// 		l.ErrorContext(ctx, "Failed to process unified chat message stream", slog.Any("error", err))
+	// 		span.RecordError(err)
+
+	// 		// Safely send error event, check if context is still active
+	// 		select {
+	// 		case eventCh <- types.StreamEvent{
+	// 			Type:      types.EventTypeError,
+	// 			Error:     err.Error(),
+	// 			Timestamp: time.Now(),
+	// 			EventID:   uuid.New().String(),
+	// 		}:
+	// 			// Event sent successfully
+	// 		case <-ctx.Done():
+	// 			// Context cancelled, don't send event
+	// 			return
+	// 		}
+	// 	}
+	// }()
 
 	// Stream events to client
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		l.ErrorContext(ctx, "Response writer does not support flushing")
-		span.SetStatus(codes.Error, "Streaming not supported")
-		api.ErrorResponse(w, r, http.StatusInternalServerError, "Streaming not supported")
-		return
-	}
+	// flusher, ok := w.(http.Flusher)
+	// if !ok {
+	// 	l.ErrorContext(ctx, "Response writer does not support flushing")
+	// 	span.SetStatus(codes.Error, "Streaming not supported")
+	// 	api.ErrorResponse(w, r, http.StatusInternalServerError, "Streaming not supported")
+	// 	return
+	// }
 
-	for {
-		select {
-		case event, ok := <-eventCh:
-			if !ok {
-				l.InfoContext(ctx, "Event channel closed, ending stream")
-				span.SetStatus(codes.Ok, "Stream completed")
-				return
-			}
+	// for {
+	// 	select {
+	// 	case event, ok := <-eventCh:
+	// 		if !ok {
+	// 			l.InfoContext(ctx, "Event channel closed, ending stream")
+	// 			span.SetStatus(codes.Ok, "Stream completed")
+	// 			return
+	// 		}
 
-			eventData, err := json.Marshal(event)
-			if err != nil {
-				l.ErrorContext(ctx, "Failed to marshal event", slog.Any("error", err))
-				span.RecordError(err)
-				continue
-			}
+	// 		eventData, err := json.Marshal(event)
+	// 		if err != nil {
+	// 			l.ErrorContext(ctx, "Failed to marshal event", slog.Any("error", err))
+	// 			span.RecordError(err)
+	// 			continue
+	// 		}
 
-			fmt.Fprintf(w, "data: %s\n\n", eventData)
+	// 		fmt.Fprintf(w, "data: %s\n\n", eventData)
+	// 		flusher.Flush()
+
+	// 		if event.Type == types.EventTypeComplete || event.Type == types.EventTypeError {
+	// 			l.InfoContext(ctx, "Stream completed", slog.String("eventType", event.Type))
+	// 			span.SetStatus(codes.Ok, "Stream completed")
+	// 			return
+	// 		}
+
+	// 	case <-r.Context().Done():
+	// 		l.InfoContext(ctx, "Client disconnected")
+	// 		span.SetStatus(codes.Ok, "Client disconnected")
+	// 		return
+	// 	}
+	// }
+	go h.llmInteractionService.ProcessUnifiedChatMessageStream(
+		ctx, userID, profileID, "", req.Message, userLocation, eventCh,
+	)
+
+	for event := range eventCh {
+		jsonData, err := json.Marshal(event)
+		if err != nil {
+			h.logger.ErrorContext(ctx, "Failed to marshal stream event", "error", err)
+			continue
+		}
+
+		fmt.Fprintf(w, "data: %s\n\n", jsonData)
+
+		if flusher, ok := w.(http.Flusher); ok {
 			flusher.Flush()
-
-			if event.Type == types.EventTypeComplete || event.Type == types.EventTypeError {
-				l.InfoContext(ctx, "Stream completed", slog.String("eventType", event.Type))
-				span.SetStatus(codes.Ok, "Stream completed")
-				return
-			}
-
-		case <-r.Context().Done():
-			l.InfoContext(ctx, "Client disconnected")
-			span.SetStatus(codes.Ok, "Client disconnected")
-			return
 		}
 	}
+
+	h.logger.InfoContext(ctx, "Stream handler finished after channel was closed.")
 }
 
 // RAGEnabledChatQuery handles queries using RAG for enhanced responses

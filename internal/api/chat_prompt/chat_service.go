@@ -116,6 +116,7 @@ type LlmInteractiontService interface {
 	) error
 
 	ProcessUnifiedChatMessage(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (interface{}, error)
+	ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error
 
 	// // Context-aware chat methods
 	// StartNewSessionWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (uuid.UUID, *types.AiCityResponse, error)
@@ -3645,16 +3646,94 @@ func min(a, b int) int {
 	return b
 }
 
+// extractCityFromMessage uses AI to extract city name and clean the message
+func (l *LlmInteractiontServiceImpl) extractCityFromMessage(ctx context.Context, message string) (cityName, cleanedMessage string, err error) {
+	prompt := fmt.Sprintf(`
+You are a text parser. Extract the city name from the user's travel request and return a clean version of the message.
+
+User message: "%s"
+
+Respond with ONLY a JSON object in this exact format:
+{
+    "city": "City Name",
+    "message": "cleaned message without city"
+}
+
+Examples:
+- "Find restaurants in Barcelona" → {"city": "Barcelona", "message": "Find restaurants"}
+- "What to do in Paris?" → {"city": "Paris", "message": "What to do"}
+- "Barcelona restaurants" → {"city": "Barcelona", "message": "restaurants"}
+- "Show me hotels in New York" → {"city": "New York", "message": "Show me hotels"}
+- "Things to do Madrid" → {"city": "Madrid", "message": "Things to do"}
+
+If no city is mentioned, use empty string for city.
+`, message)
+
+	response, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{
+		Temperature: genai.Ptr[float32](0.1), // Low temperature for consistent parsing
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("failed to parse message: %w", err)
+	}
+
+	var responseText string
+	for _, cand := range response.Candidates {
+		if cand.Content != nil {
+			for _, part := range cand.Content.Parts {
+				if part.Text != "" {
+					responseText += string(part.Text)
+				}
+			}
+		}
+	}
+
+	if responseText == "" {
+		return "", "", fmt.Errorf("empty response from AI parser")
+	}
+
+	cleanResponse := cleanJSONResponse(responseText)
+	var parsed struct {
+		City    string `json:"city"`
+		Message string `json:"message"`
+	}
+
+	if err := json.Unmarshal([]byte(cleanResponse), &parsed); err != nil {
+		return "", "", fmt.Errorf("failed to parse extraction response: %w", err)
+	}
+
+	// If no city extracted, return original message
+	if parsed.City == "" {
+		return "", message, nil
+	}
+
+	return parsed.City, parsed.Message, nil
+}
+
 func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessage(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (interface{}, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ProcessUnifiedChatMessage", trace.WithAttributes(
 		attribute.String("message", message),
-		attribute.String("city.name", cityName),
 	))
 	defer span.End()
 
-	// --- Step 1: Detect Domain ---
+	// --- Step 1: Extract City and Intent from Natural Language ---
+	cityName, cleanedMessage, err := l.extractCityFromMessage(ctx, message)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to parse message: %w", err)
+	}
+
+	span.SetAttributes(
+		attribute.String("extracted.city", cityName),
+		attribute.String("cleaned.message", cleanedMessage),
+	)
+	l.logger.InfoContext(ctx, "Extracted city from message",
+		slog.String("original_message", message),
+		slog.String("city", cityName),
+		slog.String("cleaned_message", cleanedMessage))
+
+	// --- Step 2: Detect Domain ---
 	domainDetector := &DomainDetector{}
-	domain := domainDetector.DetectDomain(ctx, message)
+	domain := domainDetector.DetectDomain(ctx, cleanedMessage)
 	span.SetAttributes(attribute.String("detected.domain", string(domain)))
 	l.logger.InfoContext(ctx, "Detected domain for unified chat", slog.String("domain", string(domain)))
 
@@ -3683,11 +3762,11 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessage(ctx context.Conte
 	prompt := GetUnifiedChatPrompt(string(domain), cityName, lat, lon, searchProfile)
 
 	// --- Step 4: Call LLM API ---
-	// NOTE: This part needs a slight refactor. Instead of separate workers for each type,
-	// you have one generic worker that takes a prompt and returns JSON.
+	startTime := time.Now()
 	response, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{
 		Temperature: genai.Ptr[float32](defaultTemperature),
 	})
+	latencyMs := int(time.Since(startTime).Milliseconds())
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to generate unified chat response from LLM: %w", err)
@@ -3704,39 +3783,346 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessage(ctx context.Conte
 		}
 	}
 
-	// --- Step 5: Parse Response Based on Original Domain ---
-	// The response needs to be unmarshalled into the correct struct.
+	if rawResponseText == "" {
+		err := fmt.Errorf("empty response from AI for unified chat")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Empty response from AI")
+		return nil, err
+	}
+
+	// --- Step 5: Save LLM interaction to database first ---
+	sessionID := uuid.New() // Generate new session ID for this interaction
+	interaction := types.LlmInteraction{
+		ID:           uuid.New(),
+		SessionID:    sessionID,
+		UserID:       userID,
+		ProfileID:    profileID,
+		CityName:     cityName,
+		Prompt:       fmt.Sprintf("Unified Chat - Domain: %s, Message: %s", domain, cleanedMessage),
+		ResponseText: rawResponseText,
+		ModelUsed:    model,
+		LatencyMs:    latencyMs,
+		Timestamp:    time.Now(),
+	}
+
+	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to save unified chat LLM interaction", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to save LLM interaction")
+		// Continue execution despite save failure
+		savedInteractionID = uuid.New() // Use a fallback ID
+	} else {
+		span.SetAttributes(attribute.String("llm_interaction.id", savedInteractionID.String()))
+		l.logger.InfoContext(ctx, "Saved unified chat LLM interaction",
+			slog.String("interaction_id", savedInteractionID.String()),
+			slog.String("domain", string(domain)))
+	}
+
+	// --- Step 6: Parse Response Based on Original Domain ---
 	cleanTxt := cleanJSONResponse(rawResponseText)
 	var finalResponseData interface{}
 
 	switch domain {
 	case types.DomainItinerary, types.DomainGeneral:
-		var itineraryResponse types.AiCityResponse // Assuming this is the expected struct
-		if err := json.Unmarshal([]byte(cleanTxt), &itineraryResponse); err != nil {
-			return nil, fmt.Errorf("failed to parse itinerary response JSON: %w", err)
+		// Try to parse unified chat response format with "data" wrapper
+		var unifiedResponse struct {
+			Data types.AiCityResponse `json:"data"`
 		}
-		finalResponseData = itineraryResponse
+		if err := json.Unmarshal([]byte(cleanTxt), &unifiedResponse); err != nil {
+			// If that fails, try direct AiCityResponse for backward compatibility
+			var itineraryResponse types.AiCityResponse
+			if err := json.Unmarshal([]byte(cleanTxt), &itineraryResponse); err != nil {
+				span.RecordError(err)
+				return nil, fmt.Errorf("failed to parse itinerary response JSON (tried both unified and direct formats): %w", err)
+			}
+			unifiedResponse.Data = itineraryResponse
+		}
+
+		// Generate session_id and IDs for POIs
+		unifiedResponse.Data.SessionID = sessionID
+
+		for i := range unifiedResponse.Data.PointsOfInterest {
+			unifiedResponse.Data.PointsOfInterest[i].ID = uuid.New()
+			unifiedResponse.Data.PointsOfInterest[i].LlmInteractionID = savedInteractionID
+		}
+		for i := range unifiedResponse.Data.AIItineraryResponse.PointsOfInterest {
+			unifiedResponse.Data.AIItineraryResponse.PointsOfInterest[i].ID = uuid.New()
+			unifiedResponse.Data.AIItineraryResponse.PointsOfInterest[i].LlmInteractionID = savedInteractionID
+		}
+
+		finalResponseData = unifiedResponse.Data
 	case types.DomainAccommodation:
 		var hotelResponse struct {
 			Hotels []types.HotelDetailedInfo `json:"hotels"`
 		}
 		if err := json.Unmarshal([]byte(cleanTxt), &hotelResponse); err != nil {
+			span.RecordError(err)
 			return nil, fmt.Errorf("failed to parse hotel response JSON: %w", err)
 		}
+
+		// Generate IDs for hotels
+		for i := range hotelResponse.Hotels {
+			hotelResponse.Hotels[i].ID = uuid.New()
+			hotelResponse.Hotels[i].LlmInteractionID = savedInteractionID
+		}
+
 		finalResponseData = hotelResponse
 	case types.DomainDining:
 		var restaurantResponse struct {
 			Restaurants []types.RestaurantDetailedInfo `json:"restaurants"`
 		}
 		if err := json.Unmarshal([]byte(cleanTxt), &restaurantResponse); err != nil {
+			span.RecordError(err)
 			return nil, fmt.Errorf("failed to parse restaurant response JSON: %w", err)
 		}
+
+		// Generate IDs for restaurants
+		for i := range restaurantResponse.Restaurants {
+			restaurantResponse.Restaurants[i].ID = uuid.New()
+			restaurantResponse.Restaurants[i].LlmInteractionID = savedInteractionID
+		}
+
 		finalResponseData = restaurantResponse
+	case types.DomainActivities:
+		var activityResponse struct {
+			Activities []types.POIDetailedInfo `json:"activities"`
+		}
+		if err := json.Unmarshal([]byte(cleanTxt), &activityResponse); err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("failed to parse activity response JSON: %w", err)
+		}
+
+		// Generate IDs for activities
+		for i := range activityResponse.Activities {
+			activityResponse.Activities[i].ID = uuid.New()
+			activityResponse.Activities[i].LlmInteractionID = savedInteractionID
+		}
+
+		finalResponseData = activityResponse
 	default:
+		span.RecordError(fmt.Errorf("unhandled domain type: %s", domain))
 		return nil, fmt.Errorf("unhandled domain type: %s", domain)
 	}
 
-	// TODO: Save the LLM interaction to your database here.
-
+	span.SetStatus(codes.Ok, "Unified chat message processed successfully")
 	return finalResponseData, nil
+}
+
+// ProcessUnifiedChatMessageStream handles unified chat with streaming response
+func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ProcessUnifiedChatMessageStream", trace.WithAttributes(
+		attribute.String("message", message),
+	))
+	defer span.End()
+
+	// --- Step 1: Extract City and Intent from Natural Language ---
+	cityName, cleanedMessage, err := l.extractCityFromMessage(ctx, message)
+	if err != nil {
+		span.RecordError(err)
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     fmt.Sprintf("failed to parse message: %v", err),
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		})
+		return fmt.Errorf("failed to parse message: %w", err)
+	}
+
+	span.SetAttributes(
+		attribute.String("extracted.city", cityName),
+		attribute.String("cleaned.message", cleanedMessage),
+	)
+	l.logger.InfoContext(ctx, "Extracted city from message for stream",
+		slog.String("original_message", message),
+		slog.String("city", cityName),
+		slog.String("cleaned_message", cleanedMessage))
+
+	// --- Step 2: Detect Domain ---
+	domainDetector := &DomainDetector{}
+	domain := domainDetector.DetectDomain(ctx, cleanedMessage)
+	span.SetAttributes(attribute.String("detected.domain", string(domain)))
+	l.logger.InfoContext(ctx, "Detected domain for unified chat stream", slog.String("domain", string(domain)))
+
+	// Send domain detection event
+	l.sendEvent(ctx, eventCh, types.StreamEvent{
+		Type:      types.EventTypeDomainDetected,
+		Data:      map[string]string{"domain": string(domain)},
+		Timestamp: time.Now(),
+		EventID:   uuid.New().String(),
+	})
+
+	// --- Step 2: Gather Context (User Profile) ---
+	_, searchProfile, _, err := l.FetchUserData(ctx, userID, profileID)
+	if err != nil {
+		span.RecordError(err)
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     fmt.Sprintf("failed to fetch user data: %v", err),
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		})
+		return fmt.Errorf("failed to fetch user data for unified chat stream: %w", err)
+	}
+
+	// Use default location from profile if not provided
+	if userLocation == nil && searchProfile.UserLatitude != nil && searchProfile.UserLongitude != nil {
+		userLocation = &types.UserLocation{
+			UserLat: *searchProfile.UserLatitude,
+			UserLon: *searchProfile.UserLongitude,
+		}
+	}
+	var lat, lon float64
+	if userLocation != nil {
+		lat, lon = userLocation.UserLat, userLocation.UserLon
+	}
+
+	// --- Step 3: Build the Correct Prompt ---
+	prompt := GetUnifiedChatPrompt(string(domain), cityName, lat, lon, searchProfile)
+
+	// Send prompt preparation event
+	l.sendEvent(ctx, eventCh, types.StreamEvent{
+		Type:      types.EventTypePromptGenerated,
+		Data:      map[string]string{"prompt_length": fmt.Sprintf("%d", len(prompt))},
+		Timestamp: time.Now(),
+		EventID:   uuid.New().String(),
+	})
+
+	// --- Step 4: Call LLM API with Streaming ---
+	startTime := time.Now()
+	var responseText strings.Builder
+
+	// Try streaming first
+	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	if err == nil {
+		// Handle streaming response
+		for resp, err := range iter {
+			if err != nil {
+				span.RecordError(err)
+				l.sendEvent(ctx, eventCh, types.StreamEvent{
+					Type:      types.EventTypeError,
+					Error:     fmt.Sprintf("streaming error: %v", err),
+					Timestamp: time.Now(),
+					EventID:   uuid.New().String(),
+				})
+				return fmt.Errorf("streaming error: %w", err)
+			}
+			for _, cand := range resp.Candidates {
+				if cand.Content != nil {
+					for _, part := range cand.Content.Parts {
+						if part.Text != "" {
+							responseText.WriteString(string(part.Text))
+							// Send streaming text event based on domain
+							eventType := types.EventTypeUnifiedChat
+							switch domain {
+							case types.DomainItinerary, types.DomainGeneral:
+								eventType = types.EventTypeItinerary
+							case types.DomainAccommodation:
+								eventType = types.EventTypeHotels
+							case types.DomainDining:
+								eventType = types.EventTypeRestaurants
+							}
+							l.sendEvent(ctx, eventCh, types.StreamEvent{
+								Type:      eventType,
+								Data:      map[string]string{"partial_response": responseText.String()},
+								Timestamp: time.Now(),
+								EventID:   uuid.New().String(),
+							})
+						}
+					}
+				}
+			}
+		}
+	} else {
+		// Fallback to non-streaming
+		response, err := l.aiClient.GenerateResponse(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+		if err != nil {
+			span.RecordError(err)
+			l.sendEvent(ctx, eventCh, types.StreamEvent{
+				Type:      types.EventTypeError,
+				Error:     fmt.Sprintf("failed to generate response: %v", err),
+				Timestamp: time.Now(),
+				EventID:   uuid.New().String(),
+			})
+			return fmt.Errorf("failed to generate unified chat response: %w", err)
+		}
+		for _, cand := range response.Candidates {
+			if cand.Content != nil {
+				for _, part := range cand.Content.Parts {
+					if part.Text != "" {
+						responseText.WriteString(string(part.Text))
+					}
+				}
+			}
+		}
+	}
+
+	latencyMs := int(time.Since(startTime).Milliseconds())
+	rawResponseText := responseText.String()
+
+	if rawResponseText == "" {
+		err := fmt.Errorf("empty response from AI for unified chat stream")
+		span.RecordError(err)
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     "empty response from AI",
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		})
+		return err
+	}
+
+	// --- Step 5: Parse Response Based on Original Domain ---
+	cleanTxt := cleanJSONResponse(rawResponseText)
+
+	// Send parsing event
+	l.sendEvent(ctx, eventCh, types.StreamEvent{
+		Type:      types.EventTypeParsingResponse,
+		Data:      map[string]string{"domain": string(domain)},
+		Timestamp: time.Now(),
+		EventID:   uuid.New().String(),
+	})
+
+	// --- Step 6: Save LLM interaction to database ---
+	sessionID := uuid.New()
+	interaction := types.LlmInteraction{
+		ID:           uuid.New(),
+		SessionID:    sessionID,
+		UserID:       userID,
+		ProfileID:    profileID,
+		CityName:     cityName,
+		Prompt:       fmt.Sprintf("Unified Chat Stream - Domain: %s, Message: %s", domain, cleanedMessage),
+		ResponseText: rawResponseText,
+		ModelUsed:    model,
+		LatencyMs:    latencyMs,
+		Timestamp:    time.Now(),
+	}
+
+	savedInteractionID, err := l.llmInteractionRepo.SaveInteraction(ctx, interaction)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to save unified chat stream LLM interaction", slog.Any("error", err))
+		span.RecordError(err)
+		l.sendEvent(ctx, eventCh, types.StreamEvent{
+			Type:      types.EventTypeError,
+			Error:     fmt.Sprintf("failed to save interaction: %v", err),
+			Timestamp: time.Now(),
+			EventID:   uuid.New().String(),
+		})
+	} else {
+		span.SetAttributes(attribute.String("llm_interaction.id", savedInteractionID.String()))
+		l.logger.InfoContext(ctx, "Saved unified chat stream LLM interaction",
+			slog.String("interaction_id", savedInteractionID.String()),
+			slog.String("domain", string(domain)))
+	}
+
+	// Send completion event
+	l.sendEvent(ctx, eventCh, types.StreamEvent{
+		Type:      types.EventTypeComplete,
+		Data:      map[string]string{"response": cleanTxt, "domain": string(domain)},
+		Timestamp: time.Now(),
+		EventID:   uuid.New().String(),
+	})
+
+	span.SetStatus(codes.Ok, "Unified chat stream processed successfully")
+	return nil
 }

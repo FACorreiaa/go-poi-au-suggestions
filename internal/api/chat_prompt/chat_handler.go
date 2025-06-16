@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -72,6 +73,10 @@ type Handler interface {
 	// StartItineraryChatSessionStream(w http.ResponseWriter, r *http.Request)
 	// ContinueItineraryChatSession(w http.ResponseWriter, r *http.Request)
 	// ContinueItineraryChatSessionStream(w http.ResponseWriter, r *http.Request)
+
+	// Unified chat methods
+	ProcessUnifiedChatMessage(w http.ResponseWriter, r *http.Request)
+	ProcessUnifiedChatMessageStream(w http.ResponseWriter, r *http.Request)
 }
 type HandlerImpl struct {
 	llmInteractionService LlmInteractiontService
@@ -1143,6 +1148,246 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 
 func (HandlerImpl *HandlerImpl) GetNearbyRecommendations(w http.ResponseWriter, r *http.Request) {
 	return
+}
+
+// ProcessUnifiedChatMessage handles unified chat requests
+func (h *HandlerImpl) ProcessUnifiedChatMessage(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "ProcessUnifiedChatMessage", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/prompt-response/unified-chat"),
+	))
+	defer span.End()
+
+	l := h.logger.With(slog.String("handler", "ProcessUnifiedChatMessage"))
+	l.DebugContext(ctx, "Processing unified chat message")
+
+	// Parse profile ID from URL
+	profileIDStr := chi.URLParam(r, "profileID")
+	profileID, err := uuid.Parse(profileIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid profile ID", slog.String("profileID", profileIDStr), slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid profile ID")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid profile ID")
+		return
+	}
+
+	// Get user ID from auth context
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		Message      string              `json:"message"`
+		UserLocation *types.UserLocation `json:"user_location,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		l.ErrorContext(ctx, "Failed to decode request body", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid request body")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate required fields
+	if req.Message == "" {
+		l.ErrorContext(ctx, "Missing required fields", slog.String("message", req.Message))
+		span.SetStatus(codes.Error, "Missing required fields")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "message is required")
+		return
+	}
+
+	userLocation := &types.UserLocation{
+		UserLat: 38.7223,
+		UserLon: -9.1393,
+	}
+
+	span.SetAttributes(
+		attribute.String("user.id", userID.String()),
+		attribute.String("profile.id", profileID.String()),
+		attribute.String("message", req.Message),
+	)
+
+	// Process unified chat message
+	response, err := h.llmInteractionService.ProcessUnifiedChatMessage(ctx, userID, profileID, "", req.Message, userLocation)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to process unified chat message", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to process chat message")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Failed to process chat message")
+		return
+	}
+
+	l.InfoContext(ctx, "Successfully processed unified chat message")
+	span.SetStatus(codes.Ok, "Success")
+	api.WriteJSONResponse(w, r, http.StatusOK, response)
+}
+
+// ProcessUnifiedChatMessageStream handles unified chat requests with streaming
+func (h *HandlerImpl) ProcessUnifiedChatMessageStream(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "ProcessUnifiedChatMessageStream", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/prompt-response/unified-chat/stream"),
+	))
+	defer span.End()
+
+	l := h.logger.With(slog.String("handler", "ProcessUnifiedChatMessageStream"))
+	l.DebugContext(ctx, "Processing unified chat message with streaming")
+
+	// Parse profile ID from URL
+	profileIDStr := chi.URLParam(r, "profileID")
+	profileID, err := uuid.Parse(profileIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid profile ID", slog.String("profileID", profileIDStr), slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid profile ID")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid profile ID")
+		return
+	}
+
+	// Get user ID from auth context
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		Message      string              `json:"message"`
+		UserLocation *types.UserLocation `json:"user_location,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		l.ErrorContext(ctx, "Failed to decode request body", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid request body")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate required fields
+	if req.Message == "" {
+		l.ErrorContext(ctx, "Missing required fields", slog.String("message", req.Message))
+		span.SetStatus(codes.Error, "Missing required fields")
+		api.ErrorResponse(w, r, http.StatusBadRequest, "message is required")
+		return
+	}
+
+	span.SetAttributes(
+		attribute.String("user.id", userID.String()),
+		attribute.String("profile.id", profileID.String()),
+		attribute.String("message", req.Message),
+	)
+
+	// Set up SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Cache-Control")
+
+	// Create event channel
+	eventCh := make(chan types.StreamEvent, 100)
+	
+	userLocation := &types.UserLocation{
+		UserLat: 38.7223,
+		UserLon: -9.1393,
+	}
+
+	// Channel for coordinating shutdown
+	doneCh := make(chan struct{})
+	var once sync.Once
+
+	// Start processing in a goroutine
+	go func() {
+		defer func() {
+			// Signal completion and close channel exactly once
+			once.Do(func() {
+				close(eventCh)
+				close(doneCh)
+			})
+		}()
+		
+		err := h.llmInteractionService.ProcessUnifiedChatMessageStream(ctx, userID, profileID, "", req.Message, userLocation, eventCh)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to process unified chat message stream", slog.Any("error", err))
+			span.RecordError(err)
+			
+			// Safely send error event, check if context is still active
+			select {
+			case eventCh <- types.StreamEvent{
+				Type:      types.EventTypeError,
+				Error:     err.Error(),
+				Timestamp: time.Now(),
+				EventID:   uuid.New().String(),
+			}:
+				// Event sent successfully
+			case <-ctx.Done():
+				// Context cancelled, don't send event
+				return
+			}
+		}
+	}()
+
+	// Stream events to client
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		l.ErrorContext(ctx, "Response writer does not support flushing")
+		span.SetStatus(codes.Error, "Streaming not supported")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Streaming not supported")
+		return
+	}
+
+	for {
+		select {
+		case event, ok := <-eventCh:
+			if !ok {
+				l.InfoContext(ctx, "Event channel closed, ending stream")
+				span.SetStatus(codes.Ok, "Stream completed")
+				return
+			}
+
+			eventData, err := json.Marshal(event)
+			if err != nil {
+				l.ErrorContext(ctx, "Failed to marshal event", slog.Any("error", err))
+				span.RecordError(err)
+				continue
+			}
+
+			fmt.Fprintf(w, "data: %s\n\n", eventData)
+			flusher.Flush()
+
+			if event.Type == types.EventTypeComplete || event.Type == types.EventTypeError {
+				l.InfoContext(ctx, "Stream completed", slog.String("eventType", event.Type))
+				span.SetStatus(codes.Ok, "Stream completed")
+				return
+			}
+
+		case <-r.Context().Done():
+			l.InfoContext(ctx, "Client disconnected")
+			span.SetStatus(codes.Ok, "Client disconnected")
+			return
+		}
+	}
 }
 
 // RAGEnabledChatQuery handles queries using RAG for enhanced responses

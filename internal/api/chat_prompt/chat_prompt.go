@@ -496,7 +496,6 @@ USER PREFERENCES:
 
 Generate a comprehensive travel response in JSON format with the following structure:
 {
-    "session_id": "generated-uuid",
     "data": {
         "general_city_data": {
             "city": "%s",
@@ -515,10 +514,6 @@ Generate a comprehensive travel response in JSON format with the following struc
         },
         "points_of_interest": [
             {
-                "id": "uuid",
-                "llm_interaction_id": "uuid",
-                "city": "",
-                "city_id": "uuid",
                 "name": "POI Name",
                 "latitude": <float>,
                 "longitude": <float>,
@@ -526,8 +521,7 @@ Generate a comprehensive travel response in JSON format with the following struc
                 "description_poi": "",
                 "address": "",
                 "website": "",
-                "opening_hours": "",
-                "distance": 0
+                "opening_hours": ""
             }
         ],
         "itinerary_response": {
@@ -535,10 +529,6 @@ Generate a comprehensive travel response in JSON format with the following struc
             "overall_description": "Detailed description of the itinerary (100-150 words)",
             "points_of_interest": [
                 {
-                    "id": "uuid",
-                    "llm_interaction_id": "uuid",
-                    "city": "",
-                    "city_id": "uuid",
                     "name": "POI Name",
                     "latitude": <float>,
                     "longitude": <float>,
@@ -546,19 +536,17 @@ Generate a comprehensive travel response in JSON format with the following struc
                     "description_poi": "",
                     "address": "",
                     "website": "",
-                    "opening_hours": "",
-                    "distance": 0
+                    "opening_hours": ""
                 }
             ]
-        },
-        "session_id": "uuid"
+        }
     }
 }
 
 Focus on creating an itinerary that matches the user's preferences, dietary needs, preferred pace, and transportation method.`,
 			cityName, lat, lon, basePreferences, cityName, lat, lon)
 
-	case "rest", "hotels":
+	case "accommodation":
 		return fmt.Sprintf(`
 You are a hotel recommendation assistant. Find suitable accommodation in %s near coordinates %.4f, %.4f.
 
@@ -569,7 +557,6 @@ Generate a hotel response in JSON format:
 {
     "hotels": [
         {
-            "id": "uuid",
             "city": "%s",
             "name": "Hotel Name",
             "latitude": <float>,
@@ -583,18 +570,17 @@ Generate a hotel response in JSON format:
             "price_range": null,
             "rating": 0,
             "tags": null,
-            "images": null,
-            "llm_interaction_id": "uuid"
+            "images": null
         }
     ]
 }
 
-Consider the user's budget level, preferred vibes, and accessibility needs when selecting hotels.`,
+Consider the user's budget level, preferred amenities, and accessibility needs when selecting accommodation.`,
 			cityName, lat, lon, basePreferences, cityName)
 
-	case "food", "restaurants":
+	case "dining":
 		return fmt.Sprintf(`
-You are a restaurant recommendation assistant. Find suitable dining options in %s near coordinates %.4f, %.4f.
+You are a restaurant recommendation assistant. Find dining options in %s near coordinates %.4f, %.4f.
 
 USER PREFERENCES:
 %s
@@ -603,28 +589,57 @@ Generate a restaurant response in JSON format:
 {
     "restaurants": [
         {
-            "id": "uuid",
             "city": "%s",
             "name": "Restaurant Name",
             "latitude": <float>,
             "longitude": <float>,
-            "category": "Restaurant|Bar|Cafe",
-            "description": "Description highlighting how it matches dietary needs and preferences",
-            "address": null,
-            "website": null,
-            "phone_number": null,
-            "opening_hours": null,
-            "price_level": null,
-            "cuisine_type": null,
-            "tags": null,
-            "images": null,
-            "rating": 0,
-            "llm_interaction_id": "uuid"
+            "category": "Fine Dining|Casual Dining|Fast Food|Cafe|Bar",
+            "description": "Description matching user dietary needs and preferences",
+            "address": "Complete address",
+            "website": "Official website URL (if available)",
+            "phone_number": "Phone number (if available)",
+            "opening_hours": "Operating hours",
+            "price_level": "$|$$|$$$|$$$$",
+            "cuisine_type": "Cuisine type",
+            "tags": ["tag1", "tag2"],
+            "images": [],
+            "rating": 0
         }
     ]
 }
 
-Pay special attention to dietary needs, budget level, preference for outdoor seating, and dog-friendly options.`,
+Pay special attention to dietary needs, budget level, cuisine preferences, and accessibility options.`,
+			cityName, lat, lon, basePreferences, cityName)
+
+	case "activities":
+		return fmt.Sprintf(`
+You are an activity recommendation assistant. Find activities and attractions in %s near coordinates %.4f, %.4f.
+
+USER PREFERENCES:
+%s
+
+Generate an activities response in JSON format:
+{
+    "activities": [
+        {
+            "city": "%s",
+            "name": "Activity/Attraction Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Museum|Outdoor Activity|Entertainment|Cultural|Sports",
+            "description": "Description matching user activity preferences",
+            "address": "Complete address",
+            "website": "Official website URL (if available)",
+            "opening_hours": "Operating hours",
+            "price_range": "Free|$|$$|$$$",
+            "rating": 0,
+            "tags": ["tag1", "tag2"],
+            "images": []
+        }
+    ]
+}
+
+Consider the user's physical activity level, cultural interests, and accessibility needs when selecting activities.`,
 			cityName, lat, lon, basePreferences, cityName)
 
 	default:

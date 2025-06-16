@@ -177,6 +177,10 @@ func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueChatSessionHandler)
 	r.Post("/prompt-response/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueSessionStreamHandler)
 
+	// Unified chat endpoints
+	r.Post("/prompt-response/chat/sessions/unified-chat/{profileID}", HandlerImpl.ProcessUnifiedChatMessage)
+	r.Post("/prompt-response/chat/sessions/unified-chat/stream/{profileID}", HandlerImpl.ProcessUnifiedChatMessageStream)
+
 	// TODO
 
 	// // Context-aware hotel chat endpoints

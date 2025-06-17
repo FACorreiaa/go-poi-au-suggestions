@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"time"
 
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -157,11 +159,20 @@ func (r *RepositoryImpl) SaveInteraction(ctx context.Context, interaction types.
 
 	if itineraryID != uuid.Nil {
 		var pois []types.POIDetail
-		pois, err = parsePOIsFromResponse(interaction.ResponseText, r.logger)
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "Failed to parse POIs from response")
-			return interactionID, fmt.Errorf("failed to parse POIs from response: %w", err)
+		// Only parse POIs for itinerary/general responses, skip for domain-specific responses
+		if strings.Contains(interaction.Prompt, "Unified Chat - Domain: dining") ||
+			strings.Contains(interaction.Prompt, "Unified Chat - Domain: accommodation") ||
+			strings.Contains(interaction.Prompt, "Unified Chat - Domain: activities") {
+			// Skip POI parsing for domain-specific responses that don't contain POIs
+			r.logger.DebugContext(ctx, "Skipping POI parsing for domain-specific response", "interaction_id", interactionID.String())
+			span.AddEvent("Skipped POI parsing for domain-specific response")
+		} else {
+			pois, err = parsePOIsFromResponse(interaction.ResponseText, r.logger)
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "Failed to parse POIs from response")
+				return interactionID, fmt.Errorf("failed to parse POIs from response: %w", err)
+			}
 		}
 		span.SetAttributes(attribute.Int("parsed_pois.count", len(pois)))
 
@@ -795,19 +806,48 @@ func (l *RepositoryImpl) CalculateDistancePostGIS(ctx context.Context, userLat, 
 func parsePOIsFromResponse(responseText string, logger *slog.Logger) ([]types.POIDetail, error) {
 	cleanedResponse := cleanJSONResponse(responseText)
 
+	// First try to parse as unified chat response format with "data" wrapper
+	var unifiedResponse struct {
+		Data types.AiCityResponse `json:"data"`
+	}
+	err := json.Unmarshal([]byte(cleanedResponse), &unifiedResponse)
+	if err == nil {
+		// Collect POIs from both general points_of_interest and itinerary points_of_interest
+		var allPOIs []types.POIDetail
+		if unifiedResponse.Data.PointsOfInterest != nil {
+			allPOIs = append(allPOIs, unifiedResponse.Data.PointsOfInterest...)
+		}
+		if unifiedResponse.Data.AIItineraryResponse.PointsOfInterest != nil {
+			allPOIs = append(allPOIs, unifiedResponse.Data.AIItineraryResponse.PointsOfInterest...)
+		}
+		if len(allPOIs) > 0 {
+			logger.Debug("parsePOIsFromResponse: Parsed as unified chat response", "poiCount", len(allPOIs))
+			return allPOIs, nil
+		}
+	}
+
+	// Second, try to parse as a full AiCityResponse (for legacy responses)
 	var parsedResponse types.AiCityResponse
-	err := json.Unmarshal([]byte(cleanedResponse), &parsedResponse)
-	if err != nil {
-		logger.Error("parsePOIsFromResponse: Failed to unmarshal LLM response", "error", err, "cleanedResponseLength", len(cleanedResponse))
-		return nil, fmt.Errorf("parsePOIsFromResponse: failed to unmarshal LLM response: %w", err)
+	err = json.Unmarshal([]byte(cleanedResponse), &parsedResponse)
+	if err == nil && parsedResponse.PointsOfInterest != nil {
+		logger.Debug("parsePOIsFromResponse: Parsed as AiCityResponse", "poiCount", len(parsedResponse.PointsOfInterest))
+		return parsedResponse.PointsOfInterest, nil
 	}
 
-	if parsedResponse.PointsOfInterest == nil {
-		logger.Warn("parsePOIsFromResponse: No points_of_interest found in itinerary_response", "responseStructure", fmt.Sprintf("%+v", parsedResponse))
-		return []types.POIDetail{}, nil
+	// Third, try to parse as a single POI (for individual POI additions)
+	var singlePOI types.POIDetail
+	err = json.Unmarshal([]byte(cleanedResponse), &singlePOI)
+	if err == nil && singlePOI.Name != "" {
+		logger.Debug("parsePOIsFromResponse: Parsed as single POI", "poiName", singlePOI.Name)
+		return []types.POIDetail{singlePOI}, nil
 	}
 
-	return parsedResponse.PointsOfInterest, nil
+	// If all fail, log the error and return empty
+	logger.Warn("parsePOIsFromResponse: Could not parse response as unified chat, AiCityResponse, or single POI",
+		"error", err,
+		"cleanedResponseLength", len(cleanedResponse),
+		"responsePreview", cleanedResponse[:min(200, len(cleanedResponse))])
+	return []types.POIDetail{}, nil
 }
 
 func (r *RepositoryImpl) GetOrCreatePOI(ctx context.Context, tx pgx.Tx, poiDetail types.POIDetail, cityID uuid.UUID, sourceInteractionID uuid.UUID) (uuid.UUID, error) {

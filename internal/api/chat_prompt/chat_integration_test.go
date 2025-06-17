@@ -147,8 +147,8 @@ func TestLlmInteractiontServiceImpl_SaveItenerary_Integration(t *testing.T) {
 
 		// Verify in database
 		var dbTitle, dbDescription string
-		err = testChatDB.QueryRow(ctx, 
-			"SELECT title, description FROM user_saved_iteneraries WHERE id = $1", 
+		err = testChatDB.QueryRow(ctx,
+			"SELECT title, description FROM user_saved_iteneraries WHERE id = $1",
 			itineraryID).Scan(&dbTitle, &dbDescription)
 		require.NoError(t, err)
 		assert.Equal(t, req.Title, dbTitle)
@@ -180,8 +180,8 @@ func TestLlmInteractiontServiceImpl_RemoveItenerary_Integration(t *testing.T) {
 
 		// Verify removal
 		var count int
-		err = testChatDB.QueryRow(ctx, 
-			"SELECT COUNT(*) FROM user_saved_iteneraries WHERE id = $1", 
+		err = testChatDB.QueryRow(ctx,
+			"SELECT COUNT(*) FROM user_saved_iteneraries WHERE id = $1",
 			itineraryID).Scan(&count)
 		require.NoError(t, err)
 		assert.Equal(t, 0, count)
@@ -213,7 +213,7 @@ func TestLlmInteractiontServiceImpl_StartNewSession_Integration(t *testing.T) {
 		}
 
 		sessionID, response, err := testChatService.StartNewSession(ctx, userID, profileID, cityName, message, userLocation)
-		
+
 		if os.Getenv("GOOGLE_GEMINI_API_KEY") == "" {
 			// Skip AI-dependent tests if no API key
 			t.Skip("Skipping AI-dependent test: GOOGLE_GEMINI_API_KEY not set")
@@ -225,8 +225,8 @@ func TestLlmInteractiontServiceImpl_StartNewSession_Integration(t *testing.T) {
 
 		// Verify session was saved
 		var dbSessionID uuid.UUID
-		err = testChatDB.QueryRow(ctx, 
-			"SELECT id FROM llm_interaction_session WHERE id = $1", 
+		err = testChatDB.QueryRow(ctx,
+			"SELECT id FROM llm_interaction_session WHERE id = $1",
 			sessionID).Scan(&dbSessionID)
 		require.NoError(t, err)
 		assert.Equal(t, sessionID, dbSessionID)
@@ -258,7 +258,7 @@ func TestLlmInteractiontServiceImpl_ContinueSession_Integration(t *testing.T) {
 
 	t.Run("Continue existing session", func(t *testing.T) {
 		followUpMessage := "Tell me more about Belém Tower"
-		
+
 		response, err := testChatService.ContinueSession(ctx, sessionID, followUpMessage, userLocation)
 		require.NoError(t, err)
 		assert.NotNil(t, response)
@@ -267,7 +267,7 @@ func TestLlmInteractiontServiceImpl_ContinueSession_Integration(t *testing.T) {
 	t.Run("Continue non-existent session", func(t *testing.T) {
 		nonExistentSessionID := uuid.New()
 		followUpMessage := "This should fail"
-		
+
 		_, err := testChatService.ContinueSession(ctx, nonExistentSessionID, followUpMessage, userLocation)
 		require.Error(t, err)
 	})
@@ -312,7 +312,7 @@ func TestLlmInteractiontServiceImpl_GetPOIDetailsResponse_Integration(t *testing
 		lon := -9.1393
 
 		response, err := testChatService.GetPOIDetailsResponse(ctx, userID, city, lat, lon)
-		
+
 		// This test depends on having POI data in the database
 		// If no POIs exist, the service should handle gracefully
 		if err != nil {
@@ -339,7 +339,7 @@ func TestLlmInteractiontServiceImpl_GetGeneralPOIByDistanceResponse_Integration(
 
 		pois, err := testChatService.GetGeneralPOIByDistanceResponse(ctx, userID, city, lat, lon, distance)
 		require.NoError(t, err)
-		
+
 		// POIs should be empty if no test data exists, but method should succeed
 		assert.NotNil(t, pois)
 		// assert.GreaterOrEqual(t, len(pois), 0) // Could be 0 if no POIs in test DB

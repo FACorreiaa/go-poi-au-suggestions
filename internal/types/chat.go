@@ -91,8 +91,8 @@ type ChatTurn struct { // You might not need this explicit struct if directly us
 }
 
 type UserLocation struct {
-	UserLat        float64
-	UserLon        float64
+	UserLat        float64 `json:"user_lat"`
+	UserLon        float64 `json:"user_lon"`
 	SearchRadiusKm float64 // Radius in kilometers for searching nearby POIs
 }
 

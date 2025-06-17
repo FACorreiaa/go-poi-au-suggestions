@@ -172,14 +172,14 @@ func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
 
 	// Legacy chat endpoints (maintain backward compatibility)
-	r.Post("/prompt-response/chat/sessions/{profileID}", HandlerImpl.StartChatSessionHandler)
-	r.Post("/prompt-response/chat/sessions/stream/{profileID}", HandlerImpl.StartChatSessionStreamHandler)
-	r.Post("/prompt-response/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueChatSessionHandler)
-	r.Post("/prompt-response/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueSessionStreamHandler)
+	//r.Post("/prompt-response/chat/sessions/{profileID}", HandlerImpl.StartChatSessionHandler)
+	//r.Post("/prompt-response/chat/sessions/stream/{profileID}", HandlerImpl.StartChatSessionStreamHandler)
+	//r.Post("/prompt-response/chat/sessions/{sessionID}/messages", HandlerImpl.ContinueChatSessionHandler)
+	//r.Post("/prompt-response/chat/sessions/{sessionID}/messages/stream", HandlerImpl.ContinueSessionStreamHandler)
 
 	// Unified chat endpoints
-	r.Post("/prompt-response/chat/sessions/unified-chat/{profileID}", HandlerImpl.ProcessUnifiedChatMessage)
-	r.Post("/prompt-response/chat/sessions/unified-chat/stream/{profileID}", HandlerImpl.ProcessUnifiedChatMessageStream)
+	r.Post("/prompt-response/chat/sessions/{profileID}", HandlerImpl.ProcessUnifiedChatMessage)
+	r.Post("/prompt-response/chat/sessions/stream/{profileID}", HandlerImpl.ProcessUnifiedChatMessageStream)
 
 	// LLM interaction routes
 	//r.Post("/prompt-response/profile/{profileID}", HandlerImpl.GetPrompResponse)        // GET http://localhost:8000/api/v1/user/interests

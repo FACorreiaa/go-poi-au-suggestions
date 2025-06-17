@@ -690,7 +690,8 @@ Respond with JSON:
             "description_poi": "",
             "address": "",
             "website": "",
-            "opening_hours": ""
+            "opening_hours": "",
+            "distance": <float>
         }
     ]
 }`, cityName, basePreferences)
@@ -718,7 +719,8 @@ Respond with JSON:
             "price_range": null,
             "rating": 0,
             "tags": null,
-            "images": null
+            "images": null,
+            "distance": <float>
         }
     ]
 }`, cityName, lat, lon, basePreferences, cityName)
@@ -747,7 +749,8 @@ Respond with JSON:
             "cuisine_type": "",
             "tags": [],
             "images": [],
-            "rating": 0
+            "rating": 0,
+            "distance": <float>
         }
     ]
 }`, cityName, lat, lon, basePreferences, cityName)
@@ -774,7 +777,8 @@ Respond with JSON:
             "price_range": "Free|$|$$|$$$",
             "rating": 0,
             "tags": [],
-            "images": []
+            "images": [],
+            "distance": <float>
         }
     ]
 }`, cityName, lat, lon, basePreferences, cityName)

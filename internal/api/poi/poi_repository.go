@@ -894,6 +894,9 @@ func (r *RepositoryImpl) SearchPOIs(ctx context.Context, filter types.POIFilter)
 			poi.DescriptionPOI = description.String
 		}
 
+		// Convert distance from meters to kilometers
+		poi.Distance = distanceMeters / 1000
+
 		pois = append(pois, poi)
 	}
 

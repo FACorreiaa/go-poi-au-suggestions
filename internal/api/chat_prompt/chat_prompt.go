@@ -8,7 +8,10 @@ import (
 )
 
 func getUserPreferencesPrompt(searchProfile *types.UserPreferenceProfileResponse) string {
-	return fmt.Sprintf(`
+	// Base preferences
+	basePrefs := fmt.Sprintf(`
+BASIC PREFERENCES:
+    - Profile Name: %s
     - Search Radius: %.1f km
     - Preferred Time: %s
     - Budget Level: %d (0=any, 1=cheap, 4=expensive)
@@ -18,11 +21,265 @@ func getUserPreferencesPrompt(searchProfile *types.UserPreferenceProfileResponse
     - Preferred Pace: %s
     - Prefers Accessible POIs: %t
     - Preferred Vibes: [%s]
-    - Preferred Transport: %s
-`, searchProfile.SearchRadiusKm, searchProfile.PreferredTime, searchProfile.BudgetLevel,
+    - Preferred Transport: %s`,
+		searchProfile.ProfileName, searchProfile.SearchRadiusKm, searchProfile.PreferredTime, searchProfile.BudgetLevel,
 		searchProfile.PreferOutdoorSeating, searchProfile.PreferDogFriendly, strings.Join(searchProfile.DietaryNeeds, ", "),
 		searchProfile.PreferredPace, searchProfile.PreferAccessiblePOIs, strings.Join(searchProfile.PreferredVibes, ", "),
 		searchProfile.PreferredTransport)
+
+	// User location if available
+	if searchProfile.UserLatitude != nil && searchProfile.UserLongitude != nil {
+		basePrefs += fmt.Sprintf(`
+    - User Location: %.4f, %.4f`, *searchProfile.UserLatitude, *searchProfile.UserLongitude)
+	}
+
+	// Interests
+	if len(searchProfile.Interests) > 0 {
+		interests := make([]string, len(searchProfile.Interests))
+		for i, interest := range searchProfile.Interests {
+			interests[i] = interest.Name
+		}
+		basePrefs += fmt.Sprintf(`
+    - Interests: [%s]`, strings.Join(interests, ", "))
+	}
+
+	// Tags to avoid
+	if len(searchProfile.Tags) > 0 {
+		tags := make([]string, len(searchProfile.Tags))
+		for i, tag := range searchProfile.Tags {
+			tags[i] = tag.Name
+		}
+		basePrefs += fmt.Sprintf(`
+    - Tags to Avoid: [%s]`, strings.Join(tags, ", "))
+	}
+
+	// Accommodation preferences
+	if searchProfile.AccommodationPreferences != nil {
+		accom := searchProfile.AccommodationPreferences
+		basePrefs += `
+
+ACCOMMODATION PREFERENCES:`
+
+		if len(accom.AccommodationType) > 0 {
+			basePrefs += fmt.Sprintf(`
+    - Accommodation Types: [%s]`, strings.Join(accom.AccommodationType, ", "))
+		}
+
+		if accom.StarRating != nil {
+			minStar := "any"
+			maxStar := "any"
+			if accom.StarRating.Min != nil {
+				minStar = fmt.Sprintf("%.0f", *accom.StarRating.Min)
+			}
+			if accom.StarRating.Max != nil {
+				maxStar = fmt.Sprintf("%.0f", *accom.StarRating.Max)
+			}
+			basePrefs += fmt.Sprintf(`
+    - Star Rating: %s - %s stars`, minStar, maxStar)
+		}
+
+		if accom.PriceRangePerNight != nil {
+			minPrice := "any"
+			maxPrice := "any"
+			if accom.PriceRangePerNight.Min != nil {
+				minPrice = fmt.Sprintf("%.0f", *accom.PriceRangePerNight.Min)
+			}
+			if accom.PriceRangePerNight.Max != nil {
+				maxPrice = fmt.Sprintf("%.0f", *accom.PriceRangePerNight.Max)
+			}
+			basePrefs += fmt.Sprintf(`
+    - Price Range Per Night: %s - %s`, minPrice, maxPrice)
+		}
+
+		if len(accom.Amenities) > 0 {
+			basePrefs += fmt.Sprintf(`
+    - Required Amenities: [%s]`, strings.Join(accom.Amenities, ", "))
+		}
+
+		if len(accom.RoomType) > 0 {
+			basePrefs += fmt.Sprintf(`
+    - Room Types: [%s]`, strings.Join(accom.RoomType, ", "))
+		}
+
+		if accom.ChainPreference != "" {
+			basePrefs += fmt.Sprintf(`
+    - Chain Preference: %s`, accom.ChainPreference)
+		}
+	}
+
+	// Dining preferences
+	if searchProfile.DiningPreferences != nil {
+		dining := searchProfile.DiningPreferences
+		basePrefs += `
+
+DINING PREFERENCES:`
+
+		if len(dining.CuisineTypes) > 0 {
+			basePrefs += fmt.Sprintf(`
+    - Cuisine Types: [%s]`, strings.Join(dining.CuisineTypes, ", "))
+		}
+
+		if len(dining.MealTypes) > 0 {
+			basePrefs += fmt.Sprintf(`
+    - Meal Types: [%s]`, strings.Join(dining.MealTypes, ", "))
+		}
+
+		if len(dining.ServiceStyle) > 0 {
+			basePrefs += fmt.Sprintf(`
+    - Service Style: [%s]`, strings.Join(dining.ServiceStyle, ", "))
+		}
+
+		if dining.PriceRangePerPerson != nil {
+			minPrice := "any"
+			maxPrice := "any"
+			if dining.PriceRangePerPerson.Min != nil {
+				minPrice = fmt.Sprintf("%.0f", *dining.PriceRangePerPerson.Min)
+			}
+			if dining.PriceRangePerPerson.Max != nil {
+				maxPrice = fmt.Sprintf("%.0f", *dining.PriceRangePerPerson.Max)
+			}
+			basePrefs += fmt.Sprintf(`
+    - Price Range Per Person: %s - %s`, minPrice, maxPrice)
+		}
+
+		if len(dining.AllergenFree) > 0 {
+			basePrefs += fmt.Sprintf(`
+    - Allergen Free: [%s]`, strings.Join(dining.AllergenFree, ", "))
+		}
+
+		if dining.MichelinRated {
+			basePrefs += `
+    - Michelin Rated: Preferred`
+		}
+
+		if dining.LocalRecommendations {
+			basePrefs += `
+    - Local Recommendations: Preferred`
+		}
+
+		if dining.ChainVsLocal != "" {
+			basePrefs += fmt.Sprintf(`
+    - Chain vs Local: %s`, dining.ChainVsLocal)
+		}
+
+		if dining.OrganicPreference {
+			basePrefs += `
+    - Organic Preference: Yes`
+		}
+
+		if dining.OutdoorSeatingPref {
+			basePrefs += `
+    - Outdoor Seating: Preferred`
+		}
+	}
+
+	// Activity preferences
+	if searchProfile.ActivityPreferences != nil {
+		activity := searchProfile.ActivityPreferences
+		basePrefs += `
+
+ACTIVITY PREFERENCES:`
+
+		if len(activity.ActivityCategories) > 0 {
+			basePrefs += fmt.Sprintf(`
+    - Activity Categories: [%s]`, strings.Join(activity.ActivityCategories, ", "))
+		}
+
+		if activity.PhysicalActivityLevel != "" {
+			basePrefs += fmt.Sprintf(`
+    - Physical Activity Level: %s`, activity.PhysicalActivityLevel)
+		}
+
+		if activity.IndoorOutdoorPref != "" {
+			basePrefs += fmt.Sprintf(`
+    - Indoor/Outdoor Preference: %s`, activity.IndoorOutdoorPref)
+		}
+
+		if activity.CulturalImmersionLevel != "" {
+			basePrefs += fmt.Sprintf(`
+    - Cultural Immersion Level: %s`, activity.CulturalImmersionLevel)
+		}
+
+		if activity.MustSeeVsHiddenGems != "" {
+			basePrefs += fmt.Sprintf(`
+    - Must-See vs Hidden Gems: %s`, activity.MustSeeVsHiddenGems)
+		}
+
+		if activity.EducationalPreference {
+			basePrefs += `
+    - Educational Preference: Yes`
+		}
+
+		if activity.PhotoOpportunities {
+			basePrefs += `
+    - Photography Opportunities: Important`
+		}
+
+		if len(activity.SeasonSpecific) > 0 {
+			basePrefs += fmt.Sprintf(`
+    - Season Specific: [%s]`, strings.Join(activity.SeasonSpecific, ", "))
+		}
+
+		if activity.AvoidCrowds {
+			basePrefs += `
+    - Avoid Crowds: Yes`
+		}
+
+		if len(activity.LocalEventsInterest) > 0 {
+			basePrefs += fmt.Sprintf(`
+    - Local Events Interest: [%s]`, strings.Join(activity.LocalEventsInterest, ", "))
+		}
+	}
+
+	// Itinerary preferences
+	if searchProfile.ItineraryPreferences != nil {
+		itinerary := searchProfile.ItineraryPreferences
+		basePrefs += `
+
+ITINERARY PREFERENCES:`
+
+		if itinerary.PlanningStyle != "" {
+			basePrefs += fmt.Sprintf(`
+    - Planning Style: %s`, itinerary.PlanningStyle)
+		}
+
+		if itinerary.TimeFlexibility != "" {
+			basePrefs += fmt.Sprintf(`
+    - Time Flexibility: %s`, itinerary.TimeFlexibility)
+		}
+
+		if itinerary.MorningVsEvening != "" {
+			basePrefs += fmt.Sprintf(`
+    - Morning vs Evening: %s`, itinerary.MorningVsEvening)
+		}
+
+		if itinerary.WeekendVsWeekday != "" {
+			basePrefs += fmt.Sprintf(`
+    - Weekend vs Weekday: %s`, itinerary.WeekendVsWeekday)
+		}
+
+		if len(itinerary.PreferredSeasons) > 0 {
+			basePrefs += fmt.Sprintf(`
+    - Preferred Seasons: [%s]`, strings.Join(itinerary.PreferredSeasons, ", "))
+		}
+
+		if itinerary.AvoidPeakSeason {
+			basePrefs += `
+    - Avoid Peak Season: Yes`
+		}
+
+		if itinerary.AdventureVsRelaxation != "" {
+			basePrefs += fmt.Sprintf(`
+    - Adventure vs Relaxation: %s`, itinerary.AdventureVsRelaxation)
+		}
+
+		if itinerary.SpontaneousVsPlanned != "" {
+			basePrefs += fmt.Sprintf(`
+    - Spontaneous vs Planned: %s`, itinerary.SpontaneousVsPlanned)
+		}
+	}
+
+	return basePrefs
 }
 
 func getGeneralPOIByDistance(cityName string, lat, lon, distance float64) string {
@@ -201,21 +458,328 @@ func getCityDescriptionPrompt(cityName string) string {
     `, cityName, cityName)
 }
 
-// getGeneralPOI generates a prompt for general POIs
-func getGeneralPOIPrompt(cityName string) string {
-	return fmt.Sprintf(`
-        Provide a list of 6 general points of interest for %s in JSON format with the following structure:
-        {
+// GetUnifiedChatPrompt generates context-based prompts for the unified chat system
+func GetUnifiedChatPrompt(context, cityName string, lat, lon float64, searchProfile *types.UserPreferenceProfileResponse) string {
+	basePreferences := ""
+	if searchProfile != nil {
+		basePreferences = getUserPreferencesPrompt(searchProfile)
+	}
+
+	switch context {
+	case "traveling", "itinerary":
+		return fmt.Sprintf(`
+You are a travel planning assistant. Create a personalized itinerary for %s based on the user's location (%.4f, %.4f) and preferences.
+
+USER PREFERENCES:
+%s
+
+Generate a comprehensive travel response in JSON format with the following structure:
+{
+    "data": {
+        "general_city_data": {
+            "city": "%s",
+            "country": "Country name",
+            "state_province": "State/Province if applicable",
+            "description": "Detailed city description (100-150 words)",
+            "center_latitude": %.4f,
+            "center_longitude": %.4f,
+            "population": "",
+            "area": "",
+            "timezone": "",
+            "language": "",
+            "weather": "",
+            "attractions": "",
+            "history": ""
+        },
+        "points_of_interest": [
+            {
+                "name": "POI Name",
+                "latitude": <float>,
+                "longitude": <float>,
+                "category": "Category (e.g., Museum, Historical Site)",
+                "description_poi": "",
+                "address": "",
+                "website": "",
+                "opening_hours": ""
+            }
+        ],
+        "itinerary_response": {
+            "itinerary_name": "Creative itinerary name based on user preferences",
+            "overall_description": "Detailed description of the itinerary (100-150 words)",
             "points_of_interest": [
                 {
-                    "name": "POI name",
-                    "category": "Category (e.g., Historical Site, Museum)",
-                    "coordinates": {
-                        "latitude": float64,
-                        "longitude": float64
-                    }
+                    "name": "POI Name",
+                    "latitude": <float>,
+                    "longitude": <float>,
+                    "category": "",
+                    "description_poi": "",
+                    "address": "",
+                    "website": "",
+                    "opening_hours": ""
                 }
             ]
         }
-    `, cityName)
+    }
+}
+
+Focus on creating an itinerary that matches the user's preferences, dietary needs, preferred pace, and transportation method.`,
+			cityName, lat, lon, basePreferences, cityName, lat, lon)
+
+	case "accommodation":
+		return fmt.Sprintf(`
+You are a hotel recommendation assistant. Find suitable accommodation in %s near coordinates %.4f, %.4f.
+
+USER PREFERENCES:
+%s
+
+Generate a hotel response in JSON format:
+{
+    "hotels": [
+        {
+            "city": "%s",
+            "name": "Hotel Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Hotel|Hostel|Guesthouse|Apartment",
+            "description": "Description matching user preferences and budget level",
+            "address": "",
+            "phone_number": null,
+            "website": null,
+            "opening_hours": null,
+            "price_range": null,
+            "rating": 0,
+            "tags": null,
+            "images": null
+        }
+    ]
+}
+
+Consider the user's budget level, preferred amenities, and accessibility needs when selecting accommodation.`,
+			cityName, lat, lon, basePreferences, cityName)
+
+	case "dining":
+		return fmt.Sprintf(`
+You are a restaurant recommendation assistant. Find dining options in %s near coordinates %.4f, %.4f.
+
+USER PREFERENCES:
+%s
+
+Generate a restaurant response in JSON format:
+{
+    "restaurants": [
+        {
+            "city": "%s",
+            "name": "Restaurant Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Fine Dining|Casual Dining|Fast Food|Cafe|Bar",
+            "description": "Description matching user dietary needs and preferences",
+            "address": "Complete address",
+            "website": "Official website URL (if available)",
+            "phone_number": "Phone number (if available)",
+            "opening_hours": "Operating hours",
+            "price_level": "$|$$|$$$|$$$$",
+            "cuisine_type": "Cuisine type",
+            "tags": ["tag1", "tag2"],
+            "images": [],
+            "rating": 0
+        }
+    ]
+}
+
+Pay special attention to dietary needs, budget level, cuisine preferences, and accessibility options.`,
+			cityName, lat, lon, basePreferences, cityName)
+
+	case "activities":
+		return fmt.Sprintf(`
+You are an activity recommendation assistant. Find activities and attractions in %s near coordinates %.4f, %.4f.
+
+USER PREFERENCES:
+%s
+
+Generate an activities response in JSON format:
+{
+    "activities": [
+        {
+            "city": "%s",
+            "name": "Activity/Attraction Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Museum|Outdoor Activity|Entertainment|Cultural|Sports",
+            "description": "Description matching user activity preferences",
+            "address": "Complete address",
+            "website": "Official website URL (if available)",
+            "opening_hours": "Operating hours",
+            "price_range": "Free|$|$$|$$$",
+            "rating": 0,
+            "tags": ["tag1", "tag2"],
+            "images": []
+        }
+    ]
+}
+
+Consider the user's physical activity level, cultural interests, and accessibility needs when selecting activities.`,
+			cityName, lat, lon, basePreferences, cityName)
+
+	default:
+		// Default to itinerary if context is not recognized
+		return GetUnifiedChatPrompt("traveling", cityName, lat, lon, searchProfile)
+	}
+}
+
+/*
+  Testing Fan in Fan out prompt
+*/
+
+func getCityDataPrompt(cityName string) string {
+	return fmt.Sprintf(`
+You are a travel assistant. Provide general information about %s.
+Respond with JSON:
+{
+    "city": "%s",
+    "country": "Country name",
+    "state_province": "State/Province if applicable",
+    "description": "Detailed city description (100-150 words)",
+    "center_latitude": <float>,
+    "center_longitude": <float>,
+    "population": "",
+    "area": "",
+    "timezone": "",
+    "language": "",
+    "weather": "",
+    "attractions": "",
+    "history": ""
+}`, cityName, cityName)
+}
+
+func getGeneralPOIPrompt(cityName string) string {
+	return fmt.Sprintf(`
+You are a travel assistant. List general points of interest in %s.
+Respond with JSON:
+{
+    "points_of_interest": [
+        {
+            "name": "POI Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Category (e.g., Museum, Historical Site)",
+            "description_poi": "",
+            "address": "",
+            "website": "",
+            "opening_hours": ""
+        }
+    ]
+}`, cityName)
+}
+
+func getPersonalizedItineraryPrompt(cityName, basePreferences string) string {
+	return fmt.Sprintf(`
+You are a travel planning assistant. Create a personalized itinerary for %s based on user preferences.
+USER PREFERENCES:
+%s
+Respond with JSON:
+{
+    "itinerary_name": "Creative itinerary name",
+    "overall_description": "Detailed description (100-150 words)",
+    "points_of_interest": [
+        {
+            "name": "POI Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "",
+            "description_poi": "",
+            "address": "",
+            "website": "",
+            "opening_hours": "",
+            "distance": <float>
+        }
+    ]
+}`, cityName, basePreferences)
+}
+
+func getAccommodationPrompt(cityName string, lat, lon float64, basePreferences string) string {
+	return fmt.Sprintf(`
+You are a hotel recommendation assistant. Find suitable accommodation in %s near coordinates %.4f, %.4f.
+USER PREFERENCES:
+%s
+Respond with JSON:
+{
+    "hotels": [
+        {
+            "city": "%s",
+            "name": "Hotel Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Hotel|Hostel|Guesthouse|Apartment",
+            "description": "Description matching preferences",
+            "address": "",
+            "phone_number": null,
+            "website": null,
+            "opening_hours": null,
+            "price_range": null,
+            "rating": 0,
+            "tags": null,
+            "images": null,
+            "distance": <float>
+        }
+    ]
+}`, cityName, lat, lon, basePreferences, cityName)
+}
+
+func getDiningPrompt(cityName string, lat, lon float64, basePreferences string) string {
+	return fmt.Sprintf(`
+You are a restaurant recommendation assistant. Find dining options in %s near coordinates %.4f, %.4f.
+USER PREFERENCES:
+%s
+Respond with JSON:
+{
+    "restaurants": [
+        {
+            "city": "%s",
+            "name": "Restaurant Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Fine Dining|Casual Dining|Fast Food|Cafe|Bar",
+            "description": "Description matching preferences",
+            "address": "",
+            "website": "",
+            "phone_number": "",
+            "opening_hours": "",
+            "price_level": "$|$$|$$$|$$$$",
+            "cuisine_type": "",
+            "tags": [],
+            "images": [],
+            "rating": 0,
+            "distance": <float>
+        }
+    ]
+}`, cityName, lat, lon, basePreferences, cityName)
+}
+
+func getActivitiesPrompt(cityName string, lat, lon float64, basePreferences string) string {
+	return fmt.Sprintf(`
+You are an activity recommendation assistant. Find activities in %s near coordinates %.4f, %.4f.
+USER PREFERENCES:
+%s
+Respond with JSON:
+{
+    "activities": [
+        {
+            "city": "%s",
+            "name": "Activity Name",
+            "latitude": <float>,
+            "longitude": <float>,
+            "category": "Museum|Outdoor Activity|Entertainment|Cultural|Sports",
+            "description": "Description matching preferences",
+            "address": "",
+            "website": "",
+            "opening_hours": "",
+            "price_range": "Free|$|$$|$$$",
+            "rating": 0,
+            "tags": [],
+            "images": [],
+            "distance": <float>
+        }
+    ]
+}`, cityName, lat, lon, basePreferences, cityName)
 }

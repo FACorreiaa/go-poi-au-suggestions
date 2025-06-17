@@ -190,15 +190,22 @@ type StreamEvent struct {
 
 // StreamEventType constants
 const (
-	EventTypeStart           = "start"
-	EventTypeProgress        = "progress"
-	EventTypeCityData        = "city_data"
-	EventTypeGeneralPOI      = "general_poi"
-	EventTypePersonalizedPOI = "personalized_poi"
-	EventTypeItinerary       = "itinerary"
-	EventTypeMessage         = "message"
-	EventTypeError           = "error"
-	EventTypeComplete        = "complete"
+	EventTypeStart             = "start"
+	EventTypeProgress          = "progress"
+	EventTypeCityData          = "city_data"
+	EventTypeGeneralPOI        = "general_poi"
+	EventTypePersonalizedPOI   = "personalized_poi"
+	EventTypeItinerary         = "itinerary"
+	EventTypeMessage           = "message"
+	EventTypeError             = "error"
+	EventTypeComplete          = "complete"
+	EventTypeDomainDetected    = "domain_detected"
+	EventTypePromptGenerated   = "prompt_generated"
+	EventTypeParsingResponse   = "parsing_response"
+	EventTypeUnifiedChat       = "unified_chat"
+	EventTypeHotels            = "hotels"
+	EventTypeRestaurants       = "restaurants"
+	EventTypeChunk             = "chunk" // For immediate text chunks (Google GenAI pattern)
 )
 
 // StreamingResponse wraps the streaming channel and metadata

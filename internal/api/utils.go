@@ -58,6 +58,9 @@ func WriteJSONResponse(w http.ResponseWriter, r *http.Request, status int, data 
 			slog.String("request_id", reqID),
 		)
 	}
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush() // Ensure data is sent immediately
+	}
 }
 
 // DecodeJSONBody reads and decodes a JSON request body safely.

@@ -415,23 +415,70 @@ func (h *HandlerImpl) ProcessUnifiedChatMessageStream(w http.ResponseWriter, r *
 	// 		return
 	// 	}
 	// }
-	go h.llmInteractionService.ProcessUnifiedChatMessageStream(
-		ctx, userID, profileID, "", req.Message, req.UserLocation, eventCh,
-	)
-
-	for event := range eventCh {
-		jsonData, err := json.Marshal(event)
+	// Start processing in a goroutine
+	go func() {
+		err := h.llmInteractionService.ProcessUnifiedChatMessageStream(
+			ctx, userID, profileID, "", req.Message, req.UserLocation, eventCh,
+		)
 		if err != nil {
-			h.logger.ErrorContext(ctx, "Failed to marshal stream event", "error", err)
-			continue
-		}
+			l.ErrorContext(ctx, "Failed to process unified chat message stream", slog.Any("error", err))
+			span.RecordError(err)
 
-		fmt.Fprintf(w, "data: %s\n\n", jsonData)
-
-		if flusher, ok := w.(http.Flusher); ok {
-			flusher.Flush()
+			// Safely send error event, check if context is still active
+			select {
+			case eventCh <- types.StreamEvent{
+				Type:      types.EventTypeError,
+				Error:     err.Error(),
+				Timestamp: time.Now(),
+				EventID:   uuid.New().String(),
+			}:
+				// Event sent successfully
+			case <-ctx.Done():
+				// Context cancelled, don't send event
+				return
+			}
 		}
+	}()
+
+	// Set up flusher for real-time streaming
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		l.ErrorContext(ctx, "Response writer does not support flushing")
+		span.SetStatus(codes.Error, "Streaming not supported")
+		api.ErrorResponse(w, r, http.StatusInternalServerError, "Streaming not supported")
+		return
 	}
 
-	h.logger.InfoContext(ctx, "Stream handler finished after channel was closed.")
+	// Process events in real-time as they arrive
+	for {
+		select {
+		case event, ok := <-eventCh:
+			if !ok {
+				l.InfoContext(ctx, "Event channel closed, ending stream")
+				span.SetStatus(codes.Ok, "Stream completed")
+				return
+			}
+
+			eventData, err := json.Marshal(event)
+			if err != nil {
+				l.ErrorContext(ctx, "Failed to marshal event", slog.Any("error", err))
+				span.RecordError(err)
+				continue
+			}
+
+			fmt.Fprintf(w, "data: %s\n\n", eventData)
+			flusher.Flush() // Send immediately to client
+
+			if event.Type == types.EventTypeComplete || event.Type == types.EventTypeError {
+				l.InfoContext(ctx, "Stream completed", slog.String("eventType", event.Type))
+				span.SetStatus(codes.Ok, "Stream completed")
+				return
+			}
+
+		case <-r.Context().Done():
+			l.InfoContext(ctx, "Client disconnected")
+			span.SetStatus(codes.Ok, "Client disconnected")
+			return
+		}
+	}
 }

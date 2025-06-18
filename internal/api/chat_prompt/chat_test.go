@@ -11,25 +11,6 @@ import (
 
 type mockAIClient struct{}
 
-// func (m *mockAIClient) GenerateResponse(ctx context.Context, prompt string, config *genai.GenerateContentConfig) (*genai.GenerateContentResponse, error) {
-// 	return &genai.GenerateContentResponse{
-// 		Candidates: []*genai.Candidate{
-// 			{
-// 				Content: &genai.Content{
-// 					Parts: []genai.Part{{Text: `{
-//                         "name": "Cafe Berlin",
-//                         "description": "Cozy cafe",
-//                         "address": "123 Berlin St",
-//                         "opening_hours": "Monday: 9:00-17:00",
-//                         "category": "Coffee",
-//                         "tags": ["cozy", "coffee"]
-//                     }`}},
-// 				},
-// 			},
-// 		},
-// 	}, nil
-// }
-
 type mockCityRepo struct{}
 
 func (m *mockCityRepo) FindCityByNameAndCountry(ctx context.Context, name, country string) (*types.CityDetail, error) {

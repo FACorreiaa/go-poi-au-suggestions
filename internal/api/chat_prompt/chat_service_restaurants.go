@@ -121,7 +121,7 @@ func (l *LlmInteractiontServiceImpl) GetRestaurantsByPreferencesResponse(ctx con
 	resultCh := make(chan []types.RestaurantDetailedInfo, 1)
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go l.getRestaurantsByPreferences(&wg, ctx, city, lat, lon, userID, preferences, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.7)})
+	go l.getRestaurantsByPreferences(&wg, ctx, city, lat, lon, userID, preferences, resultCh, nil)
 	wg.Wait()
 	close(resultCh)
 
@@ -315,7 +315,7 @@ func (l *LlmInteractiontServiceImpl) GetRestaurantsNearbyResponse(ctx context.Co
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	go l.getRestaurantsNearby(&wg, ctx, city, lat, lon, userID, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.7)})
+	go l.getRestaurantsNearby(&wg, ctx, city, lat, lon, userID, resultCh, nil)
 
 	go func() {
 		wg.Wait()

@@ -33,6 +33,7 @@ type Container struct {
 	LLMInteractionHandlerImpl *llmChat.HandlerImpl
 	POIHandler                *poi.HandlerImpl
 	ItineraryListHandler      *itineraryList.HandlerImpl
+	CityHandler               *city.Handler
 	// Add other HandlerImpls, services, and repositories as needed
 }
 
@@ -78,8 +79,10 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	profilessHandlerImpl := profiles.NewUserHandlerImpl(profilessService, logger)
 	// Create and return the container
 
-	// city repository
+	// city repository, service, and handler
 	cityRepo := city.NewCityRepository(pool, logger)
+	cityService := city.NewCityService(cityRepo, logger)
+	cityHandler := city.NewCityHandler(cityService, logger)
 
 	poiRepo := poi.NewRepository(pool, logger)
 	// initialise the LLM interaction service
@@ -114,6 +117,7 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 		LLMInteractionHandlerImpl: llmInteractionHandlerImpl,
 		POIHandler:                poiHandler,
 		ItineraryListHandler:      itineraryListHandler,
+		CityHandler:               cityHandler,
 		// Add other HandlerImpls, services, and repositories as needed
 	}, nil
 }

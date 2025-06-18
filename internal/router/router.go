@@ -10,6 +10,7 @@ import (
 
 	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	llmChat "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/chat_prompt"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests"
 	itineraryList "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/list"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
@@ -30,6 +31,7 @@ type Config struct {
 	LLMInteractionHandler   *llmChat.HandlerImpl
 	PointsOfInterestHandler *poi.HandlerImpl
 	ItineraryListHandler    *itineraryList.HandlerImpl
+	CityHandler             *city.Handler
 }
 
 // SetupRouter initializes and configures the main application router.
@@ -62,6 +64,9 @@ func SetupRouter(cfg *Config) chi.Router {
 			r.Get("/auth/google", cfg.AuthHandler.LoginWithGoogle)
 			r.Get("/auth/google/callback", cfg.AuthHandler.GoogleCallback)
 			r.Post("/auth/refresh", cfg.AuthHandler.RefreshToken) // Refresh tokens via HttpOnly cookie
+			
+			// Public city routes
+			r.Mount("/cities", CityRoutes(cfg.CityHandler))
 		})
 
 		// --- Protected Routes ---
@@ -242,5 +247,13 @@ func ItineraryListRoutes(h *itineraryList.HandlerImpl) http.Handler {
 	r.Post("/{itineraryID}/items", h.AddPOIListItemHandler)                      // Add a POI to an itinerary
 	r.Put("/{itineraryID}/items/{poiID}", h.UpdatePOIListItemHandler)            // Update a POI in an itinerary
 	r.Delete("/{itineraryID}/items/{poiID}", h.RemovePOIListItemHandler)         // Remove a POI from an itinerary
+	return r
+}
+
+func CityRoutes(h *city.Handler) http.Handler {
+	r := chi.NewRouter()
+	
+	r.Get("/", h.GetAllCities) // GET http://localhost:8000/api/v1/cities
+	
 	return r
 }

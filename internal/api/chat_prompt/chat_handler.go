@@ -60,7 +60,7 @@ type Handler interface {
 	// Unified chat methods
 	ProcessUnifiedChatMessage(w http.ResponseWriter, r *http.Request)
 	ProcessUnifiedChatMessageStream(w http.ResponseWriter, r *http.Request)
-	
+
 	// Chat session management
 	GetUserChatSessions(w http.ResponseWriter, r *http.Request)
 }
@@ -1089,10 +1089,14 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 	l.DebugContext(ctx, "Fetching POIs by distance")
 
 	// Get query parameters
-	city := r.URL.Query().Get("city")
 	latStr := r.URL.Query().Get("lat")
 	lonStr := r.URL.Query().Get("lon")
 	distanceStr := r.URL.Query().Get("distance")
+
+	// Optional filter parameters
+	// city := r.URL.Query().Get("city")
+	// category := r.URL.Query().Get("category")
+	// priceRange := r.URL.Query().Get("price_range")
 
 	// Parse latitude
 	lat, err := strconv.ParseFloat(latStr, 64)
@@ -1132,8 +1136,15 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Create filters struct
+	// filters := types.POIFilters{
+	// 	City:       city,
+	// 	Category:   category,
+	// 	PriceRange: priceRange,
+	// }
+
 	// Call service method
-	pois, err := HandlerImpl.llmInteractionService.GetGeneralPOIByDistanceResponse(ctx, userID, city, lat, lon, distance)
+	pois, err := HandlerImpl.llmInteractionService.GetGeneralPOIByDistanceResponse(ctx, userID, lat, lon, distance)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch POIs", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch POIs: %s", err.Error()))

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"math"
 	"regexp"
 	"strings"
 	"sync"
@@ -49,7 +50,9 @@ type LlmInteractiontService interface {
 	SaveItenerary(ctx context.Context, userID uuid.UUID, req types.BookmarkRequest) (uuid.UUID, error)
 	RemoveItenerary(ctx context.Context, userID, itineraryID uuid.UUID) error
 	GetPOIDetailsResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64) (*types.POIDetailedInfo, error)
-	GetGeneralPOIByDistanceResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon, distance float64) ([]types.POIDetailedInfo, error)
+	GetGeneralPOIByDistanceResponse(ctx context.Context, userID uuid.UUID, lat, lon, distance float64) ([]types.POIDetailedInfo, error)
+	//filters types.POIFilters
+
 	// hotels
 	GetHotelsByPreferenceResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64, userPreferences types.HotelUserPreferences) ([]types.HotelDetailedInfo, error)
 	GetHotelsNearbyResponse(ctx context.Context, userID uuid.UUID, city string, userLocation *types.UserLocation) ([]types.HotelDetailedInfo, error)
@@ -73,7 +76,7 @@ type LlmInteractiontService interface {
 
 	ProcessUnifiedChatMessage(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (interface{}, error)
 	ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error
-	
+
 	// Chat session management
 	GetUserChatSessions(ctx context.Context, userID uuid.UUID) ([]types.ChatSession, error)
 
@@ -1577,7 +1580,7 @@ func (l *LlmInteractiontServiceImpl) GetUserChatSessions(ctx context.Context, us
 		return nil, fmt.Errorf("failed to get user chat sessions: %w", err)
 	}
 
-	l.logger.InfoContext(ctx, "Successfully retrieved chat sessions", 
+	l.logger.InfoContext(ctx, "Successfully retrieved chat sessions",
 		slog.String("userID", userID.String()),
 		slog.Int("sessionCount", len(sessions)))
 	span.SetAttributes(attribute.Int("sessions.count", len(sessions)))
@@ -1793,12 +1796,10 @@ func (l *LlmInteractiontServiceImpl) GetPOIDetailsResponse(ctx context.Context, 
 func (l *LlmInteractiontServiceImpl) getGeneralPOIByDistance(wg *sync.WaitGroup,
 	ctx context.Context,
 	userID uuid.UUID,
-	cityName string,
 	lat, lon, distance float64,
 	resultCh chan<- types.GenAIResponse,
 	config *genai.GenerateContentConfig) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GenerateGeneralPOIWorker", trace.WithAttributes(
-		attribute.String("city.name", cityName),
 		attribute.Float64("latitude", lat),
 		attribute.Float64("longitude", lon),
 		attribute.Float64("distance.km", distance),
@@ -1807,7 +1808,7 @@ func (l *LlmInteractiontServiceImpl) getGeneralPOIByDistance(wg *sync.WaitGroup,
 	defer span.End()
 	defer wg.Done()
 
-	prompt := getGeneralPOIByDistance(cityName, lat, lon, distance)
+	prompt := getGeneralPOIByDistance(lat, lon, distance)
 	span.SetAttributes(attribute.Int("prompt.length", len(prompt)))
 
 	startTime := time.Now()
@@ -1849,16 +1850,18 @@ func (l *LlmInteractiontServiceImpl) getGeneralPOIByDistance(wg *sync.WaitGroup,
 		return
 	}
 
+	fmt.Println(cleanTxt)
+
 	span.SetAttributes(attribute.Int("pois.count", len(poiData.PointsOfInterest)))
 	span.SetStatus(codes.Ok, "General POIs generated successfully")
 	resultCh <- types.GenAIResponse{GeneralPOI: poiData.PointsOfInterest}
 }
 
-func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon, distance float64) ([]types.POIDetailedInfo, error) {
+func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceResponse(ctx context.Context, userID uuid.UUID, lat, lon, distance float64) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetGeneralPOIByDistanceResponse")
 	defer span.End()
 
-	cacheKey := generatePOICacheKey(city, lat, lon, distance, userID)
+	cacheKey := generateFilteredPOICacheKey(lat, lon, distance, userID)
 	span.SetAttributes(attribute.String("cache.key", cacheKey))
 
 	if cached, found := l.cache.Get(cacheKey); found {
@@ -1869,31 +1872,31 @@ func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceResponse(ctx context
 	}
 
 	// Fetch cityID
-	cityData, err := l.cityRepo.FindCityByNameAndCountry(ctx, city, "")
-	if err != nil || cityData == nil {
-		span.RecordError(err)
-		return nil, fmt.Errorf("city %s not found: %w", city, err)
-	}
-	cityID := cityData.ID
+	// cityData, err := l.cityRepo.FindCityByNameAndCountry(ctx, "", "")
+	// if err != nil || cityData == nil {
+	// 	span.RecordError(err)
+	// 	return nil, fmt.Errorf("city %s not found: %w", "", err)
+	// }
+	// cityID := cityData.ID
 
 	// Query database
-	userLocation := types.UserLocation{UserLat: lat, UserLon: lon, SearchRadiusKm: distance}
-	pois, err := l.poiRepo.GetPOIsByCityAndDistance(ctx, cityID, userLocation)
-	if err != nil {
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to query POIs: %w", err)
-	}
-	if len(pois) > 0 {
-		l.cache.Set(cacheKey, pois, cache.DefaultExpiration)
-		span.SetStatus(codes.Ok, "Served from database")
-		return pois, nil
-	}
+	// userLocation := types.UserLocation{UserLat: lat, UserLon: lon, SearchRadiusKm: distance}
+	// pois, err := l.poiRepo.GetPOIsByCityAndDistance(ctx, cityID, userLocation)
+	// if err != nil {
+	// 	span.RecordError(err)
+	// 	return nil, fmt.Errorf("failed to query POIs: %w", err)
+	// }
+	// if len(pois) > 0 {
+	// 	l.cache.Set(cacheKey, pois, cache.DefaultExpiration)
+	// 	span.SetStatus(codes.Ok, "Served from database")
+	// 	return pois, nil
+	// }
 
 	// Generate via AI
 	resultCh := make(chan types.GenAIResponse, 1)
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go l.getGeneralPOIByDistance(&wg, ctx, userID, city, lat, lon, distance, resultCh, &genai.GenerateContentConfig{
+	go l.getGeneralPOIByDistance(&wg, ctx, userID, lat, lon, distance, resultCh, &genai.GenerateContentConfig{
 		Temperature:     genai.Ptr[float32](0.7),
 		MaxOutputTokens: 16384,
 	})
@@ -1906,25 +1909,41 @@ func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceResponse(ctx context
 		return nil, genAIResponse.Err
 	}
 
-	// Convert AI response to POIDetailedInfo if necessary
+	// Convert AI response to POIDetailedInfo and calculate real distances
 	var poisDetailed []types.POIDetailedInfo
 	for _, p := range genAIResponse.GeneralPOI {
-		poisDetailed = append(poisDetailed, types.POIDetailedInfo{
+		// Calculate actual distance using PostGIS haversine formula
+		distanceKm := calculateDistance(lat, lon, p.Latitude, p.Longitude)
+
+		poi := types.POIDetailedInfo{
 			ID:        p.ID,
 			Name:      p.Name,
 			Latitude:  p.Latitude,
 			Longitude: p.Longitude,
 			Category:  p.Category,
-		})
+			Distance:  distanceKm, // Set calculated distance in km
+		}
+
+		// Apply additional client-side filtering if needed
+		// if filters.Category != "" && filters.Category != "all" {
+		// 	if !strings.Contains(strings.ToLower(poi.Category), strings.ToLower(filters.Category)) {
+		// 		continue // Skip POIs that don't match category filter
+		// 	}
+		// }
+
+		// Filter by actual distance - only include POIs within the requested radius
+		if distanceKm <= distance/1000 { // Convert meters to km for comparison
+			poisDetailed = append(poisDetailed, poi)
+		}
 	}
 
 	// Save to database
-	for _, poi := range poisDetailed {
-		_, err := l.poiRepo.SavePOIDetails(ctx, poi, cityID)
-		if err != nil {
-			l.logger.WarnContext(ctx, "Failed to save POI", slog.Any("error", err), slog.String("poi_name", poi.Name))
-		}
-	}
+	// for _, poi := range poisDetailed {
+	// 	_, err := l.poiRepo.SavePOIDetails(ctx, poi, cityID)
+	// 	if err != nil {
+	// 		l.logger.WarnContext(ctx, "Failed to save POI", slog.Any("error", err), slog.String("poi_name", poi.Name))
+	// 	}
+	// }
 
 	l.cache.Set(cacheKey, poisDetailed, cache.DefaultExpiration)
 	span.SetStatus(codes.Ok, "POIs generated and cached")
@@ -3248,4 +3267,29 @@ func assignIDs(response interface{}, interactionID uuid.UUID) {
 			r.Activities[i].LlmInteractionID = interactionID
 		}
 	}
+}
+
+// calculateDistance calculates the distance between two coordinates using the Haversine formula
+// Returns distance in kilometers
+func calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
+	const R = 6371 // Earth's radius in kilometers
+
+	// Convert degrees to radians
+	lat1Rad := lat1 * math.Pi / 180
+	lon1Rad := lon1 * math.Pi / 180
+	lat2Rad := lat2 * math.Pi / 180
+	lon2Rad := lon2 * math.Pi / 180
+
+	// Differences
+	dlat := lat2Rad - lat1Rad
+	dlon := lon2Rad - lon1Rad
+
+	// Haversine formula
+	a := math.Sin(dlat/2)*math.Sin(dlat/2) +
+		math.Cos(lat1Rad)*math.Cos(lat2Rad)*math.Sin(dlon/2)*math.Sin(dlon/2)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+
+	// Distance in kilometers
+	distance := R * c
+	return distance
 }

@@ -2,6 +2,13 @@ package types
 
 import "github.com/google/uuid"
 
+// POIFilters represents filters for POI queries
+type POIFilters struct {
+	City       string `json:"city,omitempty"`
+	Category   string `json:"category,omitempty"`
+	PriceRange string `json:"price_range,omitempty"`
+}
+
 type POIDetail struct {
 	ID               uuid.UUID `json:"id"`
 	LlmInteractionID uuid.UUID `json:"llm_interaction_id,omitempty"` // ID of the LLM interaction that generated this POI

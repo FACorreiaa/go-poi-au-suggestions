@@ -23,6 +23,7 @@ type Repository interface {
 	SaveCity(ctx context.Context, city types.CityDetail) (uuid.UUID, error)
 	FindCityByNameAndCountry(ctx context.Context, city, country string) (*types.CityDetail, error)
 	GetCityIDByName(ctx context.Context, cityName string) (uuid.UUID, error)
+	GetAllCities(ctx context.Context) ([]types.CityDetail, error)
 	
 	// Vector similarity search methods
 	FindSimilarCities(ctx context.Context, queryEmbedding []float32, limit int) ([]types.CityDetail, error)
@@ -450,6 +451,79 @@ func (r *RepositoryImpl) GetCitiesWithoutEmbeddings(ctx context.Context, limit i
 	l.InfoContext(ctx, "Cities without embeddings found", slog.Int("count", len(cities)))
 	span.SetAttributes(attribute.Int("results.count", len(cities)))
 	span.SetStatus(codes.Ok, "Cities without embeddings retrieved")
+
+	return cities, nil
+}
+
+// GetAllCities retrieves all cities from the database with their coordinates
+func (r *RepositoryImpl) GetAllCities(ctx context.Context) ([]types.CityDetail, error) {
+	ctx, span := otel.Tracer("CityRepository").Start(ctx, "GetAllCities")
+	defer span.End()
+
+	l := r.logger.With(slog.String("method", "GetAllCities"))
+
+	query := `
+        SELECT 
+            id, 
+            name, 
+            country,
+            COALESCE(state_province, '') as state_province,
+            ai_summary,
+            ST_Y(center_location) as center_latitude,
+            ST_X(center_location) as center_longitude
+        FROM cities
+        WHERE center_location IS NOT NULL
+        ORDER BY name ASC
+    `
+
+	rows, err := r.pgpool.Query(ctx, query)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to query all cities", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database query failed")
+		return nil, fmt.Errorf("failed to query all cities: %w", err)
+	}
+	defer rows.Close()
+
+	var cities []types.CityDetail
+	for rows.Next() {
+		var city types.CityDetail
+		var lat, lon sql.NullFloat64
+
+		err := rows.Scan(
+			&city.ID,
+			&city.Name,
+			&city.Country,
+			&city.StateProvince,
+			&city.AiSummary,
+			&lat,
+			&lon,
+		)
+		if err != nil {
+			l.ErrorContext(ctx, "Failed to scan city row", slog.Any("error", err))
+			span.RecordError(err)
+			return nil, fmt.Errorf("failed to scan city row: %w", err)
+		}
+
+		if lat.Valid {
+			city.CenterLatitude = lat.Float64
+		}
+		if lon.Valid {
+			city.CenterLongitude = lon.Float64
+		}
+
+		cities = append(cities, city)
+	}
+
+	if err = rows.Err(); err != nil {
+		l.ErrorContext(ctx, "Error iterating city rows", slog.Any("error", err))
+		span.RecordError(err)
+		return nil, fmt.Errorf("error iterating city rows: %w", err)
+	}
+
+	l.InfoContext(ctx, "All cities retrieved", slog.Int("count", len(cities)))
+	span.SetAttributes(attribute.Int("results.count", len(cities)))
+	span.SetStatus(codes.Ok, "All cities retrieved")
 
 	return cities, nil
 }

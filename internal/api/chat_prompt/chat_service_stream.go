@@ -1621,6 +1621,7 @@ func (l *LlmInteractiontServiceImpl) handleSemanticAddPOIStreamed(ctx context.Co
  */
 // ProcessUnifiedChatMessageStream handles unified chat with optimized streaming based on Google GenAI patterns
 func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
+	startTime := time.Now() // Track when processing starts
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ProcessUnifiedChatMessageStream", trace.WithAttributes(
 		attribute.String("message", message),
 	))
@@ -1674,7 +1675,30 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context
 		Data: map[string]interface{}{"domain": string(domain), "city": cityName, "session_id": sessionID.String()},
 	})
 
-	// Step 5: Spawn streaming workers based on domain
+	// Step 5: Collect responses for saving interaction
+	responses := make(map[string]*strings.Builder)
+	responsesMutex := sync.Mutex{}
+	
+	// Modified sendEventWithResponse to capture responses
+	sendEventWithResponse := func(event types.StreamEvent) {
+		if event.Type == types.EventTypeChunk {
+			responsesMutex.Lock()
+			if data, ok := event.Data.(map[string]interface{}); ok {
+				if partType, exists := data["part"].(string); exists {
+					if chunk, chunkExists := data["chunk"].(string); chunkExists {
+						if responses[partType] == nil {
+							responses[partType] = &strings.Builder{}
+						}
+						responses[partType].WriteString(chunk)
+					}
+				}
+			}
+			responsesMutex.Unlock()
+		}
+		l.sendEventSimple(ctx, eventCh, event)
+	}
+
+	// Step 6: Spawn streaming workers based on domain
 	switch domain {
 	case types.DomainItinerary, types.DomainGeneral:
 		wg.Add(3)
@@ -1683,21 +1707,21 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context
 		go func() {
 			defer wg.Done()
 			prompt := getCityDataPrompt(cityName)
-			l.streamWorker(ctx, prompt, "city_data", eventCh, domain)
+			l.streamWorkerWithResponse(ctx, prompt, "city_data", sendEventWithResponse, domain)
 		}()
 
 		// Worker 2: Stream General POIs
 		go func() {
 			defer wg.Done()
 			prompt := getGeneralPOIPrompt(cityName)
-			l.streamWorker(ctx, prompt, "general_pois", eventCh, domain)
+			l.streamWorkerWithResponse(ctx, prompt, "general_pois", sendEventWithResponse, domain)
 		}()
 
 		// Worker 3: Stream Personalized Itinerary
 		go func() {
 			defer wg.Done()
 			prompt := getPersonalizedItineraryPrompt(cityName, basePreferences)
-			l.streamWorker(ctx, prompt, "itinerary", eventCh, domain)
+			l.streamWorkerWithResponse(ctx, prompt, "itinerary", sendEventWithResponse, domain)
 		}()
 
 	case types.DomainAccommodation:
@@ -1705,7 +1729,7 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context
 		go func() {
 			defer wg.Done()
 			prompt := getAccommodationPrompt(cityName, lat, lon, basePreferences)
-			l.streamWorker(ctx, prompt, "hotels", eventCh, domain)
+			l.streamWorkerWithResponse(ctx, prompt, "hotels", sendEventWithResponse, domain)
 		}()
 
 	case types.DomainDining:
@@ -1713,7 +1737,7 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context
 		go func() {
 			defer wg.Done()
 			prompt := getDiningPrompt(cityName, lat, lon, basePreferences)
-			l.streamWorker(ctx, prompt, "restaurants", eventCh, domain)
+			l.streamWorkerWithResponse(ctx, prompt, "restaurants", sendEventWithResponse, domain)
 		}()
 
 	case types.DomainActivities:
@@ -1721,15 +1745,15 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context
 		go func() {
 			defer wg.Done()
 			prompt := getActivitiesPrompt(cityName, lat, lon, basePreferences)
-			l.streamWorker(ctx, prompt, "activities", eventCh, domain)
+			l.streamWorkerWithResponse(ctx, prompt, "activities", sendEventWithResponse, domain)
 		}()
 
 	default:
-		l.sendEventSimple(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: fmt.Sprintf("unhandled domain: %s", domain)})
+		sendEventWithResponse(types.StreamEvent{Type: types.EventTypeError, Error: fmt.Sprintf("unhandled domain: %s", domain)})
 		return fmt.Errorf("unhandled domain type: %s", domain)
 	}
 
-	// Step 6: Completion goroutine with sync.Once for channel closure
+	// Step 7: Completion goroutine with sync.Once for channel closure
 	go func() {
 		wg.Wait()             // Wait for all workers to complete
 		if ctx.Err() == nil { // Only send completion event if context is still active
@@ -1744,18 +1768,40 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context
 		})
 	}()
 
-	// Step 7: Save interaction asynchronously
+	
+	// Step 8: Save interaction asynchronously after completion
 	go func() {
+		wg.Wait() // Wait for all workers to complete
+		
+		// Save interaction with complete response
 		asyncCtx := context.Background()
+		
+		// Combine all responses into a single response text
+		var fullResponseBuilder strings.Builder
+		responsesMutex.Lock()
+		for partType, builder := range responses {
+			if builder != nil && builder.Len() > 0 {
+				fullResponseBuilder.WriteString(fmt.Sprintf("[%s]\n%s\n\n", partType, builder.String()))
+			}
+		}
+		responsesMutex.Unlock()
+		
+		fullResponse := fullResponseBuilder.String()
+		if fullResponse == "" {
+			fullResponse = fmt.Sprintf("Processed %s request for %s", domain, cityName)
+		}
+		
 		interaction := types.LlmInteraction{
-			ID:        uuid.New(),
-			SessionID: sessionID,
-			UserID:    userID,
-			ProfileID: profileID,
-			CityName:  cityName,
-			Prompt:    fmt.Sprintf("Unified Chat Stream - Domain: %s, Message: %s", domain, cleanedMessage),
-			ModelUsed: model,
-			Timestamp: time.Now(),
+			ID:           uuid.New(),
+			SessionID:    sessionID,
+			UserID:       userID,
+			ProfileID:    profileID,
+			CityName:     cityName,
+			Prompt:       fmt.Sprintf("Unified Chat Stream - Domain: %s, Message: %s", domain, cleanedMessage),
+			ResponseText: fullResponse,
+			ModelUsed:    model,
+			LatencyMs:    int(time.Since(startTime).Milliseconds()),
+			Timestamp:    startTime,
 		}
 		if _, err := l.llmInteractionRepo.SaveInteraction(asyncCtx, interaction); err != nil {
 			l.logger.ErrorContext(asyncCtx, "Failed to save stream interaction", slog.Any("error", err))
@@ -1800,6 +1846,54 @@ func (l *LlmInteractiontServiceImpl) streamWorker(ctx context.Context, prompt, p
 						chunk := string(part.Text)
 						fullResponse.WriteString(chunk)
 						l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+							Type: types.EventTypeChunk,
+							Data: map[string]interface{}{
+								"part":   partType,
+								"chunk":  chunk,
+								"domain": string(domain),
+							},
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
+// streamWorkerWithResponse handles streaming for a single worker with response capture
+func (l *LlmInteractiontServiceImpl) streamWorkerWithResponse(ctx context.Context, prompt, partType string, sendEvent func(types.StreamEvent), domain types.DomainType) {
+	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	if err != nil {
+		if ctx.Err() == nil {
+			sendEvent(types.StreamEvent{
+				Type:  types.EventTypeError,
+				Error: fmt.Sprintf("%s worker failed: %v", partType, err),
+			})
+		}
+		return
+	}
+
+	var fullResponse strings.Builder
+	for resp, err := range iter {
+		if ctx.Err() != nil {
+			return // Stop if context is canceled
+		}
+		if err != nil {
+			if ctx.Err() == nil {
+				sendEvent(types.StreamEvent{
+					Type:  types.EventTypeError,
+					Error: fmt.Sprintf("%s streaming error: %v", partType, err),
+				})
+			}
+			return
+		}
+		for _, cand := range resp.Candidates {
+			if cand.Content != nil {
+				for _, part := range cand.Content.Parts {
+					if part.Text != "" {
+						chunk := string(part.Text)
+						fullResponse.WriteString(chunk)
+						sendEvent(types.StreamEvent{
 							Type: types.EventTypeChunk,
 							Data: map[string]interface{}{
 								"part":   partType,

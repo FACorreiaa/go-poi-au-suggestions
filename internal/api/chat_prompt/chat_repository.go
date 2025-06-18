@@ -579,69 +579,159 @@ func (r *RepositoryImpl) GetSession(ctx context.Context, sessionID uuid.UUID) (*
 	return &session, nil
 }
 
-// GetUserChatSessions retrieves all chat sessions for a user, ordered by most recent first
+// GetUserChatSessions retrieves chat history from LLM interactions grouped by session/city, ordered by most recent first
 func (r *RepositoryImpl) GetUserChatSessions(ctx context.Context, userID uuid.UUID) ([]types.ChatSession, error) {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "GetUserChatSessions", trace.WithAttributes(
 		semconv.DBSystemKey.String(semconv.DBSystemPostgreSQL.Value.AsString()),
 		attribute.String("db.operation", "SELECT"),
-		attribute.String("db.sql.table", "chat_sessions"),
+		attribute.String("db.sql.table", "llm_interactions"),
 		attribute.String("user.id", userID.String()),
 	))
 	defer span.End()
 
 	query := `
-        SELECT id, user_id, current_itinerary, conversation_history, session_context,
-               created_at, updated_at, expires_at, status
-        FROM chat_sessions 
-        WHERE user_id = $1 
-        ORDER BY updated_at DESC
+        WITH grouped_interactions AS (
+            SELECT 
+                COALESCE(session_id, city_name || '_' || DATE(created_at)) as session_key,
+                user_id,
+                city_name,
+                MIN(created_at) as first_interaction,
+                MAX(created_at) as last_interaction,
+                COUNT(*) as interaction_count,
+                json_agg(
+                    json_build_object(
+                        'id', id,
+                        'prompt', prompt,
+                        'response_text', response_text,
+                        'created_at', created_at,
+                        'city_name', city_name,
+                        'session_id', session_id
+                    ) ORDER BY created_at
+                ) as interactions
+            FROM llm_interactions 
+            WHERE user_id = $1 AND prompt IS NOT NULL
+            GROUP BY session_key, user_id, city_name
+        )
+        SELECT 
+            session_key,
+            user_id,
+            city_name,
+            first_interaction,
+            last_interaction,
+            interaction_count,
+            interactions
+        FROM grouped_interactions
+        ORDER BY last_interaction DESC
+        LIMIT 50
     `
+
 	rows, err := r.pgpool.Query(ctx, query, userID)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to query chat sessions")
-		r.logger.ErrorContext(ctx, "Failed to get user chat sessions", slog.Any("error", err), slog.String("user_id", userID.String()))
+		span.SetStatus(codes.Error, "Failed to query LLM interactions")
+		r.logger.ErrorContext(ctx, "Failed to get user chat sessions from LLM interactions", slog.Any("error", err), slog.String("user_id", userID.String()))
 		return nil, fmt.Errorf("failed to get user chat sessions: %w", err)
 	}
 	defer rows.Close()
 
 	var sessions []types.ChatSession
 	for rows.Next() {
-		var session types.ChatSession
-		var itineraryJSON, historyJSON, contextJSON []byte
-		
-		err := rows.Scan(&session.ID, &session.UserID, &itineraryJSON, &historyJSON, &contextJSON,
-			&session.CreatedAt, &session.UpdatedAt, &session.ExpiresAt, &session.Status)
+		var sessionKey, cityName string
+		var userIDFromDB uuid.UUID
+		var firstInteraction, lastInteraction time.Time
+		var interactionCount int
+		var interactionsJSON string
+
+		err := rows.Scan(&sessionKey, &userIDFromDB, &cityName, &firstInteraction, &lastInteraction, &interactionCount, &interactionsJSON)
 		if err != nil {
 			span.RecordError(err)
-			span.SetStatus(codes.Error, "Failed to scan chat session row")
-			r.logger.ErrorContext(ctx, "Failed to scan chat session row", slog.Any("error", err))
-			return nil, fmt.Errorf("failed to scan chat session row: %w", err)
+			span.SetStatus(codes.Error, "Failed to scan LLM interaction row")
+			r.logger.ErrorContext(ctx, "Failed to scan LLM interaction row", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to scan LLM interaction row: %w", err)
 		}
 
-		// Parse JSON fields
-		if len(itineraryJSON) > 0 {
-			json.Unmarshal(itineraryJSON, &session.CurrentItinerary)
-		}
-		if len(historyJSON) > 0 {
-			json.Unmarshal(historyJSON, &session.ConversationHistory)
-		}
-		if len(contextJSON) > 0 {
-			json.Unmarshal(contextJSON, &session.SessionContext)
+		var interactions []map[string]interface{}
+		if err := json.Unmarshal([]byte(interactionsJSON), &interactions); err != nil {
+			r.logger.WarnContext(ctx, "Failed to parse interactions JSON", slog.Any("error", err))
+			continue
 		}
 
+		var conversationHistory []types.ConversationMessage
+		for _, interaction := range interactions {
+			if prompt, ok := interaction["prompt"].(string); ok && prompt != "" {
+				conversationHistory = append(conversationHistory, types.ConversationMessage{
+					Role:      "user",
+					Content:   prompt,
+					Timestamp: parseTimeFromInterface(interaction["created_at"]),
+				})
+			}
+			if response, ok := interaction["response_text"].(string); ok {
+				if response == "" {
+					response = fmt.Sprintf("I provided recommendations for %s", cityName)
+				}
+				conversationHistory = append(conversationHistory, types.ConversationMessage{
+					Role:      "assistant",
+					Content:   response,
+					Timestamp: parseTimeFromInterface(interaction["created_at"]),
+				})
+			}
+		}
+
+		sessionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(sessionKey))
+		session := types.ChatSession{
+			ID:                  sessionID,
+			UserID:              userIDFromDB,
+			ConversationHistory: conversationHistory,
+			CreatedAt:           firstInteraction,
+			UpdatedAt:           lastInteraction,
+			Status:              "active",
+		}
 		sessions = append(sessions, session)
 	}
 
 	if err = rows.Err(); err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "Error iterating through chat session rows")
-		r.logger.ErrorContext(ctx, "Error iterating through chat session rows", slog.Any("error", err))
-		return nil, fmt.Errorf("error iterating through chat session rows: %w", err)
+		span.SetStatus(codes.Error, "Error iterating through LLM interaction rows")
+		r.logger.ErrorContext(ctx, "Error iterating through LLM interaction rows", slog.Any("error", err))
+		return nil, fmt.Errorf("error iterating through LLM interaction rows: %w", err)
 	}
 
 	span.SetAttributes(attribute.Int("sessions.count", len(sessions)))
 	return sessions, nil
+}
+
+// Helper function to parse time from interface{}
+func parseTimeFromInterface(timeInterface interface{}) time.Time {
+	switch t := timeInterface.(type) {
+	case time.Time:
+		return t
+	case string:
+		if parsed, err := time.Parse(time.RFC3339, t); err == nil {
+			return parsed
+		}
+	}
+	return time.Now()
+}
+
+// Helper function to generate session title from conversation history
+func generateSessionTitleFromHistory(history []types.ConversationMessage, cityName string) string {
+	// Find first user message
+	for _, msg := range history {
+		if msg.Role == "user" && len(msg.Content) > 0 {
+			words := strings.Fields(msg.Content)
+			if len(words) > 4 {
+				return strings.Join(words[:4], " ") + "..."
+			}
+			return msg.Content
+		}
+	}
+
+	// Fallback to city name if available
+	if cityName != "" {
+		return "Trip to " + cityName
+	}
+
+	return "Chat Session"
 }
 
 // UpdateSession updates an existing session

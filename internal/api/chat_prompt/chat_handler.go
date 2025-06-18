@@ -60,6 +60,9 @@ type Handler interface {
 	// Unified chat methods
 	ProcessUnifiedChatMessage(w http.ResponseWriter, r *http.Request)
 	ProcessUnifiedChatMessageStream(w http.ResponseWriter, r *http.Request)
+	
+	// Chat session management
+	GetUserChatSessions(w http.ResponseWriter, r *http.Request)
 }
 type HandlerImpl struct {
 	llmInteractionService LlmInteractiontService
@@ -468,6 +471,45 @@ func (HandlerImpl *HandlerImpl) SaveItenerary(w http.ResponseWriter, r *http.Req
 
 	l.InfoContext(ctx, "Itinerary saved successfully")
 	api.WriteJSONResponse(w, r, http.StatusCreated, savedItinerary)
+}
+
+func (HandlerImpl *HandlerImpl) GetUserChatSessions(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetUserChatSessions", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm/prompt-response/chat/sessions/user/{profileID}"),
+	))
+	defer span.End()
+
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "GetUserChatSessions"))
+	l.DebugContext(ctx, "Getting user chat sessions")
+
+	// Get user ID from context
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+	span.SetAttributes(semconv.EnduserIDKey.String(userID.String()))
+	l = l.With(slog.String("userID", userID.String()))
+
+	// Get chat sessions from service
+	sessions, err := HandlerImpl.llmInteractionService.GetUserChatSessions(ctx, userID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to get user chat sessions", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to get chat sessions: %s", err.Error()))
+		return
+	}
+
+	l.InfoContext(ctx, "Successfully retrieved user chat sessions", slog.Int("sessionCount", len(sessions)))
+	api.WriteJSONResponse(w, r, http.StatusOK, sessions)
 }
 
 func (HandlerImpl *HandlerImpl) RemoveItenerary(w http.ResponseWriter, r *http.Request) {

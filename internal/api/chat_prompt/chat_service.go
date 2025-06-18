@@ -73,6 +73,9 @@ type LlmInteractiontService interface {
 
 	ProcessUnifiedChatMessage(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (interface{}, error)
 	ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error
+	
+	// Chat session management
+	GetUserChatSessions(ctx context.Context, userID uuid.UUID) ([]types.ChatSession, error)
 
 	// // Context-aware chat methods
 	// StartNewSessionWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (uuid.UUID, *types.AiCityResponse, error)
@@ -1554,6 +1557,32 @@ func (l *LlmInteractiontServiceImpl) RemoveItenerary(ctx context.Context, userID
 	l.logger.InfoContext(ctx, "Successfully removed chat from bookmark", slog.String("itineraryID", itineraryID.String()))
 	span.SetStatus(codes.Ok, "Itinerary removed successfully")
 	return nil
+}
+
+// GetUserChatSessions retrieves all chat sessions for a user
+func (l *LlmInteractiontServiceImpl) GetUserChatSessions(ctx context.Context, userID uuid.UUID) ([]types.ChatSession, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetUserChatSessions", trace.WithAttributes(
+		attribute.String("user.id", userID.String()),
+	))
+	defer span.End()
+
+	l.logger.InfoContext(ctx, "Retrieving chat sessions for user",
+		slog.String("userID", userID.String()))
+
+	sessions, err := l.llmInteractionRepo.GetUserChatSessions(ctx, userID)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to get user chat sessions", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get user chat sessions")
+		return nil, fmt.Errorf("failed to get user chat sessions: %w", err)
+	}
+
+	l.logger.InfoContext(ctx, "Successfully retrieved chat sessions", 
+		slog.String("userID", userID.String()),
+		slog.Int("sessionCount", len(sessions)))
+	span.SetAttributes(attribute.Int("sessions.count", len(sessions)))
+	span.SetStatus(codes.Ok, "Chat sessions retrieved successfully")
+	return sessions, nil
 }
 
 // getPOIdetails returns a formatted string with POI details.

@@ -35,6 +35,7 @@ type Repository interface {
 	// Session methods
 	CreateSession(ctx context.Context, session types.ChatSession) error
 	GetSession(ctx context.Context, sessionID uuid.UUID) (*types.ChatSession, error)
+	GetUserChatSessions(ctx context.Context, userID uuid.UUID) ([]types.ChatSession, error)
 	UpdateSession(ctx context.Context, session types.ChatSession) error
 	AddMessageToSession(ctx context.Context, sessionID uuid.UUID, message types.ConversationMessage) error
 
@@ -576,6 +577,71 @@ func (r *RepositoryImpl) GetSession(ctx context.Context, sessionID uuid.UUID) (*
 	json.Unmarshal(historyJSON, &session.ConversationHistory)
 	json.Unmarshal(contextJSON, &session.SessionContext)
 	return &session, nil
+}
+
+// GetUserChatSessions retrieves all chat sessions for a user, ordered by most recent first
+func (r *RepositoryImpl) GetUserChatSessions(ctx context.Context, userID uuid.UUID) ([]types.ChatSession, error) {
+	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "GetUserChatSessions", trace.WithAttributes(
+		semconv.DBSystemKey.String(semconv.DBSystemPostgreSQL.Value.AsString()),
+		attribute.String("db.operation", "SELECT"),
+		attribute.String("db.sql.table", "chat_sessions"),
+		attribute.String("user.id", userID.String()),
+	))
+	defer span.End()
+
+	query := `
+        SELECT id, user_id, current_itinerary, conversation_history, session_context,
+               created_at, updated_at, expires_at, status
+        FROM chat_sessions 
+        WHERE user_id = $1 
+        ORDER BY updated_at DESC
+    `
+	rows, err := r.pgpool.Query(ctx, query, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to query chat sessions")
+		r.logger.ErrorContext(ctx, "Failed to get user chat sessions", slog.Any("error", err), slog.String("user_id", userID.String()))
+		return nil, fmt.Errorf("failed to get user chat sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []types.ChatSession
+	for rows.Next() {
+		var session types.ChatSession
+		var itineraryJSON, historyJSON, contextJSON []byte
+		
+		err := rows.Scan(&session.ID, &session.UserID, &itineraryJSON, &historyJSON, &contextJSON,
+			&session.CreatedAt, &session.UpdatedAt, &session.ExpiresAt, &session.Status)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Failed to scan chat session row")
+			r.logger.ErrorContext(ctx, "Failed to scan chat session row", slog.Any("error", err))
+			return nil, fmt.Errorf("failed to scan chat session row: %w", err)
+		}
+
+		// Parse JSON fields
+		if len(itineraryJSON) > 0 {
+			json.Unmarshal(itineraryJSON, &session.CurrentItinerary)
+		}
+		if len(historyJSON) > 0 {
+			json.Unmarshal(historyJSON, &session.ConversationHistory)
+		}
+		if len(contextJSON) > 0 {
+			json.Unmarshal(contextJSON, &session.SessionContext)
+		}
+
+		sessions = append(sessions, session)
+	}
+
+	if err = rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Error iterating through chat session rows")
+		r.logger.ErrorContext(ctx, "Error iterating through chat session rows", slog.Any("error", err))
+		return nil, fmt.Errorf("error iterating through chat session rows: %w", err)
+	}
+
+	span.SetAttributes(attribute.Int("sessions.count", len(sessions)))
+	return sessions, nil
 }
 
 // UpdateSession updates an existing session

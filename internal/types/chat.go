@@ -315,3 +315,34 @@ func (d *DomainDetector) DetectDomain(ctx context.Context, message string) Domai
 	// Default to general domain
 	return DomainGeneral
 }
+
+// RecentInteraction represents a recent user interaction with cities and POIs
+type RecentInteraction struct {
+	ID              uuid.UUID      `json:"id"`
+	UserID          uuid.UUID      `json:"user_id"`
+	CityName        string         `json:"city_name"`
+	CityID          *uuid.UUID     `json:"city_id,omitempty"`
+	Prompt          string         `json:"prompt"`
+	ResponseText    string         `json:"response_text,omitempty"`
+	ModelUsed       string         `json:"model_used"`
+	LatencyMs       int            `json:"latency_ms"`
+	CreatedAt       time.Time      `json:"created_at"`
+	POIs            []POIDetail    `json:"pois,omitempty"`
+	Hotels          []HotelDetailedInfo `json:"hotels,omitempty"`
+	Restaurants     []RestaurantDetailedInfo `json:"restaurants,omitempty"`
+}
+
+// RecentInteractionsResponse groups interactions by city
+type RecentInteractionsResponse struct {
+	Cities []CityInteractions `json:"cities"`
+	Total  int                `json:"total"`
+}
+
+// CityInteractions groups interactions for a specific city
+type CityInteractions struct {
+	CityName     string              `json:"city_name"`
+	CityID       *uuid.UUID          `json:"city_id,omitempty"`
+	Interactions []RecentInteraction `json:"interactions"`
+	POICount     int                 `json:"poi_count"`
+	LastActivity time.Time           `json:"last_activity"`
+}

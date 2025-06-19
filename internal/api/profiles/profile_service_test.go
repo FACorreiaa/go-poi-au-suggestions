@@ -186,7 +186,7 @@ func setupprofilessServiceTest() (*ServiceImpl, *MockprofilessRepo, *Mockinteres
 	return service, mockPrefRepo, mockIntRepo, mockTagRepo
 }
 
-func TestprofilessServiceImpl_GetSearchProfile(t *testing.T) {
+func TestProfilesServiceImpl_GetSearchProfile(t *testing.T) {
 	service, mockPrefRepo, _, _ := setupprofilessServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -215,7 +215,7 @@ func TestprofilessServiceImpl_GetSearchProfile(t *testing.T) {
 }
 
 // Unit test for GetSearchProfiles
-func TestprofilessServiceImpl_GetSearchProfiles(t *testing.T) {
+func TestProfilesServiceImpl_GetSearchProfiles(t *testing.T) {
 	service, mockPrefRepo, _, _ := setupprofilessServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -246,7 +246,7 @@ func TestprofilessServiceImpl_GetSearchProfiles(t *testing.T) {
 }
 
 // Unit test for GetDefaultSearchProfile
-func TestprofilessServiceImpl_GetDefaultSearchProfile(t *testing.T) {
+func TestProfilesServiceImpl_GetDefaultSearchProfile(t *testing.T) {
 	service, mockPrefRepo, _, _ := setupprofilessServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -274,7 +274,7 @@ func TestprofilessServiceImpl_GetDefaultSearchProfile(t *testing.T) {
 }
 
 // Unit test for UpdateSearchProfile
-func TestprofilessServiceImpl_UpdateSearchProfile(t *testing.T) {
+func TestProfilesServiceImpl_UpdateSearchProfile(t *testing.T) {
 	service, mockPrefRepo, _, _ := setupprofilessServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -307,7 +307,7 @@ func TestprofilessServiceImpl_UpdateSearchProfile(t *testing.T) {
 }
 
 // Unit test for DeleteSearchProfile
-func TestprofilessServiceImpl_DeleteSearchProfile(t *testing.T) {
+func TestProfilesServiceImpl_DeleteSearchProfile(t *testing.T) {
 	service, mockPrefRepo, _, _ := setupprofilessServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -334,7 +334,7 @@ func TestprofilessServiceImpl_DeleteSearchProfile(t *testing.T) {
 }
 
 // Unit test for SetDefaultSearchProfile
-func TestprofilessServiceImpl_SetDefaultSearchProfile(t *testing.T) {
+func TestProfilesServiceImpl_SetDefaultSearchProfile(t *testing.T) {
 	service, mockPrefRepo, _, _ := setupprofilessServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -361,7 +361,7 @@ func TestprofilessServiceImpl_SetDefaultSearchProfile(t *testing.T) {
 }
 
 // Unit tests for CreateSearchProfile (the simpler version first)
-func TestprofilessServiceImpl_CreateSearchProfile(t *testing.T) {
+func TestProfilesServiceImpl_CreateSearchProfile(t *testing.T) {
 	service, mockPrefRepo, mockIntRepo, mockTagRepo := setupprofilessServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -472,7 +472,7 @@ func TestprofilessServiceImpl_CreateSearchProfile(t *testing.T) {
 
 // Unit test for CreateSearchProfileCC (the transactional version)
 // Note: This is a simplified test that doesn't mock the transaction directly
-func TestprofilessServiceImpl_CreateSearchProfileCC(t *testing.T) {
+func TestProfilesServiceImpl_CreateSearchProfileCC(t *testing.T) {
 	// Skip this test for now as it requires more complex mocking of transactions
 	// TODO: Implement proper transaction mocking for this test
 	t.Skip("Skipping test for CreateSearchProfileCC as it requires complex transaction mocking")

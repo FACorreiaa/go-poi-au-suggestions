@@ -144,6 +144,7 @@ func main() {
 		PointsOfInterestHandler: c.POIHandler,
 		ItineraryListHandler:    c.ItineraryListHandler,
 		CityHandler:             c.CityHandler,
+		RecentsHandler:          c.RecentsHandler,
 		AuthenticateMiddleware:  authenticateMiddleware,
 		Logger:                  logger,
 	}

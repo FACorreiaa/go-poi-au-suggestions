@@ -1,6 +1,9 @@
 package types
 
-import "github.com/google/uuid"
+import (
+	"time"
+	"github.com/google/uuid"
+)
 
 // POIFilters represents filters for POI queries
 type POIFilters struct {
@@ -49,6 +52,7 @@ type POIDetail struct {
 type POIDetailedInfo struct {
 	ID               uuid.UUID         `json:"id,omitempty"`
 	City             string            `json:"city"`
+	CityID           uuid.UUID         `json:"city_id"`
 	Name             string            `json:"name"`
 	DescriptionPOI   string            `json:"description_poi,omitempty"`
 	Distance         float64           `json:"distance"`
@@ -67,6 +71,7 @@ type POIDetailedInfo struct {
 	Reviews          []string          `json:"reviews"`
 	LlmInteractionID uuid.UUID         `json:"llm_interaction_id"`
 	Tags             []string          `json:"tags,omitempty"`
+	CreatedAt        time.Time         `json:"created_at"`
 	Err              error             `json:"-"`
 }
 

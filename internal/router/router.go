@@ -15,6 +15,7 @@ import (
 	itineraryList "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/list"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/recents"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/tags"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 )
@@ -32,6 +33,7 @@ type Config struct {
 	PointsOfInterestHandler *poi.HandlerImpl
 	ItineraryListHandler    *itineraryList.HandlerImpl
 	CityHandler             *city.Handler
+	RecentsHandler          *recents.HandlerImpl
 }
 
 // SetupRouter initializes and configures the main application router.
@@ -91,6 +93,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			r.Mount("/llm", LLMInteractionRoutes(cfg.LLMInteractionHandler))
 			r.Mount("/pois", POIRoutes(cfg.PointsOfInterestHandler)) // Points of Interest routes
 			r.Mount("/itineraries", ItineraryListRoutes(cfg.ItineraryListHandler))
+			r.Mount("/recents", RecentsRoutes(cfg.RecentsHandler)) // Recent interactions routes
 			// r.Mount("/pois", POIRoutes(cfg.HandlerImpl))   // Example for POI routes
 		})
 
@@ -254,6 +257,15 @@ func CityRoutes(h *city.Handler) http.Handler {
 	r := chi.NewRouter()
 
 	r.Get("/", h.GetAllCities) // GET http://localhost:8000/api/v1/cities
+
+	return r
+}
+
+func RecentsRoutes(h *recents.HandlerImpl) http.Handler {
+	r := chi.NewRouter()
+
+	r.Get("/", h.GetUserRecentInteractions)                 // GET http://localhost:8000/api/v1/recents
+	r.Get("/city/{cityName}", h.GetCityDetailsForUser)      // GET http://localhost:8000/api/v1/recents/city/{cityName}
 
 	return r
 }

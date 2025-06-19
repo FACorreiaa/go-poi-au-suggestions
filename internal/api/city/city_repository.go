@@ -24,11 +24,13 @@ type Repository interface {
 	FindCityByNameAndCountry(ctx context.Context, city, country string) (*types.CityDetail, error)
 	GetCityIDByName(ctx context.Context, cityName string) (uuid.UUID, error)
 	GetAllCities(ctx context.Context) ([]types.CityDetail, error)
-	
+
 	// Vector similarity search methods
 	FindSimilarCities(ctx context.Context, queryEmbedding []float32, limit int) ([]types.CityDetail, error)
 	UpdateCityEmbedding(ctx context.Context, cityID uuid.UUID, embedding []float32) error
 	GetCitiesWithoutEmbeddings(ctx context.Context, limit int) ([]types.CityDetail, error)
+
+	GetCity(ctx context.Context, lat, lon float64) (uuid.UUID, string, error)
 }
 
 type RepositoryImpl struct {
@@ -210,7 +212,7 @@ func (r *RepositoryImpl) GetCityIDByName(ctx context.Context, cityName string) (
 			span.SetStatus(codes.Error, "City not found")
 			return uuid.Nil, fmt.Errorf("city not found: %s", cityName)
 		}
-		l.ErrorContext(ctx, "Failed to get city ID by name", 
+		l.ErrorContext(ctx, "Failed to get city ID by name",
 			slog.Any("error", err),
 			slog.String("city_name", cityName))
 		span.RecordError(err)
@@ -218,7 +220,7 @@ func (r *RepositoryImpl) GetCityIDByName(ctx context.Context, cityName string) (
 		return uuid.Nil, fmt.Errorf("failed to get city ID by name '%s': %w", cityName, err)
 	}
 
-	l.InfoContext(ctx, "City ID retrieved successfully", 
+	l.InfoContext(ctx, "City ID retrieved successfully",
 		slog.String("city_name", cityName),
 		slog.String("city_id", cityID.String()))
 	span.SetAttributes(
@@ -265,8 +267,8 @@ func (r *RepositoryImpl) FindSimilarCities(ctx context.Context, queryEmbedding [
         LIMIT $2
     `
 
-	l.DebugContext(ctx, "Executing city similarity search query", 
-		slog.String("query", query), 
+	l.DebugContext(ctx, "Executing city similarity search query",
+		slog.String("query", query),
 		slog.Int("embedding_dim", len(queryEmbedding)),
 		slog.Int("limit", limit))
 
@@ -351,7 +353,7 @@ func (r *RepositoryImpl) UpdateCityEmbedding(ctx context.Context, cityID uuid.UU
 
 	result, err := r.pgpool.Exec(ctx, query, embeddingStr, cityID)
 	if err != nil {
-		l.ErrorContext(ctx, "Failed to update city embedding", 
+		l.ErrorContext(ctx, "Failed to update city embedding",
 			slog.Any("error", err),
 			slog.String("city_id", cityID.String()))
 		span.RecordError(err)
@@ -367,7 +369,7 @@ func (r *RepositoryImpl) UpdateCityEmbedding(ctx context.Context, cityID uuid.UU
 		return err
 	}
 
-	l.InfoContext(ctx, "City embedding updated successfully", 
+	l.InfoContext(ctx, "City embedding updated successfully",
 		slog.String("city_id", cityID.String()),
 		slog.Int("embedding_dimension", len(embedding)))
 	span.SetAttributes(
@@ -526,4 +528,57 @@ func (r *RepositoryImpl) GetAllCities(ctx context.Context) ([]types.CityDetail, 
 	span.SetStatus(codes.Ok, "All cities retrieved")
 
 	return cities, nil
+}
+
+// determineCityID finds the city ID and name closest to the given latitude and longitude
+func (l *RepositoryImpl) GetCity(ctx context.Context, lat, lon float64) (uuid.UUID, string, error) {
+	// Start OpenTelemetry tracing
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "determineCityID", trace.WithAttributes(
+		attribute.Float64("lat", lat),
+		attribute.Float64("lon", lon),
+	))
+	defer span.End()
+
+	// Log the request
+	l.logger.DebugContext(ctx, "Determining city ID for coordinates",
+		slog.Float64("lat", lat),
+		slog.Float64("lon", lon))
+
+	// Create a POINT geometry from longitude and latitude
+	point := fmt.Sprintf("POINT(%f %f)", lon, lat)
+
+	// SQL query to find the closest city based on center_location
+	query := `
+        SELECT id, name
+        FROM cities
+        ORDER BY ST_Distance(center_location, ST_GeomFromText($1, 4326)) ASC
+        LIMIT 1
+    `
+
+	var cityID uuid.UUID
+	var cityName string
+	err := l.pgpool.QueryRow(ctx, query, point).Scan(&cityID, &cityName)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			l.logger.WarnContext(ctx, "No city found for the given coordinates")
+			span.SetStatus(codes.Error, "No city found")
+			return uuid.Nil, "", fmt.Errorf("no city found for coordinates (%f, %f)", lat, lon)
+		}
+		l.logger.ErrorContext(ctx, "Failed to determine city ID", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Database query failed")
+		return uuid.Nil, "", fmt.Errorf("failed to determine city ID: %w", err)
+	}
+
+	// Log success and set tracing attributes
+	l.logger.InfoContext(ctx, "City determined",
+		slog.String("city_id", cityID.String()),
+		slog.String("city_name", cityName))
+	span.SetAttributes(
+		attribute.String("city.id", cityID.String()),
+		attribute.String("city.name", cityName),
+	)
+	span.SetStatus(codes.Ok, "City determined")
+
+	return cityID, cityName, nil
 }

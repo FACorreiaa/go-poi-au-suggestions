@@ -1957,43 +1957,55 @@ func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistance(ctx context.Context
 		return nil, genAIResponse.Err
 	}
 
-	// Convert AI response to POIDetailedInfo and calculate real distances
-	var poisDetailed []types.POIDetailedInfo
+	// Save all LLM-generated POIs to the database
 	for _, p := range genAIResponse.GeneralPOI {
-		// Calculate actual distance using PostGIS haversine formula
-		distanceKm := calculateDistance(lat, lon, p.Latitude, p.Longitude)
+		// Determine cityID (assuming we need to derive it or get it from LLM response)
+		// For simplicity, we'll assume a method to get cityID based on coordinates or LLM data
+		cityID, cityName, err := l.cityRepo.GetCity(ctx, p.Latitude, p.Longitude)
+
+		if err != nil {
+			l.logger.WarnContext(ctx, "Failed to determine city ID for POI",
+				slog.Any("error", err),
+				slog.String("poi_name", p.Name))
+			continue
+		}
 
 		poi := types.POIDetailedInfo{
 			ID:        p.ID,
+			City:      cityName,
+			CityID:    cityID,
 			Name:      p.Name,
 			Latitude:  p.Latitude,
 			Longitude: p.Longitude,
 			Category:  p.Category,
-			Distance:  distanceKm, // Set calculated distance in km
+			// Note: Distance is not saved as it’s query-specific
 		}
+		_, err = l.poiRepo.SavePOIDetails(ctx, poi, cityID)
+		if err != nil {
+			l.logger.WarnContext(ctx, "Failed to save POI",
+				slog.Any("error", err),
+				slog.String("poi_name", poi.Name))
+		}
+	}
 
-		// Apply category filtering if needed
-		// if categoryFilter != "" && categoryFilter != "all" {
-		// 	if !strings.Contains(strings.ToLower(poi.Category), strings.ToLower(categoryFilter)) {
-		// 		continue // Skip POIs that don't match category filter
-		// 	}
-		// }
-
-		// Filter by actual distance - only include POIs within the requested radius
+	// Filter LLM-generated POIs for the current response
+	var poisDetailed []types.POIDetailedInfo
+	for _, p := range genAIResponse.GeneralPOI {
+		distanceKm := calculateDistance(lat, lon, p.Latitude, p.Longitude)
 		if distanceKm <= distance/1000 { // Convert meters to km for comparison
+			poi := types.POIDetailedInfo{
+				ID:        p.ID,
+				Name:      p.Name,
+				Latitude:  p.Latitude,
+				Longitude: p.Longitude,
+				Category:  p.Category,
+				Distance:  distanceKm,
+			}
 			poisDetailed = append(poisDetailed, poi)
 		}
 	}
 
-	l.logger.InfoContext(ctx, "Generated POIs using LLM", slog.Int("count", len(poisDetailed)))
-
-	// TODO: Save LLM-generated POIs to database for future use
-	// for _, poi := range poisDetailed {
-	// 	_, err := l.poiRepo.SavePOIDetails(ctx, poi, cityID)
-	// 	if err != nil {
-	// 		l.logger.WarnContext(ctx, "Failed to save POI", slog.Any("error", err), slog.String("poi_name", poi.Name))
-	// 	}
-	// }
+	l.logger.InfoContext(ctx, "Generated and filtered POIs using LLM", slog.Int("count", len(poisDetailed)))
 
 	l.cache.Set(cacheKey, poisDetailed, cache.DefaultExpiration)
 	span.SetStatus(codes.Ok, "POIs generated via LLM and cached")
@@ -2267,11 +2279,11 @@ func (l *LlmInteractiontServiceImpl) generateAddressFromLocation(lat, lon float6
 	if streetNumber <= 0 {
 		streetNumber = 1
 	}
-	
+
 	streets := []string{"Rua da República", "Avenida dos Aliados", "Rua de Santa Catarina",
 		"Rua do Almada", "Rua Formosa", "Rua das Flores", "Avenida da Boavista"}
 	streetIndex := int(math.Abs(lon*1000)) % len(streets)
-	
+
 	// Extra safety check to ensure valid index
 	if streetIndex < 0 || streetIndex >= len(streets) {
 		streetIndex = 0

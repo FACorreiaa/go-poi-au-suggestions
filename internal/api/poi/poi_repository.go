@@ -1730,28 +1730,48 @@ func (r *RepositoryImpl) GetPOIsByLocationAndDistance(ctx context.Context, lat, 
 
 	// Build the query with optional category filter
 	baseQuery := `
-        SELECT 
-            id, 
-            name, 
-            COALESCE(description, '') as description,
-            ST_X(location) as longitude,
-            ST_Y(location) as latitude,
-            COALESCE(category, '') as category,
-            COALESCE(address, '') as address,
-            COALESCE(website, '') as website,
-            COALESCE(phone_number, '') as phone_number,
-            opening_hours,
-            COALESCE(poi_type, '') as poi_type,
-            price_level,
-            COALESCE(average_rating, 0) as rating,
-            ROUND(ST_Distance(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / 1000.0, 2) as distance_km,
-            city_id
-        FROM points_of_interest
-        WHERE ST_DWithin(
-            location::geography, 
-            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 
-            $3
-        )`
+					SELECT 
+						id, 
+						name, 
+						COALESCE(description, '') as description,
+						ST_X(location) as longitude,
+						ST_Y(location) as latitude,
+						COALESCE(category, '') as category,
+						COALESCE(address, '') as address,
+						COALESCE(website, '') as website,
+						COALESCE(phone_number, '') as phone_number,
+						opening_hours,
+						COALESCE(poi_type, '') as poi_type,
+						price_level,
+						COALESCE(average_rating, 0) as rating,
+						ROUND(CAST(distance_meters / 1000.0 AS numeric), 2) as distance_km,
+						city_id
+					FROM (
+						SELECT 
+							id, 
+							name, 
+							COALESCE(description, '') as description,
+							ST_X(location) as longitude,
+							ST_Y(location) as latitude,
+							COALESCE(category, '') as category,
+							COALESCE(address, '') as address,
+							COALESCE(website, '') as website,
+							COALESCE(phone_number, '') as phone_number,
+							opening_hours,
+							COALESCE(poi_type, '') as poi_type,
+							price_level,
+							COALESCE(average_rating, 0) as rating,
+							ST_Distance(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) as distance_meters,
+							city_id
+						FROM points_of_interest
+						WHERE ST_DWithin(
+							location::geography, 
+							ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 
+							$3
+						)
+					) sub
+					ORDER BY distance_km ASC LIMIT 50
+				`
 
 	var args []interface{}
 	args = append(args, lon, lat, radiusMeters) // $1, $2, $3

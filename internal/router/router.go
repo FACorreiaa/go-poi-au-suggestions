@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors" // Import CORS middleware if needed
 
-	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/app/middleware"
 	authMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	llmChat "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/chat_prompt"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
@@ -51,10 +50,6 @@ func SetupRouter(cfg *Config) chi.Router {
 		MaxAge:           300, // Maximum value not ignored by any major browsers
 	}))
 
-	// Add rate limiting middleware for LLM endpoints
-	// Allow 30 requests per minute with burst capacity of 10 for LLM endpoints
-	r.Use(appMiddleware.LLMRateLimit(cfg.Logger, 30, 10))
-
 	// Optional: Heartbeat/Health check endpoint (often public)
 
 	// Group API routes, potentially versioning them
@@ -69,7 +64,7 @@ func SetupRouter(cfg *Config) chi.Router {
 			r.Get("/auth/google", cfg.AuthHandler.LoginWithGoogle)
 			r.Get("/auth/google/callback", cfg.AuthHandler.GoogleCallback)
 			r.Post("/auth/refresh", cfg.AuthHandler.RefreshToken) // Refresh tokens via HttpOnly cookie
-			
+
 			// Public city routes
 			r.Mount("/cities", CityRoutes(cfg.CityHandler))
 		})
@@ -190,7 +185,7 @@ func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	// Unified chat endpoints
 	r.Post("/prompt-response/chat/sessions/{profileID}", HandlerImpl.ProcessUnifiedChatMessage)
 	r.Post("/prompt-response/chat/sessions/stream/{profileID}", HandlerImpl.ProcessUnifiedChatMessageStream)
-	
+
 	// Chat session management
 	r.Get("/prompt-response/chat/sessions/user/{profileID}", HandlerImpl.GetUserChatSessions)
 
@@ -257,8 +252,8 @@ func ItineraryListRoutes(h *itineraryList.HandlerImpl) http.Handler {
 
 func CityRoutes(h *city.Handler) http.Handler {
 	r := chi.NewRouter()
-	
+
 	r.Get("/", h.GetAllCities) // GET http://localhost:8000/api/v1/cities
-	
+
 	return r
 }

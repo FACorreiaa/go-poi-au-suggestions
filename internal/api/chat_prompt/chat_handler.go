@@ -1094,20 +1094,20 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 	distanceStr := r.URL.Query().Get("distance")
 
 	// Optional filter parameters
-	category := r.URL.Query().Get("category")
-	if category == "" {
-		category = "all" // Default to all categories
-	}
+	// category := r.URL.Query().Get("category")
+	// if category == "" {
+	// 	category = "all" // Default to all categories
+	// }
 
-	priceRange := r.URL.Query().Get("price_range")
-	if priceRange == "" {
-		priceRange = "all" // Default to all price ranges
-	}
+	// priceRange := r.URL.Query().Get("price_range")
+	// if priceRange == "" {
+	// 	priceRange = "all" // Default to all price ranges
+	// }
 
-	popularity := r.URL.Query().Get("popularity")
-	if popularity == "" {
-		popularity = "all" // Default to all popularity levels
-	}
+	// popularity := r.URL.Query().Get("popularity")
+	// if popularity == "" {
+	// 	popularity = "all" // Default to all popularity levels
+	// }
 
 	// Parse latitude
 	lat, err := strconv.ParseFloat(latStr, 64)

@@ -2263,10 +2263,19 @@ func (l *LlmInteractiontServiceImpl) generateAddressFromLocation(lat, lon float6
 	}
 
 	// Generate a simple realistic address
-	streetNumber := int(lat*1000)%999 + 1
+	streetNumber := int(math.Abs(lat*1000))%999 + 1
+	if streetNumber <= 0 {
+		streetNumber = 1
+	}
+	
 	streets := []string{"Rua da República", "Avenida dos Aliados", "Rua de Santa Catarina",
 		"Rua do Almada", "Rua Formosa", "Rua das Flores", "Avenida da Boavista"}
-	streetIndex := int(lon*1000) % len(streets)
+	streetIndex := int(math.Abs(lon*1000)) % len(streets)
+	
+	// Extra safety check to ensure valid index
+	if streetIndex < 0 || streetIndex >= len(streets) {
+		streetIndex = 0
+	}
 
 	return fmt.Sprintf("%s, %d, %s, Portugal", streets[streetIndex], streetNumber, city)
 }

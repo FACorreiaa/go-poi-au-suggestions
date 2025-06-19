@@ -70,6 +70,7 @@ func (h *HandlerImpl) StartChatSessionStreamHandler(w http.ResponseWriter, r *ht
 		CityName       string                `json:"city_name"`
 		ContextType    types.ChatContextType `json:"context_type,omitempty"`
 		InitialMessage string                `json:"initial_message,omitempty"`
+		UserLocation   *types.UserLocation   `json:"user_location,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeSSEError(w, "Invalid request body")
@@ -79,11 +80,6 @@ func (h *HandlerImpl) StartChatSessionStreamHandler(w http.ResponseWriter, r *ht
 	// Default to general context for backward compatibility
 	if req.ContextType == "" {
 		req.ContextType = types.ContextGeneral
-	}
-
-	userLocation := &types.UserLocation{
-		UserLat: 41.3851,
-		UserLon: 2.1734,
 	}
 
 	// Prepare prompt
@@ -102,7 +98,7 @@ func (h *HandlerImpl) StartChatSessionStreamHandler(w http.ResponseWriter, r *ht
 	// 		return
 	// 	}
 	// }
-	streamResp, err := h.llmInteractionService.StartNewSessionStreamed(ctx, userID, profileID, req.CityName, prompt, userLocation)
+	streamResp, err := h.llmInteractionService.StartNewSessionStreamed(ctx, userID, profileID, req.CityName, prompt, req.UserLocation)
 	defer streamResp.Cancel()
 
 	h.logger.InfoContext(ctx, "Started streaming session",

@@ -1094,9 +1094,20 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 	distanceStr := r.URL.Query().Get("distance")
 
 	// Optional filter parameters
-	// city := r.URL.Query().Get("city")
-	// category := r.URL.Query().Get("category")
-	// priceRange := r.URL.Query().Get("price_range")
+	category := r.URL.Query().Get("category")
+	if category == "" {
+		category = "all" // Default to all categories
+	}
+
+	priceRange := r.URL.Query().Get("price_range")
+	if priceRange == "" {
+		priceRange = "all" // Default to all price ranges
+	}
+
+	popularity := r.URL.Query().Get("popularity")
+	if popularity == "" {
+		popularity = "all" // Default to all popularity levels
+	}
 
 	// Parse latitude
 	lat, err := strconv.ParseFloat(latStr, 64)
@@ -1143,8 +1154,15 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 	// 	PriceRange: priceRange,
 	// }
 
+	// Create filters struct
+	// filters := map[string]string{
+	// 	"category":    category,
+	// 	"price_range": priceRange,
+	// 	"popularity":  popularity,
+	// }
+
 	// Call service method
-	pois, err := HandlerImpl.llmInteractionService.GetGeneralPOIByDistanceResponse(ctx, userID, lat, lon, distance)
+	pois, err := HandlerImpl.llmInteractionService.GetGeneralPOIByDistance(ctx, userID, lat, lon, distance)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch POIs", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch POIs: %s", err.Error()))

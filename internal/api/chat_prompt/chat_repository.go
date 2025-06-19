@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"time"
-
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -668,6 +668,9 @@ func (r *RepositoryImpl) GetUserChatSessions(ctx context.Context, userID uuid.UU
 			if response, ok := interaction["response_text"].(string); ok {
 				if response == "" {
 					response = fmt.Sprintf("I provided recommendations for %s", cityName)
+				} else {
+					// Convert JSON response to human-readable format
+					response = formatResponseForDisplay(response, cityName)
 				}
 				conversationHistory = append(conversationHistory, types.ConversationMessage{
 					Role:      "assistant",
@@ -681,6 +684,7 @@ func (r *RepositoryImpl) GetUserChatSessions(ctx context.Context, userID uuid.UU
 		session := types.ChatSession{
 			ID:                  sessionID,
 			UserID:              userIDFromDB,
+			CityName:            cityName,
 			ConversationHistory: conversationHistory,
 			CreatedAt:           firstInteraction,
 			UpdatedAt:           lastInteraction,
@@ -711,6 +715,166 @@ func parseTimeFromInterface(timeInterface interface{}) time.Time {
 		}
 	}
 	return time.Now()
+}
+
+// Helper function to format JSON response for human-readable display
+func formatResponseForDisplay(response, cityName string) string {
+	// Handle responses with prefixed tags like [itinerary], [city_data], etc.
+	cleanedResponse := response
+	
+	// Remove common LLM response prefixes
+	prefixPatterns := []string{
+		`\[itinerary\]\s*`,
+		`\[city_data\]\s*`,
+		`\[restaurants\]\s*`,
+		`\[hotels\]\s*`,
+		`\[activities\]\s*`,
+		`\[pois\]\s*`,
+	}
+	
+	for _, pattern := range prefixPatterns {
+		re := regexp.MustCompile(`(?i)^` + pattern)
+		cleanedResponse = re.ReplaceAllString(cleanedResponse, "")
+	}
+	
+	// Remove markdown code blocks if present
+	cleanedResponse = regexp.MustCompile("(?s)```json\\s*(.*)\\s*```").ReplaceAllString(cleanedResponse, "$1")
+	cleanedResponse = strings.TrimSpace(cleanedResponse)
+	
+	// First, check if cleaned response is valid JSON
+	if !json.Valid([]byte(cleanedResponse)) {
+		// If not JSON, return as-is (might be already formatted text)
+		return response
+	}
+
+	// Try to parse as AiCityResponse (most common format)
+	var cityResponse types.AiCityResponse
+	if err := json.Unmarshal([]byte(cleanedResponse), &cityResponse); err == nil {
+		// Check if it's a valid itinerary response (either has POIs or itinerary data)
+		if len(cityResponse.PointsOfInterest) > 0 || cityResponse.AIItineraryResponse.ItineraryName != "" || len(cityResponse.AIItineraryResponse.PointsOfInterest) > 0 {
+			return formatItineraryResponse(cityResponse, cityName)
+		}
+	}
+
+	// Try to parse as hotel array
+	var hotels []types.HotelDetailedInfo
+	if err := json.Unmarshal([]byte(cleanedResponse), &hotels); err == nil && len(hotels) > 0 {
+		return formatHotelResponse(hotels, cityName)
+	}
+
+	// Try to parse as restaurant array
+	var restaurants []types.RestaurantDetailedInfo
+	if err := json.Unmarshal([]byte(cleanedResponse), &restaurants); err == nil && len(restaurants) > 0 {
+		return formatRestaurantResponse(restaurants, cityName)
+	}
+
+	// Try to parse as POI array
+	var pois []types.POIDetailedInfo
+	if err := json.Unmarshal([]byte(cleanedResponse), &pois); err == nil && len(pois) > 0 {
+		return formatPOIResponse(pois, cityName)
+	}
+
+	// If we can't parse it meaningfully, return a generic message
+	return fmt.Sprintf("I provided personalized recommendations for %s. Here are some great options I found for you!", cityName)
+}
+
+// Format itinerary response to readable text
+func formatItineraryResponse(response types.AiCityResponse, cityName string) string {
+	// Determine which POI list to use and total count
+	var totalPOIs int
+	var firstPOIName string
+	
+	// Check both POI arrays and get the total count
+	if len(response.PointsOfInterest) > 0 {
+		totalPOIs += len(response.PointsOfInterest)
+		firstPOIName = getFirstPOIName(response.PointsOfInterest)
+	}
+	
+	if len(response.AIItineraryResponse.PointsOfInterest) > 0 {
+		totalPOIs += len(response.AIItineraryResponse.PointsOfInterest)
+		if firstPOIName == "" {
+			firstPOIName = getFirstPOIName(response.AIItineraryResponse.PointsOfInterest)
+		}
+	}
+	
+	// If we have an itinerary name, use it
+	if response.AIItineraryResponse.ItineraryName != "" {
+		if totalPOIs > 0 {
+			return fmt.Sprintf("I created a personalized itinerary called '%s' for %s with %d amazing places to visit, including %s and more!",
+				response.AIItineraryResponse.ItineraryName,
+				cityName,
+				totalPOIs,
+				firstPOIName)
+		} else {
+			return fmt.Sprintf("I created a personalized itinerary called '%s' for %s with great recommendations!",
+				response.AIItineraryResponse.ItineraryName,
+				cityName)
+		}
+	}
+
+	// Fallback to generic response
+	if totalPOIs > 0 {
+		return fmt.Sprintf("I found %d great places to visit in %s, including %s. Perfect for your trip!",
+			totalPOIs,
+			cityName,
+			firstPOIName)
+	}
+	
+	return fmt.Sprintf("I provided personalized recommendations for %s. Here are some great options I found for you!", cityName)
+}
+
+// Format hotel response to readable text
+func formatHotelResponse(hotels []types.HotelDetailedInfo, cityName string) string {
+	if len(hotels) == 0 {
+		return fmt.Sprintf("I searched for hotels in %s for you.", cityName)
+	}
+
+	return fmt.Sprintf("I found %d excellent hotel%s in %s, including %s and other great options that match your preferences!",
+		len(hotels),
+		pluralize(len(hotels)),
+		cityName,
+		hotels[0].Name)
+}
+
+// Format restaurant response to readable text
+func formatRestaurantResponse(restaurants []types.RestaurantDetailedInfo, cityName string) string {
+	if len(restaurants) == 0 {
+		return fmt.Sprintf("I searched for restaurants in %s for you.", cityName)
+	}
+
+	return fmt.Sprintf("I discovered %d fantastic restaurant%s in %s, starting with %s and many more delicious options!",
+		len(restaurants),
+		pluralize(len(restaurants)),
+		cityName,
+		restaurants[0].Name)
+}
+
+// Format POI response to readable text
+func formatPOIResponse(pois []types.POIDetailedInfo, cityName string) string {
+	if len(pois) == 0 {
+		return fmt.Sprintf("I searched for activities in %s for you.", cityName)
+	}
+
+	return fmt.Sprintf("I found %d exciting place%s to visit in %s, including %s and other amazing spots you'll love!",
+		len(pois),
+		pluralize(len(pois)),
+		cityName,
+		pois[0].Name)
+}
+
+// Helper functions
+func getFirstPOIName(pois []types.POIDetail) string {
+	if len(pois) > 0 {
+		return pois[0].Name
+	}
+	return "some amazing attractions"
+}
+
+func pluralize(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // Helper function to generate session title from conversation history

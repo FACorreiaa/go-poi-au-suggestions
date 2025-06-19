@@ -15,10 +15,8 @@ import (
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/settings"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/tags"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/router"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -39,7 +37,7 @@ type IntegrationTestSuite struct {
 // SetupIntegrationSuite initializes the test suite with mock services
 func SetupIntegrationSuite(t *testing.T) *IntegrationTestSuite {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	
+
 	// Create mock services
 	authService := &auth.MockAuthService{}
 	userService := &user.MockUserService{}
@@ -111,14 +109,14 @@ func (suite *IntegrationTestSuite) makeAuthenticatedRequest(method, path string,
 	req := httptest.NewRequest(method, path, reqBody)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+suite.authToken)
-	
+
 	// Add user context for auth middleware
 	ctx := context.WithValue(req.Context(), "userID", suite.userID)
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, req)
-	
+
 	return w, nil
 }
 

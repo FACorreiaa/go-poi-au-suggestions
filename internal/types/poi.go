@@ -63,6 +63,8 @@ type POIDetailedInfo struct {
 	OpeningHours     map[string]string `json:"opening_hours"`
 	Images           []string          `json:"images,omitempty"`
 	PriceRange       string            `json:"price_range"`
+	PriceLevel       string            `json:"price_level"`
+	Reviews          []string          `json:"reviews"`
 	LlmInteractionID uuid.UUID         `json:"llm_interaction_id"`
 	Tags             []string          `json:"tags,omitempty"`
 	Err              error             `json:"-"`

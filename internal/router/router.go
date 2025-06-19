@@ -8,7 +8,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors" // Import CORS middleware if needed
 
-	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
+	appMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/app/middleware"
+	authMiddleware "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/auth"
 	llmChat "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/chat_prompt"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/interests"
@@ -21,7 +22,7 @@ import (
 
 // Config contains dependencies needed for the router setup
 type Config struct {
-	AuthHandler             *appMiddleware.HandlerImpl
+	AuthHandler             *authMiddleware.HandlerImpl
 	AuthenticateMiddleware  func(http.Handler) http.Handler // Function signature for auth middleware
 	Logger                  *slog.Logger
 	UserHandler             *user.HandlerImpl
@@ -49,6 +50,10 @@ func SetupRouter(cfg *Config) chi.Router {
 		AllowCredentials: true,
 		MaxAge:           300, // Maximum value not ignored by any major browsers
 	}))
+
+	// Add rate limiting middleware for LLM endpoints
+	// Allow 30 requests per minute with burst capacity of 10 for LLM endpoints
+	r.Use(appMiddleware.LLMRateLimit(cfg.Logger, 30, 10))
 
 	// Optional: Heartbeat/Health check endpoint (often public)
 
@@ -106,7 +111,7 @@ func SetupRouter(cfg *Config) chi.Router {
 		r.Group(func(r chi.Router) {
 			r.Use(cfg.AuthenticateMiddleware) // Must be authenticated
 			// Apply premium check middleware
-			r.Use(appMiddleware.RequirePlanStatus(
+			r.Use(authMiddleware.RequirePlanStatus(
 				cfg.Logger,
 				[]string{"premium_monthly", "premium_annual"}, // List of allowed plans
 				"active", // Required status

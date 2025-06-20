@@ -52,7 +52,7 @@ func (s *ServiceImpl) GetUserRecentInteractions(ctx context.Context, userID uuid
 		limit = 50
 	}
 
-	l.InfoContext(ctx, "Getting user recent interactions", 
+	l.InfoContext(ctx, "Getting user recent interactions",
 		slog.String("user_id", userID.String()),
 		slog.Int("limit", limit))
 
@@ -65,7 +65,7 @@ func (s *ServiceImpl) GetUserRecentInteractions(ctx context.Context, userID uuid
 		return nil, fmt.Errorf("failed to get recent interactions: %w", err)
 	}
 
-	l.InfoContext(ctx, "Successfully retrieved recent interactions", 
+	l.InfoContext(ctx, "Successfully retrieved recent interactions",
 		slog.String("user_id", userID.String()),
 		slog.Int("cities_count", len(response.Cities)))
 
@@ -93,7 +93,7 @@ func (s *ServiceImpl) GetCityDetailsForUser(ctx context.Context, userID uuid.UUI
 		return nil, err
 	}
 
-	l.InfoContext(ctx, "Getting city details for user", 
+	l.InfoContext(ctx, "Getting city details for user",
 		slog.String("user_id", userID.String()),
 		slog.String("city_name", cityName))
 
@@ -128,8 +128,8 @@ func (s *ServiceImpl) GetCityDetailsForUser(ctx context.Context, userID uuid.UUI
 	// Get POIs for the city
 	pois, err := s.repo.GetCityPOIsByInteraction(ctx, userID, cityName)
 	if err != nil {
-		l.WarnContext(ctx, "Failed to get POIs for city", 
-			slog.String("city_name", cityName), 
+		l.WarnContext(ctx, "Failed to get POIs for city",
+			slog.String("city_name", cityName),
 			slog.Any("error", err))
 		pois = []types.POIDetailedInfo{} // Set to empty slice if we can't get POIs
 	}
@@ -137,8 +137,8 @@ func (s *ServiceImpl) GetCityDetailsForUser(ctx context.Context, userID uuid.UUI
 	// Get hotels for the city
 	hotels, err := s.repo.GetCityHotelsByInteraction(ctx, userID, cityName)
 	if err != nil {
-		l.WarnContext(ctx, "Failed to get hotels for city", 
-			slog.String("city_name", cityName), 
+		l.WarnContext(ctx, "Failed to get hotels for city",
+			slog.String("city_name", cityName),
 			slog.Any("error", err))
 		hotels = []types.HotelDetailedInfo{} // Set to empty slice if we can't get hotels
 	}
@@ -146,8 +146,8 @@ func (s *ServiceImpl) GetCityDetailsForUser(ctx context.Context, userID uuid.UUI
 	// Get restaurants for the city
 	restaurants, err := s.repo.GetCityRestaurantsByInteraction(ctx, userID, cityName)
 	if err != nil {
-		l.WarnContext(ctx, "Failed to get restaurants for city", 
-			slog.String("city_name", cityName), 
+		l.WarnContext(ctx, "Failed to get restaurants for city",
+			slog.String("city_name", cityName),
 			slog.Any("error", err))
 		restaurants = []types.RestaurantDetailedInfo{} // Set to empty slice if we can't get restaurants
 	}
@@ -172,7 +172,7 @@ func (s *ServiceImpl) GetCityDetailsForUser(ctx context.Context, userID uuid.UUI
 		LastActivity: lastActivity,
 	}
 
-	l.InfoContext(ctx, "Successfully retrieved city details", 
+	l.InfoContext(ctx, "Successfully retrieved city details",
 		slog.String("user_id", userID.String()),
 		slog.String("city_name", cityName),
 		slog.Int("interaction_count", len(interactions)),
@@ -192,10 +192,10 @@ func (s *ServiceImpl) GetCityDetailsForUser(ctx context.Context, userID uuid.UUI
 }
 
 // Helper function to convert POIDetailedInfo to POIDetail for consistency with existing types
-func convertPOIsToDetail(detailedPOIs []types.POIDetailedInfo) []types.POIDetail {
-	var pois []types.POIDetail
+func convertPOIsToDetail(detailedPOIs []types.POIDetailedInfo) []types.POIDetailedInfo {
+	var pois []types.POIDetailedInfo
 	for _, poi := range detailedPOIs {
-		detail := types.POIDetail{
+		detail := types.POIDetailedInfo{
 			ID:               poi.ID,
 			LlmInteractionID: poi.LlmInteractionID,
 			City:             poi.City,

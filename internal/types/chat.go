@@ -31,11 +31,11 @@ type LlmInteraction struct {
 }
 
 type AIItineraryResponse struct {
-	ItineraryName      string      `json:"itinerary_name"`
-	OverallDescription string      `json:"overall_description"`
-	PointsOfInterest   []POIDetail `json:"points_of_interest"`
-	Restaurants        []POIDetail `json:"restaurants,omitempty"`
-	Bars               []POIDetail `json:"bars,omitempty"`
+	ItineraryName      string            `json:"itinerary_name"`
+	OverallDescription string            `json:"overall_description"`
+	PointsOfInterest   []POIDetailedInfo `json:"points_of_interest"`
+	Restaurants        []POIDetailedInfo `json:"restaurants,omitempty"`
+	Bars               []POIDetailedInfo `json:"bars,omitempty"`
 }
 
 type GeneralCityData struct {
@@ -56,7 +56,7 @@ type GeneralCityData struct {
 
 type AiCityResponse struct {
 	GeneralCityData     GeneralCityData     `json:"general_city_data"`
-	PointsOfInterest    []POIDetail         `json:"points_of_interest"`
+	PointsOfInterest    []POIDetailedInfo   `json:"points_of_interest"`
 	AIItineraryResponse AIItineraryResponse `json:"itinerary_response"`
 	SessionID           uuid.UUID           `json:"session_id"`
 }
@@ -72,8 +72,8 @@ type GenAIResponse struct {
 	Longitude            float64           `json:"longitude,omitempty"` // New: for city center
 	ItineraryName        string            `json:"itinerary_name,omitempty"`
 	ItineraryDescription string            `json:"itinerary_description,omitempty"`
-	GeneralPOI           []POIDetail       `json:"general_poi,omitempty"`
-	PersonalisedPOI      []POIDetail       `json:"personalised_poi,omitempty"` // Consider changing to []PersonalizedPOIDetail
+	GeneralPOI           []POIDetailedInfo `json:"general_poi,omitempty"`
+	PersonalisedPOI      []POIDetailedInfo `json:"personalised_poi,omitempty"` // Consider changing to []PersonalizedPOIDetail
 	POIDetailedInfo      []POIDetailedInfo `json:"poi_detailed_info,omitempty"`
 	Err                  error             `json:"-"`
 }
@@ -318,18 +318,18 @@ func (d *DomainDetector) DetectDomain(ctx context.Context, message string) Domai
 
 // RecentInteraction represents a recent user interaction with cities and POIs
 type RecentInteraction struct {
-	ID              uuid.UUID      `json:"id"`
-	UserID          uuid.UUID      `json:"user_id"`
-	CityName        string         `json:"city_name"`
-	CityID          *uuid.UUID     `json:"city_id,omitempty"`
-	Prompt          string         `json:"prompt"`
-	ResponseText    string         `json:"response_text,omitempty"`
-	ModelUsed       string         `json:"model_used"`
-	LatencyMs       int            `json:"latency_ms"`
-	CreatedAt       time.Time      `json:"created_at"`
-	POIs            []POIDetail    `json:"pois,omitempty"`
-	Hotels          []HotelDetailedInfo `json:"hotels,omitempty"`
-	Restaurants     []RestaurantDetailedInfo `json:"restaurants,omitempty"`
+	ID           uuid.UUID                `json:"id"`
+	UserID       uuid.UUID                `json:"user_id"`
+	CityName     string                   `json:"city_name"`
+	CityID       *uuid.UUID               `json:"city_id,omitempty"`
+	Prompt       string                   `json:"prompt"`
+	ResponseText string                   `json:"response_text,omitempty"`
+	ModelUsed    string                   `json:"model_used"`
+	LatencyMs    int                      `json:"latency_ms"`
+	CreatedAt    time.Time                `json:"created_at"`
+	POIs         []POIDetailedInfo        `json:"pois,omitempty"`
+	Hotels       []HotelDetailedInfo      `json:"hotels,omitempty"`
+	Restaurants  []RestaurantDetailedInfo `json:"restaurants,omitempty"`
 }
 
 // RecentInteractionsResponse groups interactions by city

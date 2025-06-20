@@ -37,11 +37,11 @@ type RAGService struct {
 }
 
 type RAGContext struct {
-	Query               string                 `json:"query"`
-	RelevantPOIs        []types.POIDetail      `json:"relevant_pois"`
-	UserPreferences     map[string]interface{} `json:"user_preferences,omitempty"`
-	CityContext         string                 `json:"city_context,omitempty"`
-	ConversationHistory []ConversationTurn     `json:"conversation_history,omitempty"`
+	Query               string                  `json:"query"`
+	RelevantPOIs        []types.POIDetailedInfo `json:"relevant_pois"`
+	UserPreferences     map[string]interface{}  `json:"user_preferences,omitempty"`
+	CityContext         string                  `json:"city_context,omitempty"`
+	ConversationHistory []ConversationTurn      `json:"conversation_history,omitempty"`
 }
 
 type ConversationTurn struct {
@@ -52,10 +52,10 @@ type ConversationTurn struct {
 }
 
 type RAGResponse struct {
-	Answer      string            `json:"answer"`
-	SourcePOIs  []types.POIDetail `json:"source_pois"`
-	Confidence  float64           `json:"confidence"`
-	Suggestions []string          `json:"suggestions,omitempty"`
+	Answer      string                  `json:"answer"`
+	SourcePOIs  []types.POIDetailedInfo `json:"source_pois"`
+	Confidence  float64                 `json:"confidence"`
+	Suggestions []string                `json:"suggestions,omitempty"`
 }
 
 func NewAIClient(ctx context.Context) (*AIClient, error) {

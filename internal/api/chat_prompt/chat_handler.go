@@ -618,7 +618,7 @@ func (HandlerImpl *HandlerImpl) GetPOIDetails(w http.ResponseWriter, r *http.Req
 	}
 
 	// Call service to get POI details
-	pois, err := HandlerImpl.llmInteractionService.GetPOIDetailsResponse(ctx, userID, serviceReq.CityName, serviceReq.Latitude, serviceReq.Longitude)
+	pois, err := HandlerImpl.llmInteractionService.GetPOIDetailedInfosResponse(ctx, userID, serviceReq.CityName, serviceReq.Latitude, serviceReq.Longitude)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch POI details", slog.Any("error", err))
 		span.SetStatus(codes.Error, "Service error")

@@ -49,17 +49,17 @@ type MockPOIRepository struct {
 	mock.Mock
 }
 
-func (m *MockPOIRepository) SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
+func (m *MockPOIRepository) SavePoi(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	args := m.Called(ctx, poi, cityID)
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
-func (m *MockPOIRepository) FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetail, error) {
+func (m *MockPOIRepository) FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetailedInfo, error) {
 	args := m.Called(ctx, name, cityID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*types.POIDetail), args.Error(1)
+	return args.Get(0).(*types.POIDetailedInfo), args.Error(1)
 }
 
 func (m *MockPOIRepository) GetPOIsByCityAndDistance(ctx context.Context, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error) {
@@ -96,23 +96,23 @@ func (m *MockPOIRepository) RemovePoiFromFavourites(ctx context.Context, poiID u
 	return args.Error(0)
 }
 
-func (m *MockPOIRepository) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, cityID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error) {
+func (m *MockPOIRepository) FindPOIDetailedInfos(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error) {
 	args := m.Called(ctx, cityID, lat, lon, tolerance)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -120,41 +120,41 @@ func (m *MockPOIRepository) FindPOIDetails(ctx context.Context, cityID uuid.UUID
 	return args.Get(0).(*types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+func (m *MockPOIRepository) SavePOIDetailedInfos(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	args := m.Called(ctx, poi, cityID)
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
-func (m *MockPOIRepository) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, filter)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) FindSimilarPOIs(ctx context.Context, queryEmbedding []float32, limit int) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) FindSimilarPOIs(ctx context.Context, queryEmbedding []float32, limit int) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, queryEmbedding, limit)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) FindSimilarPOIsByCity(ctx context.Context, queryEmbedding []float32, cityID uuid.UUID, limit int) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) FindSimilarPOIsByCity(ctx context.Context, queryEmbedding []float32, cityID uuid.UUID, limit int) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, queryEmbedding, cityID, limit)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, queryEmbedding []float32, semanticWeight float64) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, queryEmbedding []float32, semanticWeight float64) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, filter, queryEmbedding, semanticWeight)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
 func (m *MockPOIRepository) UpdatePOIEmbedding(ctx context.Context, poiID uuid.UUID, embedding []float32) error {
@@ -162,12 +162,12 @@ func (m *MockPOIRepository) UpdatePOIEmbedding(ctx context.Context, poiID uuid.U
 	return args.Error(0)
 }
 
-func (m *MockPOIRepository) GetPOIsWithoutEmbeddings(ctx context.Context, limit int) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) GetPOIsWithoutEmbeddings(ctx context.Context, limit int) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, limit)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
 func (m *MockPOIRepository) FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error) {
@@ -241,12 +241,12 @@ func (m *MockPOIRepository) SaveItinerary(ctx context.Context, userID, cityID uu
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
-func (m *MockPOIRepository) SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetail) error {
+func (m *MockPOIRepository) SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetailedInfo) error {
 	args := m.Called(ctx, itineraryID, pois)
 	return args.Error(0)
 }
 
-func (m *MockPOIRepository) SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
+func (m *MockPOIRepository) SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	args := m.Called(ctx, poi, cityID)
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
@@ -317,17 +317,17 @@ func (m *MockLLMInteractionRepository) SaveInteraction(ctx context.Context, inte
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
-func (m *MockLLMInteractionRepository) SaveLlmSuggestedPOIsBatch(ctx context.Context, pois []types.POIDetail, userID, searchProfileID, llmInteractionID, cityID uuid.UUID) error {
+func (m *MockLLMInteractionRepository) SaveLlmSuggestedPOIsBatch(ctx context.Context, pois []types.POIDetailedInfo, userID, searchProfileID, llmInteractionID, cityID uuid.UUID) error {
 	args := m.Called(ctx, pois, userID, searchProfileID, llmInteractionID, cityID)
 	return args.Error(0)
 }
 
-func (m *MockLLMInteractionRepository) GetLlmSuggestedPOIsByInteractionSortedByDistance(ctx context.Context, llmInteractionID uuid.UUID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error) {
+func (m *MockLLMInteractionRepository) GetLlmSuggestedPOIsByInteractionSortedByDistance(ctx context.Context, llmInteractionID uuid.UUID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, llmInteractionID, cityID, userLocation)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
 func (m *MockLLMInteractionRepository) AddChatToBookmark(ctx context.Context, itinerary *types.UserSavedItinerary) (uuid.UUID, error) {
@@ -382,17 +382,17 @@ func (m *MockLLMInteractionRepository) AddMessageToSession(ctx context.Context, 
 	return args.Error(0)
 }
 
-func (m *MockLLMInteractionRepository) SaveSinglePOI(ctx context.Context, poi types.POIDetail, userID, cityID uuid.UUID, llmInteractionID uuid.UUID) (uuid.UUID, error) {
+func (m *MockLLMInteractionRepository) SaveSinglePOI(ctx context.Context, poi types.POIDetailedInfo, userID, cityID uuid.UUID, llmInteractionID uuid.UUID) (uuid.UUID, error) {
 	args := m.Called(ctx, poi, userID, cityID, llmInteractionID)
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
-func (m *MockLLMInteractionRepository) GetPOIsBySessionSortedByDistance(ctx context.Context, sessionID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error) {
+func (m *MockLLMInteractionRepository) GetPOIsBySessionSortedByDistance(ctx context.Context, sessionID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, sessionID, cityID, userLocation)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
 func (m *MockLLMInteractionRepository) CalculateDistancePostGIS(ctx context.Context, userLat, userLon, poiLat, poiLon float64) (float64, error) {
@@ -400,8 +400,8 @@ func (m *MockLLMInteractionRepository) CalculateDistancePostGIS(ctx context.Cont
 	return args.Get(0).(float64), args.Error(1)
 }
 
-func (m *MockLLMInteractionRepository) GetOrCreatePOI(ctx context.Context, tx pgx.Tx, poiDetail types.POIDetail, cityID uuid.UUID, sourceInteractionID uuid.UUID) (uuid.UUID, error) {
-	args := m.Called(ctx, tx, poiDetail, cityID, sourceInteractionID)
+func (m *MockLLMInteractionRepository) GetOrCreatePOI(ctx context.Context, tx pgx.Tx, POIDetailedInfo types.POIDetailedInfo, cityID uuid.UUID, sourceInteractionID uuid.UUID) (uuid.UUID, error) {
+	args := m.Called(ctx, tx, POIDetailedInfo, cityID, sourceInteractionID)
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
@@ -608,7 +608,7 @@ func setupTestServiceWithMocks() (
 	return service, mockAI, mockInterestR, mockSearchProfileR, mockTagsR, mockLLMInteractionR, mockCityR, mockPOIR
 }
 
-func TestLlmInteractionServiceImpl_GetPOIDetailsResponse_Unit(t *testing.T) {
+func TestLlmInteractionServiceImpl_GetPOIDetailedInfosResponse_Unit(t *testing.T) {
 	service, mockAI, _, _, _, mockLLMRepo, mockCityRepo, mockPOIRepo := setupTestServiceWithMocks()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -626,11 +626,11 @@ func TestLlmInteractionServiceImpl_GetPOIDetailsResponse_Unit(t *testing.T) {
 		expectedDetails := &types.POIDetailedInfo{ID: expectedPOIID, Name: "Cached POI", City: city, Latitude: lat, Longitude: lon}
 		service.cache.Set(cacheKey, expectedDetails, cache.DefaultExpiration)
 
-		details, err := service.GetPOIDetailsResponse(ctx, userID, city, lat, lon)
+		details, err := service.GetPOIDetailedInfosResponse(ctx, userID, city, lat, lon)
 		require.NoError(t, err)
 		require.NotNil(t, details)
 		assert.Equal(t, expectedDetails.Name, details.Name)
-		// mockPOIRepo.AssertNotCalled(t, "FindPOIDetails") // If you mocked this method
+		// mockPOIRepo.AssertNotCalled(t, "FindPOIDetailedInfos") // If you mocked this method
 		// mockAI.AssertNotCalled(t, "GenerateResponse")
 	})
 
@@ -641,9 +641,9 @@ func TestLlmInteractionServiceImpl_GetPOIDetailsResponse_Unit(t *testing.T) {
 		// Mock CityRepo
 		mockCityRepo.On("FindCityByNameAndCountry", ctx, city, "").Return(&types.CityDetail{ID: uuid.New(), Name: city}, nil).Once()
 		// Mock POIRepo to return data
-		mockPOIRepo.On("FindPOIDetails", ctx, mock.AnythingOfType("uuid.UUID"), lat, lon, 100.0).Return(expectedDBDetails, nil).Once()
+		mockPOIRepo.On("FindPOIDetailedInfos", ctx, mock.AnythingOfType("uuid.UUID"), lat, lon, 100.0).Return(expectedDBDetails, nil).Once()
 
-		details, err := service.GetPOIDetailsResponse(ctx, userID, city, lat, lon)
+		details, err := service.GetPOIDetailedInfosResponse(ctx, userID, city, lat, lon)
 		require.NoError(t, err)
 		require.NotNil(t, details)
 		assert.Equal(t, expectedDBDetails.Name, details.Name)
@@ -681,11 +681,11 @@ func TestLlmInteractionServiceImpl_GetPOIDetailsResponse_Unit(t *testing.T) {
 		}
 
 		mockCityRepo.On("FindCityByNameAndCountry", ctx, city, "").Return(&types.CityDetail{ID: uuid.New(), Name: city}, nil).Once()
-		mockPOIRepo.On("FindPOIDetails", ctx, mock.AnythingOfType("uuid.UUID"), lat, lon, 100.0).Return(nil, nil).Once() // DB Miss
+		mockPOIRepo.On("FindPOIDetailedInfos", ctx, mock.AnythingOfType("uuid.UUID"), lat, lon, 100.0).Return(nil, nil).Once() // DB Miss
 		mockLLMRepo.On("SaveInteraction", ctx, mock.AnythingOfType("types.LlmInteraction")).Return(uuid.New(), nil).Once()
-		mockPOIRepo.On("SavePOIDetails", ctx, mock.AnythingOfType("types.POIDetailedInfo"), mock.AnythingOfType("uuid.UUID")).Return(uuid.New(), nil).Once()
+		mockPOIRepo.On("SavePOIDetailedInfos", ctx, mock.AnythingOfType("types.POIDetailedInfo"), mock.AnythingOfType("uuid.UUID")).Return(uuid.New(), nil).Once()
 
-		details, err := service.GetPOIDetailsResponse(ctx, userID, city, lat, lon)
+		details, err := service.GetPOIDetailedInfosResponse(ctx, userID, city, lat, lon)
 		// This will fail if the AI call is real and not mocked, or if API key is missing.
 		// This test highlights the need to make service.aiClient an interface.
 		// If you ran this with the skip above, it would not execute this part for AI call.
@@ -706,7 +706,7 @@ func TestLlmInteractionServiceImpl_GetPOIDetailsResponse_Unit(t *testing.T) {
 		// this specific test case (AI call success) is more suited for an integration test,
 		// or requires refactoring the service to accept an AIClientInterface.
 		// For now, we can only fully unit test cache hit and DB hit paths.
-		t.Log("NOTE: AI Call path for GetPOIDetailsResponse unit test is limited without mocking AIClient interface.")
+		t.Log("NOTE: AI Call path for GetPOIDetailedInfosResponse unit test is limited without mocking AIClient interface.")
 	})
 
 	// Add more test cases:
@@ -714,7 +714,7 @@ func TestLlmInteractionServiceImpl_GetPOIDetailsResponse_Unit(t *testing.T) {
 	// - AI returns error
 	// - AI returns malformed JSON
 	// - SaveInteraction fails
-	// - SavePOIDetails fails
+	// - SavePOIDetailedInfos fails
 }
 
 // Example for GetItinerary (simpler, as it's mostly a direct repo call)
@@ -765,10 +765,10 @@ func TestLlmInteractionServiceImpl_GetItinerary_Unit(t *testing.T) {
 // - GetRestaurantsByPreferencesResponse (mocking repo's FindRestaurantDetails, and AI call if fallback)
 // - etc.
 
-// --- Integration Tests for llmInteraction (Example for GetPOIDetailsResponse) ---
+// --- Integration Tests for llmInteraction (Example for GetPOIDetailedInfosResponse) ---
 // These would require a running database instance and potentially a configured AI client.
 
-func TestLlmInteractionServiceImpl_GetPOIDetailsResponse_Integration(t *testing.T) {
+func TestLlmInteractionServiceImpl_GetPOIDetailedInfosResponse_Integration(t *testing.T) {
 	if !*runIntegrationTests { // Use the same flag as generativeAI tests
 		t.Skip("Skipping integration test: -integration flag not set")
 	}
@@ -793,7 +793,7 @@ func TestLlmInteractionServiceImpl_GetPOIDetailsResponse_Integration(t *testing.
 
 	// t.Run("Fetch from AI and store in DB and cache", func(t *testing.T) {
 	//     // Ensure cache and DB are initially empty for this POI
-	//     details, err := service.GetPOIDetailsResponse(ctx, userID, city, lat, lon)
+	//     details, err := service.GetPOIDetailedInfosResponse(ctx, userID, city, lat, lon)
 	//     require.NoError(t, err)
 	//     require.NotNil(t, details)
 	//     assert.NotEmpty(t, details.Name)
@@ -810,5 +810,5 @@ func TestLlmInteractionServiceImpl_GetPOIDetailsResponse_Integration(t *testing.
 	//     // assert.NotNil(t, dbFetched)
 	//     // assert.Equal(t, details.Name, dbFetched.Name)
 	// })
-	t.Skip("Full integration test for GetPOIDetailsResponse requires DB and AI client setup.")
+	t.Skip("Full integration test for GetPOIDetailedInfosResponse requires DB and AI client setup.")
 }

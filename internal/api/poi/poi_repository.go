@@ -26,28 +26,28 @@ import (
 var _ Repository = (*RepositoryImpl)(nil)
 
 type Repository interface {
-	SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error)
-	FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetail, error)
-	//GetPOIsByNamesAndCitySortedByDistance(ctx context.Context, names []string, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error)
+	SavePoi(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
+	FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetailedInfo, error)
+	//GetPOIsByNamesAndCitySortedByDistance(ctx context.Context, names []string, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error)
 	GetPOIsByCityAndDistance(ctx context.Context, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error)
 	GetPOIsByLocationAndDistance(ctx context.Context, lat, lon, radiusMeters float64) ([]types.POIDetailedInfo, error)
 	GetPOIsByLocationAndDistanceWithFilters(ctx context.Context, lat, lon, radiusMeters float64, filters map[string]string) ([]types.POIDetailedInfo, error)
 	AddPoiToFavourites(ctx context.Context, userID, poiID uuid.UUID) (uuid.UUID, error)
 	RemovePoiFromFavourites(ctx context.Context, poiID uuid.UUID, userID uuid.UUID) error
-	GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error)
-	GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error)
+	GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetailedInfo, error)
+	GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetailedInfo, error)
 
 	// POI details
 	FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error)
 	SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
-	SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error)
+	SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetailedInfo, error)
 
 	// Vector similarity search methods
-	FindSimilarPOIs(ctx context.Context, queryEmbedding []float32, limit int) ([]types.POIDetail, error)
-	FindSimilarPOIsByCity(ctx context.Context, queryEmbedding []float32, cityID uuid.UUID, limit int) ([]types.POIDetail, error)
-	SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, queryEmbedding []float32, semanticWeight float64) ([]types.POIDetail, error)
+	FindSimilarPOIs(ctx context.Context, queryEmbedding []float32, limit int) ([]types.POIDetailedInfo, error)
+	FindSimilarPOIsByCity(ctx context.Context, queryEmbedding []float32, cityID uuid.UUID, limit int) ([]types.POIDetailedInfo, error)
+	SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, queryEmbedding []float32, semanticWeight float64) ([]types.POIDetailedInfo, error)
 	UpdatePOIEmbedding(ctx context.Context, poiID uuid.UUID, embedding []float32) error
-	GetPOIsWithoutEmbeddings(ctx context.Context, limit int) ([]types.POIDetail, error)
+	GetPOIsWithoutEmbeddings(ctx context.Context, limit int) ([]types.POIDetailedInfo, error)
 
 	// Hotels
 	FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error)
@@ -57,12 +57,12 @@ type Repository interface {
 	FindRestaurantDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64, preferences *types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error)
 	SaveRestaurantDetails(ctx context.Context, restaurant types.RestaurantDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
 	GetRestaurantByID(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error)
-	// GetPOIsByCityIDAndCategory(ctx context.Context, cityID uuid.UUID, category string) ([]types.POIDetail, error)
-	// GetPOIsByCityIDAndCategories(ctx context.Context, cityID uuid.UUID, categories []string) ([]types.POIDetail, error)
-	// GetPOIsByCityIDAndName(ctx context.Context, cityID uuid.UUID, name string) ([]types.POIDetail, error)
-	// GetPOIsByCityIDAndNames(ctx context.Context, cityID uuid.UUID, names []string) ([]types.POIDetail, error)
-	// GetPOIsByCityIDAndNameSortedByDistance(ctx context.Context, cityID uuid.UUID, name string, userLocation types.UserLocation) ([]types.POIDetail, error)
-	// GetPOIsByCityIDAndNamesSortedByDistance(ctx context.Context, cityID uuid.UUID, names []string, userLocation types.UserLocation) ([]types.POIDetail, error)
+	// GetPOIsByCityIDAndCategory(ctx context.Context, cityID uuid.UUID, category string) ([]types.POIDetailedInfo, error)
+	// GetPOIsByCityIDAndCategories(ctx context.Context, cityID uuid.UUID, categories []string) ([]types.POIDetailedInfo, error)
+	// GetPOIsByCityIDAndName(ctx context.Context, cityID uuid.UUID, name string) ([]types.POIDetailedInfo, error)
+	// GetPOIsByCityIDAndNames(ctx context.Context, cityID uuid.UUID, names []string) ([]types.POIDetailedInfo, error)
+	// GetPOIsByCityIDAndNameSortedByDistance(ctx context.Context, cityID uuid.UUID, name string, userLocation types.UserLocation) ([]types.POIDetailedInfo, error)
+	// GetPOIsByCityIDAndNamesSortedByDistance(ctx context.Context, cityID uuid.UUID, names []string, userLocation types.UserLocation) ([]types.POIDetailedInfo, error)
 
 	//AddPersonalizedPOItoFavourites(ctx context.Context, poiID uuid.UUID, userID uuid.UUID) (uuid.UUID, error)
 
@@ -70,8 +70,8 @@ type Repository interface {
 	GetItineraries(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]types.UserSavedItinerary, int, error)
 	UpdateItinerary(ctx context.Context, userID uuid.UUID, itineraryID uuid.UUID, updates types.UpdateItineraryRequest) (*types.UserSavedItinerary, error)
 	SaveItinerary(ctx context.Context, userID, cityID uuid.UUID) (uuid.UUID, error)
-	SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetail) error
-	SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error)
+	SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetailedInfo) error
+	SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
 	CityExists(ctx context.Context, cityID uuid.UUID) (bool, error)
 }
 
@@ -87,7 +87,7 @@ func NewRepository(pgxpool *pgxpool.Pool, logger *slog.Logger) *RepositoryImpl {
 	}
 }
 
-func (r *RepositoryImpl) SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
+func (r *RepositoryImpl) SavePoi(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -128,7 +128,7 @@ func (r *RepositoryImpl) SavePoi(ctx context.Context, poi types.POIDetail, cityI
 	return id, nil
 }
 
-func (r *RepositoryImpl) FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetail, error) {
+func (r *RepositoryImpl) FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetailedInfo, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -140,7 +140,7 @@ func (r *RepositoryImpl) FindPoiByNameAndCity(ctx context.Context, name string, 
         FROM points_of_interest
         WHERE name = $1 AND city_id = $2
     `
-	var poi types.POIDetail
+	var poi types.POIDetailedInfo
 	if err = tx.QueryRow(ctx, query, name, cityID).Scan(
 		&poi.Name, &poi.DescriptionPOI, &poi.Latitude, &poi.Longitude, &poi.Category,
 	); err != nil {
@@ -162,7 +162,7 @@ func (r *RepositoryImpl) FindPoiByNameAndCity(ctx context.Context, name string, 
 	return &poi, nil
 }
 
-// func (r *RepositoryImpl) GetPOIsByNamesAndCitySortedByDistance(ctx context.Context, names []string, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetail, error) {
+// func (r *RepositoryImpl) GetPOIsByNamesAndCitySortedByDistance(ctx context.Context, names []string, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error) {
 // 	// Construct the user's location as a PostGIS POINT
 // 	userPoint := fmt.Sprintf("SRID=4326;POINT(%f %f)", userLocation.UserLon, userLocation.UserLat)
 
@@ -187,9 +187,9 @@ func (r *RepositoryImpl) FindPoiByNameAndCity(ctx context.Context, name string, 
 // 	}
 // 	defer rows.Close()
 
-// 	var pois []types.POIDetail
+// 	var pois []types.POIDetailedInfo
 // 	for rows.Next() {
-// 		var poi types.POIDetail
+// 		var poi types.POIDetailedInfo
 // 		err := rows.Scan(&poi.ID, &poi.Name, &poi.Longitude,
 // 			&poi.Latitude, &poi.Category, &poi.DescriptionPOI, &poi.Distance)
 // 		if err != nil {
@@ -296,7 +296,7 @@ func (r *RepositoryImpl) RemovePoiFromFavourites(ctx context.Context, poiID uuid
 	return nil
 }
 
-func (r *RepositoryImpl) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error) {
+func (r *RepositoryImpl) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetailedInfo, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -315,9 +315,9 @@ func (r *RepositoryImpl) GetFavouritePOIsByUserID(ctx context.Context, userID uu
 		return nil, fmt.Errorf("failed to query favourite POIs: %w", err)
 	}
 	defer rows.Close()
-	var pois []types.POIDetail
+	var pois []types.POIDetailedInfo
 	for rows.Next() {
-		var poi types.POIDetail
+		var poi types.POIDetailedInfo
 		err := rows.Scan(&poi.ID, &poi.Name, &poi.Longitude, &poi.Latitude, &poi.Category, &poi.DescriptionPOI)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan favourite POI row: %w", err)
@@ -334,7 +334,7 @@ func (r *RepositoryImpl) GetFavouritePOIsByUserID(ctx context.Context, userID uu
 	return pois, nil
 }
 
-func (r *RepositoryImpl) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error) {
+func (r *RepositoryImpl) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetailedInfo, error) {
 	tx, err := r.pgpool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -352,9 +352,9 @@ func (r *RepositoryImpl) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) 
 	}
 	defer rows.Close()
 
-	var pois []types.POIDetail
+	var pois []types.POIDetailedInfo
 	for rows.Next() {
-		var poi types.POIDetail
+		var poi types.POIDetailedInfo
 		err := rows.Scan(&poi.ID, &poi.Name, &poi.DescriptionPOI, &poi.Longitude, &poi.Latitude, &poi.Category)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan POI row: %w", err)
@@ -375,7 +375,7 @@ func (r *RepositoryImpl) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) 
 }
 
 func (r *RepositoryImpl) FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error) {
-	ctx, span := otel.Tracer("Repository").Start(ctx, "FindPOIDetails", trace.WithAttributes(
+	ctx, span := otel.Tracer("Repository").Start(ctx, "FindPOIDetailedInfos", trace.WithAttributes(
 		attribute.String("city.id", cityID.String()),
 		attribute.Float64("latitude", lat),
 		attribute.Float64("longitude", lon),
@@ -423,13 +423,25 @@ func (r *RepositoryImpl) FindPOIDetails(ctx context.Context, cityID uuid.UUID, l
 }
 
 func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
-	ctx, span := otel.Tracer("Repository").Start(ctx, "SavePOIDetails", trace.WithAttributes(
+	ctx, span := otel.Tracer("Repository").Start(ctx, "SavePOIDetailedInfos", trace.WithAttributes(
 		attribute.String("city.id", cityID.String()),
 		attribute.String("poi.name", poi.Name),
 	))
 	defer span.End()
 
-	query := `
+	// Start a transaction to ensure both tables are updated atomically
+	tx, err := r.pgpool.Begin(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to begin transaction")
+		return uuid.Nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	poiID := uuid.New()
+
+	// Insert into poi_details table
+	POIDetailedInfosQuery := `
         INSERT INTO poi_details (
             id, city_id, name, description, latitude, longitude, location,
             address, website, phone_number, opening_hours, price_range, category,
@@ -438,25 +450,75 @@ func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetail
             $1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7, $8), 4326),
             $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
         )
-        RETURNING id
     `
-	var id uuid.UUID
-	err := r.pgpool.QueryRow(ctx, query,
-		uuid.New(), cityID, poi.Name, poi.Description, poi.Latitude, poi.Longitude,
+	_, err = tx.Exec(ctx, POIDetailedInfosQuery,
+		poiID, cityID, poi.Name, poi.Description, poi.Latitude, poi.Longitude,
 		poi.Longitude, poi.Latitude, // lon, lat for ST_MakePoint
 		poi.Address, poi.Website, poi.PhoneNumber, poi.OpeningHours,
 		poi.PriceRange, poi.Category, poi.Tags, poi.Images, poi.Rating,
 		uuid.NullUUID{UUID: poi.LlmInteractionID, Valid: poi.LlmInteractionID != uuid.Nil},
-	).Scan(&id)
+	)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to save POI details")
 		return uuid.Nil, fmt.Errorf("failed to save poi_details: %w", err)
 	}
 
-	span.SetAttributes(attribute.String("poi.id", id.String()))
-	span.SetStatus(codes.Ok, "POI details saved successfully")
-	return id, nil
+	// Convert price_range to price_level for points_of_interest
+	var priceLevel *int
+	if poi.PriceRange != "" {
+		switch poi.PriceRange {
+		case "€", "$":
+			level := 1
+			priceLevel = &level
+		case "€€", "$$":
+			level := 2
+			priceLevel = &level
+		case "€€€", "$$$":
+			level := 3
+			priceLevel = &level
+		case "€€€€", "$$$$":
+			level := 4
+			priceLevel = &level
+		}
+	}
+
+	// Insert into points_of_interest table
+	poisQuery := `
+        INSERT INTO points_of_interest (
+            id, name, description, location, city_id, address, poi_type,
+            website, phone_number, opening_hours, category, price_level,
+            average_rating, source, ai_summary, tags
+        ) VALUES (
+            $1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326), $6, $7, $8,
+            $9, $10, $11, $12, $13, $14, $15, $16, $17
+        )
+    `
+	_, err = tx.Exec(ctx, poisQuery,
+		poiID, poi.Name, poi.Description,
+		poi.Longitude, poi.Latitude, // lon, lat for ST_MakePoint
+		cityID, poi.Address, poi.Category,
+		poi.Website, poi.PhoneNumber, poi.OpeningHours,
+		poi.Category, priceLevel, poi.Rating,
+		"loci_ai", poi.Description, poi.Tags,
+	)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to save POI to points_of_interest")
+		return uuid.Nil, fmt.Errorf("failed to save points_of_interest: %w", err)
+	}
+
+	// Commit the transaction
+	err = tx.Commit(ctx)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to commit transaction")
+		return uuid.Nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	span.SetAttributes(attribute.String("poi.id", poiID.String()))
+	span.SetStatus(codes.Ok, "POI details saved successfully to both tables")
+	return poiID, nil
 }
 
 func (r *RepositoryImpl) FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error) {
@@ -811,7 +873,7 @@ func (r *RepositoryImpl) GetRestaurantByID(ctx context.Context, restaurantID uui
 	return &restaurant, nil
 }
 
-func (r *RepositoryImpl) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error) {
+func (r *RepositoryImpl) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("Repository").Start(ctx, "SearchPOIs", trace.WithAttributes(
 		attribute.Float64("location.latitude", filter.Location.Latitude),
 		attribute.Float64("location.longitude", filter.Location.Longitude),
@@ -870,9 +932,9 @@ func (r *RepositoryImpl) SearchPOIs(ctx context.Context, filter types.POIFilter)
 	defer rows.Close()
 
 	// Collect results
-	var pois []types.POIDetail
+	var pois []types.POIDetailedInfo
 	for rows.Next() {
-		var poi types.POIDetail
+		var poi types.POIDetailedInfo
 		var distanceMeters float64
 		var description sql.NullString // Handle NULL description
 
@@ -1179,7 +1241,7 @@ func (r *RepositoryImpl) SaveItinerary(ctx context.Context, userID, cityID uuid.
 	return itineraryID, nil
 }
 
-func (r *RepositoryImpl) SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
+func (r *RepositoryImpl) SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SavePOItoPointsOfInterest")
 	defer span.End()
 
@@ -1214,7 +1276,7 @@ func (r *RepositoryImpl) SavePOItoPointsOfInterest(ctx context.Context, poi type
 	return poiID, nil
 }
 
-func (r *RepositoryImpl) SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetail) error {
+func (r *RepositoryImpl) SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetailedInfo) error {
 	ctx, span := otel.Tracer("LlmInteractionRepo").Start(ctx, "SaveItineraryPOIs")
 	defer span.End()
 
@@ -1224,7 +1286,7 @@ func (r *RepositoryImpl) SaveItineraryPOIs(ctx context.Context, itineraryID uuid
         VALUES ($1, $2, $3, $4)
     `
 	for i, poi := range pois {
-		poiID, err := r.SavePOItoPointsOfInterest(ctx, poi, poi.CityID) // Assume CityID is added to POIDetail or passed separately
+		poiID, err := r.SavePOItoPointsOfInterest(ctx, poi, poi.CityID) // Assume CityID is added to POIDetailedInfo or passed separately
 		if err != nil {
 			span.RecordError(err)
 			return fmt.Errorf("failed to ensure POI in points_of_interest: %w", err)
@@ -1258,7 +1320,7 @@ func (r *RepositoryImpl) CityExists(ctx context.Context, cityID uuid.UUID) (bool
 }
 
 // FindSimilarPOIs finds POIs similar to the provided query embedding using cosine similarity
-func (r *RepositoryImpl) FindSimilarPOIs(ctx context.Context, queryEmbedding []float32, limit int) ([]types.POIDetail, error) {
+func (r *RepositoryImpl) FindSimilarPOIs(ctx context.Context, queryEmbedding []float32, limit int) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("Repository").Start(ctx, "FindSimilarPOIs", trace.WithAttributes(
 		attribute.Int("embedding.dimension", len(queryEmbedding)),
 		attribute.Int("limit", limit),
@@ -1305,9 +1367,9 @@ func (r *RepositoryImpl) FindSimilarPOIs(ctx context.Context, queryEmbedding []f
 	}
 	defer rows.Close()
 
-	var pois []types.POIDetail
+	var pois []types.POIDetailedInfo
 	for rows.Next() {
-		var poi types.POIDetail
+		var poi types.POIDetailedInfo
 		var similarityScore float64
 		var description sql.NullString
 
@@ -1350,7 +1412,7 @@ func (r *RepositoryImpl) FindSimilarPOIs(ctx context.Context, queryEmbedding []f
 }
 
 // FindSimilarPOIsByCity finds POIs similar to the provided query embedding within a specific city
-func (r *RepositoryImpl) FindSimilarPOIsByCity(ctx context.Context, queryEmbedding []float32, cityID uuid.UUID, limit int) ([]types.POIDetail, error) {
+func (r *RepositoryImpl) FindSimilarPOIsByCity(ctx context.Context, queryEmbedding []float32, cityID uuid.UUID, limit int) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("Repository").Start(ctx, "FindSimilarPOIsByCity", trace.WithAttributes(
 		attribute.String("city.id", cityID.String()),
 		attribute.Int("embedding.dimension", len(queryEmbedding)),
@@ -1398,9 +1460,9 @@ func (r *RepositoryImpl) FindSimilarPOIsByCity(ctx context.Context, queryEmbeddi
 	}
 	defer rows.Close()
 
-	var pois []types.POIDetail
+	var pois []types.POIDetailedInfo
 	for rows.Next() {
-		var poi types.POIDetail
+		var poi types.POIDetailedInfo
 		var similarityScore float64
 		var description sql.NullString
 
@@ -1448,7 +1510,7 @@ func (r *RepositoryImpl) FindSimilarPOIsByCity(ctx context.Context, queryEmbeddi
 }
 
 // SearchPOIsHybrid combines spatial filtering with semantic similarity search
-func (r *RepositoryImpl) SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, queryEmbedding []float32, semanticWeight float64) ([]types.POIDetail, error) {
+func (r *RepositoryImpl) SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, queryEmbedding []float32, semanticWeight float64) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("Repository").Start(ctx, "SearchPOIsHybrid", trace.WithAttributes(
 		attribute.Float64("location.latitude", filter.Location.Latitude),
 		attribute.Float64("location.longitude", filter.Location.Longitude),
@@ -1538,9 +1600,9 @@ func (r *RepositoryImpl) SearchPOIsHybrid(ctx context.Context, filter types.POIF
 	}
 	defer rows.Close()
 
-	var pois []types.POIDetail
+	var pois []types.POIDetailedInfo
 	for rows.Next() {
-		var poi types.POIDetail
+		var poi types.POIDetailedInfo
 		var distanceMeters, similarityScore, hybridScore float64
 		var description sql.NullString
 
@@ -1645,7 +1707,7 @@ func (r *RepositoryImpl) UpdatePOIEmbedding(ctx context.Context, poiID uuid.UUID
 }
 
 // GetPOIsWithoutEmbeddings retrieves POIs that don't have embeddings generated yet
-func (r *RepositoryImpl) GetPOIsWithoutEmbeddings(ctx context.Context, limit int) ([]types.POIDetail, error) {
+func (r *RepositoryImpl) GetPOIsWithoutEmbeddings(ctx context.Context, limit int) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("Repository").Start(ctx, "GetPOIsWithoutEmbeddings", trace.WithAttributes(
 		attribute.Int("limit", limit),
 	))
@@ -1677,9 +1739,9 @@ func (r *RepositoryImpl) GetPOIsWithoutEmbeddings(ctx context.Context, limit int
 	}
 	defer rows.Close()
 
-	var pois []types.POIDetail
+	var pois []types.POIDetailedInfo
 	for rows.Next() {
-		var poi types.POIDetail
+		var poi types.POIDetailedInfo
 		var description sql.NullString
 
 		err := rows.Scan(
@@ -1745,7 +1807,10 @@ func (r *RepositoryImpl) GetPOIsByLocationAndDistance(ctx context.Context, lat, 
 						price_level,
 						COALESCE(average_rating, 0) as rating,
 						ROUND(CAST(distance_meters / 1000.0 AS numeric), 2) as distance_km,
-						city_id
+						city_id,
+						COALESCE(tags, '{}') as tags,
+						COALESCE(rating_count, 0) as rating_count,
+						COALESCE(is_sponsored, false) as is_sponsored
 					FROM (
 						SELECT 
 							id, 
@@ -1762,7 +1827,10 @@ func (r *RepositoryImpl) GetPOIsByLocationAndDistance(ctx context.Context, lat, 
 							price_level,
 							COALESCE(average_rating, 0) as rating,
 							ST_Distance(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) as distance_meters,
-							city_id
+							city_id,
+							tags,
+							rating_count,
+							is_sponsored
 						FROM points_of_interest
 						WHERE ST_DWithin(
 							location::geography, 
@@ -1775,9 +1843,6 @@ func (r *RepositoryImpl) GetPOIsByLocationAndDistance(ctx context.Context, lat, 
 
 	var args []interface{}
 	args = append(args, lon, lat, radiusMeters) // $1, $2, $3
-
-	// Order by distance
-	baseQuery += ` ORDER BY distance_km ASC LIMIT 50`
 
 	l.DebugContext(ctx, "Executing POI distance query",
 		slog.String("query", baseQuery),
@@ -1802,6 +1867,9 @@ func (r *RepositoryImpl) GetPOIsByLocationAndDistance(ctx context.Context, lat, 
 		var priceLevel sql.NullInt32
 		var rating sql.NullFloat64
 		var cityID sql.NullString
+		var tagsRaw []byte // Postgres array of text
+		var ratingCount sql.NullInt32
+		var isSponsored sql.NullBool
 
 		err := rows.Scan(
 			&poi.ID,
@@ -1819,6 +1887,9 @@ func (r *RepositoryImpl) GetPOIsByLocationAndDistance(ctx context.Context, lat, 
 			&rating,
 			&poi.Distance, // Already calculated in km
 			&cityID,
+			&tagsRaw,
+			&ratingCount,
+			&isSponsored,
 		)
 		if err != nil {
 			l.ErrorContext(ctx, "Failed to scan POI row", slog.Any("error", err))
@@ -1858,6 +1929,40 @@ func (r *RepositoryImpl) GetPOIsByLocationAndDistance(ctx context.Context, lat, 
 			}
 		} else {
 			poi.PriceLevel = "Free"
+		}
+
+		// Process tags array from PostgreSQL
+		if tagsRaw != nil {
+			// Parse PostgreSQL array format: {tag1,tag2,tag3}
+			tagsStr := string(tagsRaw)
+			if tagsStr != "{}" && len(tagsStr) > 2 {
+				// Remove braces and split by commas
+				tagsStr = strings.Trim(tagsStr, "{}")
+				if tagsStr != "" {
+					poi.Tags = strings.Split(tagsStr, ",")
+					// Clean up quotes and spaces
+					for i, tag := range poi.Tags {
+						poi.Tags[i] = strings.Trim(strings.Trim(tag, `"`), " ")
+					}
+				}
+			}
+		}
+
+		// Calculate popularity from rating count and sponsored status
+		popularityScore := 0
+		if ratingCount.Valid {
+			popularityScore = int(ratingCount.Int32)
+		}
+		if isSponsored.Valid && isSponsored.Bool {
+			popularityScore += 50 // Boost sponsored items
+		}
+		// Map popularity score to 1-10 scale for display
+		if popularityScore > 100 {
+			poi.Priority = 10
+		} else if popularityScore > 0 {
+			poi.Priority = (popularityScore / 10) + 1
+		} else {
+			poi.Priority = 1
 		}
 
 		pois = append(pois, poi)

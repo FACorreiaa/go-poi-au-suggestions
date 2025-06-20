@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
+	generativeAI "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types" // Ensure this path is correct
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -20,17 +20,17 @@ type MockPOIRepository struct {
 	mock.Mock
 }
 
-func (m *MockPOIRepository) SavePoi(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
+func (m *MockPOIRepository) SavePoi(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	args := m.Called(ctx, poi, cityID)
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
-func (m *MockPOIRepository) FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetail, error) {
+func (m *MockPOIRepository) FindPoiByNameAndCity(ctx context.Context, name string, cityID uuid.UUID) (*types.POIDetailedInfo, error) {
 	args := m.Called(ctx, name, cityID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*types.POIDetail), args.Error(1)
+	return args.Get(0).(*types.POIDetailedInfo), args.Error(1)
 }
 
 func (m *MockPOIRepository) GetPOIsByCityAndDistance(ctx context.Context, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error) {
@@ -67,23 +67,23 @@ func (m *MockPOIRepository) RemovePoiFromFavourites(ctx context.Context, poiID u
 	return args.Error(0)
 }
 
-func (m *MockPOIRepository) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, cityID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error) {
+func (m *MockPOIRepository) FindPOIDetailedInfos(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error) {
 	args := m.Called(ctx, cityID, lat, lon, tolerance)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -91,41 +91,41 @@ func (m *MockPOIRepository) FindPOIDetails(ctx context.Context, cityID uuid.UUID
 	return args.Get(0).(*types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+func (m *MockPOIRepository) SavePOIDetailedInfos(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	args := m.Called(ctx, poi, cityID)
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
-func (m *MockPOIRepository) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, filter)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) FindSimilarPOIs(ctx context.Context, queryEmbedding []float32, limit int) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) FindSimilarPOIs(ctx context.Context, queryEmbedding []float32, limit int) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, queryEmbedding, limit)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) FindSimilarPOIsByCity(ctx context.Context, queryEmbedding []float32, cityID uuid.UUID, limit int) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) FindSimilarPOIsByCity(ctx context.Context, queryEmbedding []float32, cityID uuid.UUID, limit int) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, queryEmbedding, cityID, limit)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
-func (m *MockPOIRepository) SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, queryEmbedding []float32, semanticWeight float64) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, queryEmbedding []float32, semanticWeight float64) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, filter, queryEmbedding, semanticWeight)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
 func (m *MockPOIRepository) UpdatePOIEmbedding(ctx context.Context, poiID uuid.UUID, embedding []float32) error {
@@ -133,12 +133,12 @@ func (m *MockPOIRepository) UpdatePOIEmbedding(ctx context.Context, poiID uuid.U
 	return args.Error(0)
 }
 
-func (m *MockPOIRepository) GetPOIsWithoutEmbeddings(ctx context.Context, limit int) ([]types.POIDetail, error) {
+func (m *MockPOIRepository) GetPOIsWithoutEmbeddings(ctx context.Context, limit int) ([]types.POIDetailedInfo, error) {
 	args := m.Called(ctx, limit)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.POIDetail), args.Error(1)
+	return args.Get(0).([]types.POIDetailedInfo), args.Error(1)
 }
 
 func (m *MockPOIRepository) FindHotelDetails(ctx context.Context, cityID uuid.UUID, lat, lon, tolerance float64) ([]types.HotelDetailedInfo, error) {
@@ -212,12 +212,12 @@ func (m *MockPOIRepository) SaveItinerary(ctx context.Context, userID, cityID uu
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
-func (m *MockPOIRepository) SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetail) error {
+func (m *MockPOIRepository) SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetailedInfo) error {
 	args := m.Called(ctx, itineraryID, pois)
 	return args.Error(0)
 }
 
-func (m *MockPOIRepository) SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetail, cityID uuid.UUID) (uuid.UUID, error) {
+func (m *MockPOIRepository) SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
 	args := m.Called(ctx, poi, cityID)
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }

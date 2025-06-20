@@ -1094,20 +1094,21 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 	distanceStr := r.URL.Query().Get("distance")
 
 	// Optional filter parameters
-	// category := r.URL.Query().Get("category")
-	// if category == "" {
-	// 	category = "all" // Default to all categories
-	// }
+	category := r.URL.Query().Get("category")
+	priceRange := r.URL.Query().Get("price_range")
+	minRating := r.URL.Query().Get("min_rating")
 
-	// priceRange := r.URL.Query().Get("price_range")
-	// if priceRange == "" {
-	// 	priceRange = "all" // Default to all price ranges
-	// }
-
-	// popularity := r.URL.Query().Get("popularity")
-	// if popularity == "" {
-	// 	popularity = "all" // Default to all popularity levels
-	// }
+	// Create filters map
+	filters := make(map[string]string)
+	if category != "" && category != "all" {
+		filters["category"] = category
+	}
+	if priceRange != "" && priceRange != "all" {
+		filters["price_range"] = priceRange
+	}
+	if minRating != "" && minRating != "all" {
+		filters["min_rating"] = minRating
+	}
 
 	// Parse latitude
 	lat, err := strconv.ParseFloat(latStr, 64)
@@ -1161,8 +1162,13 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 	// 	"popularity":  popularity,
 	// }
 
-	// Call service method
-	pois, err := HandlerImpl.llmInteractionService.GetGeneralPOIByDistance(ctx, userID, lat, lon, distance)
+	// Call service method with filters
+	var pois []types.POIDetailedInfo
+	if len(filters) > 0 {
+		pois, err = HandlerImpl.llmInteractionService.GetGeneralPOIByDistanceWithFilters(ctx, userID, lat, lon, distance, filters)
+	} else {
+		pois, err = HandlerImpl.llmInteractionService.GetGeneralPOIByDistance(ctx, userID, lat, lon, distance)
+	}
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch POIs", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch POIs: %s", err.Error()))

@@ -1960,8 +1960,10 @@ func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistance(ctx context.Context
 
 	// Save all LLM-generated POIs to the database
 	for _, p := range genAIResponse.GeneralPOI {
-		// Determine cityID (assuming we need to derive it or get it from LLM response)
-		// For simplicity, we'll assume a method to get cityID based on coordinates or LLM data
+		poiID := p.ID
+		if poiID == uuid.Nil { // uuid.Nil is "00000000-0000-0000-0000-000000000000"
+			poiID = uuid.New()
+		}
 		cityID, cityName, err := l.cityRepo.GetCity(ctx, p.Latitude, p.Longitude)
 
 		if err != nil {
@@ -2009,7 +2011,7 @@ func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistance(ctx context.Context
 		}
 
 		poi := types.POIDetailedInfo{
-			ID:        p.ID,
+			ID:        poiID,
 			City:      cityName,
 			CityID:    cityID,
 			Name:      p.Name,
@@ -2028,6 +2030,7 @@ func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistance(ctx context.Context
 
 	// Filter LLM-generated POIs for the current response
 	var poisDetailed []types.POIDetailedInfo
+
 	for _, p := range genAIResponse.GeneralPOI {
 		distanceKm := calculateDistance(lat, lon, p.Latitude, p.Longitude)
 		if distanceKm <= distance/1000 { // Convert meters to km for comparison
@@ -2047,6 +2050,160 @@ func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistance(ctx context.Context
 
 	l.cache.Set(cacheKey, poisDetailed, cache.DefaultExpiration)
 	span.SetStatus(codes.Ok, "POIs generated via LLM and cached")
+	return poisDetailed, nil
+}
+
+func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceWithFilters(ctx context.Context, userID uuid.UUID, lat, lon, distance float64, filters map[string]string) ([]types.POIDetailedInfo, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetGeneralPOIByDistanceWithFilters")
+	defer span.End()
+
+	// Create cache key including filters
+	filtersKey := "no-filters"
+	if filters != nil && len(filters) > 0 {
+		filtersJSON, _ := json.Marshal(filters)
+		filtersKey = string(filtersJSON)
+	}
+	cacheKey := fmt.Sprintf("poi:distance:%.6f:%.6f:%.0f:%s:%s", lat, lon, distance, userID.String(), filtersKey)
+	span.SetAttributes(attribute.String("cache.key", cacheKey))
+
+	// Check cache first
+	if cached, found := l.cache.Get(cacheKey); found {
+		if pois, ok := cached.([]types.POIDetailedInfo); ok {
+			span.SetStatus(codes.Ok, "Served from cache")
+			return pois, nil
+		}
+	}
+
+	l.logger.InfoContext(ctx, "Querying POIs from database with filters",
+		slog.Float64("lat", lat),
+		slog.Float64("lon", lon),
+		slog.Float64("distance_meters", distance),
+		slog.Any("filters", filters))
+
+	// Try to get POIs from database using PostGIS with filters
+	pois, err := l.poiRepo.GetPOIsByLocationAndDistanceWithFilters(ctx, lat, lon, distance, filters)
+	if err != nil {
+		l.logger.WarnContext(ctx, "Failed to query POIs from database with filters, will fallback to LLM", slog.Any("error", err))
+	} else if len(pois) > 0 {
+		l.logger.InfoContext(ctx, "Found POIs in database with filters", slog.Int("count", len(pois)))
+		l.cache.Set(cacheKey, pois, cache.DefaultExpiration)
+		span.SetStatus(codes.Ok, "Served from database")
+		return pois, nil
+	}
+
+	// Fallback to LLM if database is empty or query failed
+	l.logger.InfoContext(ctx, "No POIs found in database with filters, falling back to LLM generation")
+
+	// Generate via AI (reuse existing LLM generation logic)
+	resultCh := make(chan types.GenAIResponse, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go l.getGeneralPOIByDistance(&wg, ctx, userID, lat, lon, distance, resultCh, &genai.GenerateContentConfig{
+		Temperature:     genai.Ptr[float32](0.7),
+		MaxOutputTokens: 16384,
+	})
+	wg.Wait()
+	close(resultCh)
+
+	genAIResponse := <-resultCh
+	if genAIResponse.Err != nil {
+		span.RecordError(genAIResponse.Err)
+		return nil, genAIResponse.Err
+	}
+
+	// Save all LLM-generated POIs to the database (same logic as existing method)
+	for _, p := range genAIResponse.GeneralPOI {
+		poiID := p.ID
+		if poiID == uuid.Nil {
+			poiID = uuid.New()
+		}
+
+		cityID, cityName, err := l.cityRepo.GetCity(ctx, p.Latitude, p.Longitude)
+
+		if err != nil {
+			// Create city if not exists (same logic as existing method)
+			if genAIResponse.City != "" && genAIResponse.Country != "" {
+				cityDetail := types.CityDetail{
+					Name:            genAIResponse.City,
+					Country:         genAIResponse.Country,
+					StateProvince:   genAIResponse.StateProvince,
+					AiSummary:       genAIResponse.CityDescription,
+					CenterLatitude:  genAIResponse.Latitude,
+					CenterLongitude: genAIResponse.Longitude,
+				}
+
+				if cityDetail.CenterLatitude == 0 && cityDetail.CenterLongitude == 0 {
+					cityDetail.CenterLatitude = p.Latitude
+					cityDetail.CenterLongitude = p.Longitude
+				}
+
+				createdCityID, cityErr := l.cityRepo.SaveCity(ctx, cityDetail)
+				if cityErr != nil {
+					continue
+				}
+				cityID = createdCityID
+				cityName = genAIResponse.City
+			} else {
+				continue
+			}
+		}
+
+		poi := types.POIDetailedInfo{
+			ID:        poiID,
+			City:      cityName,
+			CityID:    cityID,
+			Name:      p.Name,
+			Latitude:  p.Latitude,
+			Longitude: p.Longitude,
+			Category:  p.Category,
+		}
+		_, err = l.poiRepo.SavePOIDetails(ctx, poi, cityID)
+		if err != nil {
+			l.logger.WarnContext(ctx, "Failed to save POI",
+				slog.Any("error", err),
+				slog.String("poi_name", poi.Name))
+		}
+	}
+
+	// Filter LLM-generated POIs for the current response and apply client-side filters
+	var poisDetailed []types.POIDetailedInfo
+	for _, p := range genAIResponse.GeneralPOI {
+
+		distanceKm := calculateDistance(lat, lon, p.Latitude, p.Longitude)
+		if distanceKm <= distance/1000 { // Convert meters to km for comparison
+			// Apply client-side filters for LLM-generated data
+			includeItem := true
+
+			if filters != nil {
+				if categoryFilter, exists := filters["category"]; exists && categoryFilter != "" && categoryFilter != "all" {
+					if !strings.EqualFold(p.Category, categoryFilter) {
+						includeItem = false
+					}
+				}
+			}
+
+			if includeItem {
+				poiID := p.ID
+				if poiID == uuid.Nil {
+					poiID = uuid.New()
+				}
+				poi := types.POIDetailedInfo{
+					ID:        poiID,
+					Name:      p.Name,
+					Latitude:  p.Latitude,
+					Longitude: p.Longitude,
+					Category:  p.Category,
+					Distance:  distanceKm,
+				}
+				poisDetailed = append(poisDetailed, poi)
+			}
+		}
+	}
+
+	l.logger.InfoContext(ctx, "Generated and filtered POIs using LLM with filters", slog.Int("count", len(poisDetailed)))
+
+	l.cache.Set(cacheKey, poisDetailed, cache.DefaultExpiration)
+	span.SetStatus(codes.Ok, "POIs generated via LLM with filters and cached")
 	return poisDetailed, nil
 }
 
@@ -2117,60 +2274,6 @@ func (l *LlmInteractiontServiceImpl) enrichLLMPOIsWithMetadata(ctx context.Conte
 	}
 
 	return enrichedPOIs, cityID, nil
-}
-
-// GetGeneralPOIByDistanceWithFilters implements advanced filtering for POIs including category, price, and popularity
-func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceWithFilters(ctx context.Context, userID uuid.UUID, lat, lon, distance float64, filters map[string]string) ([]types.POIDetailedInfo, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetGeneralPOIByDistanceWithFilters")
-	defer span.End()
-
-	// Generate cache key that includes all filters
-	cacheKey := generateAdvancedFilteredPOICacheKey(lat, lon, distance, userID, filters)
-	span.SetAttributes(attribute.String("cache.key", cacheKey))
-
-	// Check cache first
-	if cached, found := l.cache.Get(cacheKey); found {
-		if pois, ok := cached.([]types.POIDetailedInfo); ok {
-			span.SetStatus(codes.Ok, "Served from cache")
-			return pois, nil
-		}
-	}
-
-	l.logger.InfoContext(ctx, "Querying POIs from database with filters",
-		slog.Float64("lat", lat),
-		slog.Float64("lon", lon),
-		slog.Float64("distance_meters", distance),
-		slog.Any("filters", filters))
-
-	// First, try to get POIs from database using PostGIS with advanced filters
-	pois, err := l.poiRepo.GetPOIsByLocationAndDistanceWithFilters(ctx, lat, lon, distance, filters)
-	if err != nil {
-		l.logger.WarnContext(ctx, "Failed to query POIs from database with filters, will fallback to LLM", slog.Any("error", err))
-	} else if len(pois) > 0 {
-		l.logger.InfoContext(ctx, "Found POIs in database with filters, using them instead of LLM", slog.Int("count", len(pois)))
-		l.cache.Set(cacheKey, pois, cache.DefaultExpiration)
-		span.SetStatus(codes.Ok, "Served from database with filters")
-		return pois, nil
-	}
-
-	// Fallback to existing method with basic category filter for LLM generation
-	categoryFilter := filters["category"]
-	if categoryFilter == "" || categoryFilter == "all" {
-		categoryFilter = ""
-	}
-
-	l.logger.InfoContext(ctx, "No POIs found in database with filters, falling back to LLM generation")
-	llmPois, err := l.GetGeneralPOIByDistance(ctx, userID, lat, lon, distance)
-	if err != nil {
-		return nil, err
-	}
-
-	// Enrich LLM-generated POIs with realistic metadata for better filtering
-	enrichedPOIs, _, err := l.enrichLLMPOIsWithMetadata(ctx, llmPois, lat, lon, distance)
-
-	// Cache the enriched results
-	l.cache.Set(cacheKey, enrichedPOIs, cache.DefaultExpiration)
-	return enrichedPOIs, nil
 }
 
 // // enrichLLMPOIsWithMetadata enhances LLM-generated POIs with realistic metadata for filtering

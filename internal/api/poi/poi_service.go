@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
+	generativeAI "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -20,16 +20,16 @@ var _ Service = (*ServiceImpl)(nil)
 type Service interface {
 	AddPoiToFavourites(ctx context.Context, userID, poiID uuid.UUID) (uuid.UUID, error)
 	RemovePoiFromFavourites(ctx context.Context, poiID uuid.UUID, userID uuid.UUID) error
-	GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error)
-	GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error)
+	GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetailedInfo, error)
+	GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetailedInfo, error)
 
 	// Traditional search
-	SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error)
+	SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetailedInfo, error)
 
 	// Semantic search methods
-	SearchPOIsSemantic(ctx context.Context, query string, limit int) ([]types.POIDetail, error)
-	SearchPOIsSemanticByCity(ctx context.Context, query string, cityID uuid.UUID, limit int) ([]types.POIDetail, error)
-	SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, query string, semanticWeight float64) ([]types.POIDetail, error)
+	SearchPOIsSemantic(ctx context.Context, query string, limit int) ([]types.POIDetailedInfo, error)
+	SearchPOIsSemanticByCity(ctx context.Context, query string, cityID uuid.UUID, limit int) ([]types.POIDetailedInfo, error)
+	SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, query string, semanticWeight float64) ([]types.POIDetailedInfo, error)
 	GenerateEmbeddingForPOI(ctx context.Context, poiID uuid.UUID) error
 	GenerateEmbeddingsForAllPOIs(ctx context.Context, batchSize int) error
 
@@ -68,7 +68,7 @@ func (s *ServiceImpl) RemovePoiFromFavourites(ctx context.Context, poiID uuid.UU
 
 	return nil
 }
-func (s *ServiceImpl) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetail, error) {
+func (s *ServiceImpl) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.UUID) ([]types.POIDetailedInfo, error) {
 	pois, err := s.poiRepository.GetFavouritePOIsByUserID(ctx, userID)
 	if err != nil {
 		s.logger.Error("failed to get favourite POIs by user ID", "error", err)
@@ -76,7 +76,7 @@ func (s *ServiceImpl) GetFavouritePOIsByUserID(ctx context.Context, userID uuid.
 	}
 	return pois, nil
 }
-func (s *ServiceImpl) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetail, error) {
+func (s *ServiceImpl) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]types.POIDetailedInfo, error) {
 	pois, err := s.poiRepository.GetPOIsByCityID(ctx, cityID)
 	if err != nil {
 		s.logger.Error("failed to get POIs by city ID", "error", err)
@@ -85,7 +85,7 @@ func (s *ServiceImpl) GetPOIsByCityID(ctx context.Context, cityID uuid.UUID) ([]
 	return pois, nil
 }
 
-func (s *ServiceImpl) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetail, error) {
+func (s *ServiceImpl) SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetailedInfo, error) {
 	pois, err := s.poiRepository.SearchPOIs(ctx, filter)
 	if err != nil {
 		s.logger.Error("failed to search POIs", "error", err)
@@ -176,7 +176,7 @@ func (l *ServiceImpl) UpdateItinerary(ctx context.Context, userID, itineraryID u
 }
 
 // SearchPOIsSemantic performs semantic search for POIs using natural language queries
-func (s *ServiceImpl) SearchPOIsSemantic(ctx context.Context, query string, limit int) ([]types.POIDetail, error) {
+func (s *ServiceImpl) SearchPOIsSemantic(ctx context.Context, query string, limit int) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("POIService").Start(ctx, "SearchPOIsSemantic", trace.WithAttributes(
 		attribute.String("query", query),
 		attribute.Int("limit", limit),
@@ -196,7 +196,7 @@ func (s *ServiceImpl) SearchPOIsSemantic(ctx context.Context, query string, limi
 	// Generate embedding for the query
 	queryEmbedding, err := s.embeddingService.GenerateQueryEmbedding(ctx, query)
 	if err != nil {
-		l.ErrorContext(ctx, "Failed to generate query embedding", 
+		l.ErrorContext(ctx, "Failed to generate query embedding",
 			slog.Any("error", err),
 			slog.String("query", query))
 		span.RecordError(err)
@@ -213,7 +213,7 @@ func (s *ServiceImpl) SearchPOIsSemantic(ctx context.Context, query string, limi
 		return nil, fmt.Errorf("failed to find similar POIs: %w", err)
 	}
 
-	l.InfoContext(ctx, "Semantic search completed", 
+	l.InfoContext(ctx, "Semantic search completed",
 		slog.String("query", query),
 		slog.Int("results", len(pois)))
 	span.SetAttributes(
@@ -226,7 +226,7 @@ func (s *ServiceImpl) SearchPOIsSemantic(ctx context.Context, query string, limi
 }
 
 // SearchPOIsSemanticByCity performs semantic search for POIs within a specific city
-func (s *ServiceImpl) SearchPOIsSemanticByCity(ctx context.Context, query string, cityID uuid.UUID, limit int) ([]types.POIDetail, error) {
+func (s *ServiceImpl) SearchPOIsSemanticByCity(ctx context.Context, query string, cityID uuid.UUID, limit int) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("POIService").Start(ctx, "SearchPOIsSemanticByCity", trace.WithAttributes(
 		attribute.String("query", query),
 		attribute.String("city.id", cityID.String()),
@@ -247,7 +247,7 @@ func (s *ServiceImpl) SearchPOIsSemanticByCity(ctx context.Context, query string
 	// Generate embedding for the query
 	queryEmbedding, err := s.embeddingService.GenerateQueryEmbedding(ctx, query)
 	if err != nil {
-		l.ErrorContext(ctx, "Failed to generate query embedding", 
+		l.ErrorContext(ctx, "Failed to generate query embedding",
 			slog.Any("error", err),
 			slog.String("query", query))
 		span.RecordError(err)
@@ -264,7 +264,7 @@ func (s *ServiceImpl) SearchPOIsSemanticByCity(ctx context.Context, query string
 		return nil, fmt.Errorf("failed to find similar POIs by city: %w", err)
 	}
 
-	l.InfoContext(ctx, "Semantic search by city completed", 
+	l.InfoContext(ctx, "Semantic search by city completed",
 		slog.String("query", query),
 		slog.String("city_id", cityID.String()),
 		slog.Int("results", len(pois)))
@@ -279,7 +279,7 @@ func (s *ServiceImpl) SearchPOIsSemanticByCity(ctx context.Context, query string
 }
 
 // SearchPOIsHybrid performs hybrid search combining spatial and semantic similarity
-func (s *ServiceImpl) SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, query string, semanticWeight float64) ([]types.POIDetail, error) {
+func (s *ServiceImpl) SearchPOIsHybrid(ctx context.Context, filter types.POIFilter, query string, semanticWeight float64) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("POIService").Start(ctx, "SearchPOIsHybrid", trace.WithAttributes(
 		attribute.String("query", query),
 		attribute.Float64("semantic.weight", semanticWeight),
@@ -311,7 +311,7 @@ func (s *ServiceImpl) SearchPOIsHybrid(ctx context.Context, filter types.POIFilt
 	// Generate embedding for the query
 	queryEmbedding, err := s.embeddingService.GenerateQueryEmbedding(ctx, query)
 	if err != nil {
-		l.ErrorContext(ctx, "Failed to generate query embedding", 
+		l.ErrorContext(ctx, "Failed to generate query embedding",
 			slog.Any("error", err),
 			slog.String("query", query))
 		span.RecordError(err)
@@ -328,7 +328,7 @@ func (s *ServiceImpl) SearchPOIsHybrid(ctx context.Context, filter types.POIFilt
 		return nil, fmt.Errorf("failed to perform hybrid search: %w", err)
 	}
 
-	l.InfoContext(ctx, "Hybrid search completed", 
+	l.InfoContext(ctx, "Hybrid search completed",
 		slog.String("query", query),
 		slog.Float64("semantic_weight", semanticWeight),
 		slog.Int("results", len(pois)))
@@ -379,7 +379,7 @@ func (s *ServiceImpl) GenerateEmbeddingForPOI(ctx context.Context, poiID uuid.UU
 	// Generate embedding using POI information
 	embedding, err := s.embeddingService.GeneratePOIEmbedding(ctx, poi.Name, poi.DescriptionPOI, poi.Category)
 	if err != nil {
-		l.ErrorContext(ctx, "Failed to generate POI embedding", 
+		l.ErrorContext(ctx, "Failed to generate POI embedding",
 			slog.Any("error", err),
 			slog.String("poi_id", poiID.String()))
 		span.RecordError(err)
@@ -390,7 +390,7 @@ func (s *ServiceImpl) GenerateEmbeddingForPOI(ctx context.Context, poiID uuid.UU
 	// Update POI with generated embedding
 	err = s.poiRepository.UpdatePOIEmbedding(ctx, poiID, embedding)
 	if err != nil {
-		l.ErrorContext(ctx, "Failed to update POI embedding", 
+		l.ErrorContext(ctx, "Failed to update POI embedding",
 			slog.Any("error", err),
 			slog.String("poi_id", poiID.String()))
 		span.RecordError(err)
@@ -398,7 +398,7 @@ func (s *ServiceImpl) GenerateEmbeddingForPOI(ctx context.Context, poiID uuid.UU
 		return fmt.Errorf("failed to update POI embedding: %w", err)
 	}
 
-	l.InfoContext(ctx, "POI embedding generated and stored successfully", 
+	l.InfoContext(ctx, "POI embedding generated and stored successfully",
 		slog.String("poi_id", poiID.String()),
 		slog.String("poi_name", poi.Name))
 	span.SetAttributes(
@@ -456,7 +456,7 @@ func (s *ServiceImpl) GenerateEmbeddingsForAllPOIs(ctx context.Context, batchSiz
 			// Generate embedding
 			embedding, err := s.embeddingService.GeneratePOIEmbedding(ctx, poi.Name, poi.DescriptionPOI, poi.Category)
 			if err != nil {
-				l.ErrorContext(ctx, "Failed to generate embedding for POI", 
+				l.ErrorContext(ctx, "Failed to generate embedding for POI",
 					slog.Any("error", err),
 					slog.String("poi_id", poi.ID.String()),
 					slog.String("poi_name", poi.Name))
@@ -467,7 +467,7 @@ func (s *ServiceImpl) GenerateEmbeddingsForAllPOIs(ctx context.Context, batchSiz
 			// Update POI with embedding
 			err = s.poiRepository.UpdatePOIEmbedding(ctx, poi.ID, embedding)
 			if err != nil {
-				l.ErrorContext(ctx, "Failed to update POI embedding", 
+				l.ErrorContext(ctx, "Failed to update POI embedding",
 					slog.Any("error", err),
 					slog.String("poi_id", poi.ID.String()),
 					slog.String("poi_name", poi.Name))
@@ -476,7 +476,7 @@ func (s *ServiceImpl) GenerateEmbeddingsForAllPOIs(ctx context.Context, batchSiz
 			}
 
 			totalProcessed++
-			l.DebugContext(ctx, "POI embedding generated successfully", 
+			l.DebugContext(ctx, "POI embedding generated successfully",
 				slog.String("poi_id", poi.ID.String()),
 				slog.String("poi_name", poi.Name))
 		}
@@ -487,7 +487,7 @@ func (s *ServiceImpl) GenerateEmbeddingsForAllPOIs(ctx context.Context, batchSiz
 		}
 	}
 
-	l.InfoContext(ctx, "Batch embedding generation completed", 
+	l.InfoContext(ctx, "Batch embedding generation completed",
 		slog.Int("total_processed", totalProcessed),
 		slog.Int("total_errors", totalErrors))
 	span.SetAttributes(

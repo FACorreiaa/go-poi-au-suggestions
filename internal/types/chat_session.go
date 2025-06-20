@@ -121,17 +121,17 @@ type ChatService interface {
 }
 
 type StreamingChatEvent struct {
-	Timestamp        time.Time        `json:"timestamp"`  // Time of the event
-	EventID          string           `json:"event_id"`   // Unique identifier for the event
-	EventType        string           `json:"event_type"` // e.g., "session_started", "city_info", "general_pois", "personalized_poi_chunk", "final_itinerary", "error"
-	SessionID        uuid.UUID        `json:"session_id,omitempty"`
-	Message          string           `json:"message,omitempty"` // For general messages or errors
-	CityData         *GeneralCityData `json:"city_data,omitempty"`
-	GeneralPOIs      []POIDetail      `json:"general_pois,omitempty"`
-	PersonalizedPOIs []POIDetail      `json:"personalized_pois,omitempty"` // Could send chunks or final list
-	Itinerary        *AiCityResponse  `json:"itinerary,omitempty"`         // Could be a partial or final one
-	Error            string           `json:"error_message,omitempty"`
-	IsFinal          bool             `json:"is_final,omitempty"` // Indicates the end of a sequence or the whole stream
+	Timestamp        time.Time         `json:"timestamp"`  // Time of the event
+	EventID          string            `json:"event_id"`   // Unique identifier for the event
+	EventType        string            `json:"event_type"` // e.g., "session_started", "city_info", "general_pois", "personalized_poi_chunk", "final_itinerary", "error"
+	SessionID        uuid.UUID         `json:"session_id,omitempty"`
+	Message          string            `json:"message,omitempty"` // For general messages or errors
+	CityData         *GeneralCityData  `json:"city_data,omitempty"`
+	GeneralPOIs      []POIDetailedInfo `json:"general_pois,omitempty"`
+	PersonalizedPOIs []POIDetailedInfo `json:"personalized_pois,omitempty"` // Could send chunks or final list
+	Itinerary        *AiCityResponse   `json:"itinerary,omitempty"`         // Could be a partial or final one
+	Error            string            `json:"error_message,omitempty"`
+	IsFinal          bool              `json:"is_final,omitempty"` // Indicates the end of a sequence or the whole stream
 	// Add any other relevant data for different event types
 }
 
@@ -190,22 +190,22 @@ type StreamEvent struct {
 
 // StreamEventType constants
 const (
-	EventTypeStart             = "start"
-	EventTypeProgress          = "progress"
-	EventTypeCityData          = "city_data"
-	EventTypeGeneralPOI        = "general_poi"
-	EventTypePersonalizedPOI   = "personalized_poi"
-	EventTypeItinerary         = "itinerary"
-	EventTypeMessage           = "message"
-	EventTypeError             = "error"
-	EventTypeComplete          = "complete"
-	EventTypeDomainDetected    = "domain_detected"
-	EventTypePromptGenerated   = "prompt_generated"
-	EventTypeParsingResponse   = "parsing_response"
-	EventTypeUnifiedChat       = "unified_chat"
-	EventTypeHotels            = "hotels"
-	EventTypeRestaurants       = "restaurants"
-	EventTypeChunk             = "chunk" // For immediate text chunks (Google GenAI pattern)
+	EventTypeStart           = "start"
+	EventTypeProgress        = "progress"
+	EventTypeCityData        = "city_data"
+	EventTypeGeneralPOI      = "general_poi"
+	EventTypePersonalizedPOI = "personalized_poi"
+	EventTypeItinerary       = "itinerary"
+	EventTypeMessage         = "message"
+	EventTypeError           = "error"
+	EventTypeComplete        = "complete"
+	EventTypeDomainDetected  = "domain_detected"
+	EventTypePromptGenerated = "prompt_generated"
+	EventTypeParsingResponse = "parsing_response"
+	EventTypeUnifiedChat     = "unified_chat"
+	EventTypeHotels          = "hotels"
+	EventTypeRestaurants     = "restaurants"
+	EventTypeChunk           = "chunk" // For immediate text chunks (Google GenAI pattern)
 )
 
 // StreamingResponse wraps the streaming channel and metadata

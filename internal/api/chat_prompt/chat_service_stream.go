@@ -343,7 +343,7 @@ func (l *LlmInteractiontServiceImpl) streamingGeneralPOIWorker(wg *sync.WaitGrou
 
 	cleanTxt := cleanJSONResponse(fullText)
 	var poiData struct {
-		PointsOfInterest []types.POIDetail `json:"points_of_interest"`
+		PointsOfInterest []types.POIDetailedInfo `json:"points_of_interest"`
 	}
 	if err := json.Unmarshal([]byte(cleanTxt), &poiData); err != nil {
 		span.RecordError(err)
@@ -494,9 +494,9 @@ func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorker(wg *sync.Wai
 
 	cleanTxt := cleanJSONResponse(fullText)
 	var itineraryData struct {
-		ItineraryName      string            `json:"itinerary_name"`
-		OverallDescription string            `json:"overall_description"`
-		PointsOfInterest   []types.POIDetail `json:"points_of_interest"`
+		ItineraryName      string                  `json:"itinerary_name"`
+		OverallDescription string                  `json:"overall_description"`
+		PointsOfInterest   []types.POIDetailedInfo `json:"points_of_interest"`
 	}
 	if err := json.Unmarshal([]byte(cleanTxt), &itineraryData); err != nil {
 		span.RecordError(err)
@@ -527,7 +527,7 @@ func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorker(wg *sync.Wai
 }
 
 // streamingPersonalizedPOIWorkerWithSemantics generates personalized POIs with semantic context and streaming updates
-func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorkerWithSemantics(wg *sync.WaitGroup, ctx context.Context, cityName string, userID, profileID uuid.UUID, resultCh chan<- types.GenAIResponse, eventCh chan<- types.StreamEvent, interestNames []string, tagsPromptPart, userPrefs string, semanticPOIs []types.POIDetail) {
+func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorkerWithSemantics(wg *sync.WaitGroup, ctx context.Context, cityName string, userID, profileID uuid.UUID, resultCh chan<- types.GenAIResponse, eventCh chan<- types.StreamEvent, interestNames []string, tagsPromptPart, userPrefs string, semanticPOIs []types.POIDetailedInfo) {
 	defer wg.Done()
 
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "streamingPersonalizedPOIWorkerWithSemantics", trace.WithAttributes(
@@ -663,9 +663,9 @@ func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorkerWithSemantics
 
 	cleanTxt := cleanJSONResponse(fullText)
 	var itineraryData struct {
-		ItineraryName      string            `json:"itinerary_name"`
-		OverallDescription string            `json:"overall_description"`
-		PointsOfInterest   []types.POIDetail `json:"points_of_interest"`
+		ItineraryName      string                  `json:"itinerary_name"`
+		OverallDescription string                  `json:"overall_description"`
+		PointsOfInterest   []types.POIDetailedInfo `json:"points_of_interest"`
 	}
 	if err := json.Unmarshal([]byte(cleanTxt), &itineraryData); err != nil {
 		span.RecordError(err)
@@ -778,7 +778,7 @@ func (l *LlmInteractiontServiceImpl) StartNewSessionStreamed(ctx context.Context
 			EventID:   uuid.New().String(),
 		})
 
-		var semanticPOIs []types.POIDetail
+		var semanticPOIs []types.POIDetailedInfo
 		if len(interestNames) > 0 {
 			cityUUID, cityErr := l.cityRepo.GetCityIDByName(ctx, cityName)
 			if cityErr == nil {
@@ -831,7 +831,7 @@ func (l *LlmInteractiontServiceImpl) StartNewSessionStreamed(ctx context.Context
 
 		var itinerary types.AiCityResponse
 		var llmInteractionID uuid.UUID
-		var rawPersonalisedPOIs []types.POIDetail
+		var rawPersonalisedPOIs []types.POIDetailedInfo
 		var errors []error
 
 		for i := 0; i < 3; i++ {
@@ -1187,58 +1187,6 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 			finalResponseMessage = "I’ve noted your request to modify the itinerary. Please specify the changes (e.g., 'replace X with Y')."
 		}
 	}
-	// 	conversationContext := l.buildConversationContext(session.ConversationHistory)
-	// 	currentItinerarySummary := l.summarizeCurrentItinerary(session.CurrentItinerary)
-	// 	updatePrompt := l.buildUpdatePrompt(session.SessionContext.CityName, message, conversationContext, currentItinerarySummary, types.Intent{Type: types.IntentModifyItinerary})
-
-	// 	iter, err := l.aiClient.GenerateContentStream(ctx, updatePrompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](0.7)})
-	// 	if err != nil {
-	// 		finalResponseMessage = "I had trouble processing that itinerary update."
-	// 		assistantMessageType = types.TypeError
-	// 		l.sendEvent(types.StreamEvent{Type: types.EventTypeError, Error: err.Error()})
-	// 	} else {
-	// 		var fullResponseBuilder strings.Builder
-	// 		iterErr := iter(func(chunk *genai.GenerateContentResponse) bool {
-	// 			select {
-	// 			case <-ctx.Done():
-	// 				return false
-	// 			default:
-	// 			}
-	// 			chunkContent := ""
-	// 			for _, cand := range chunk.Candidates {
-	// 				if cand.Content != nil {
-	// 					for _, part := range cand.Content.Parts {
-	// 						if textPart, ok := part.(genai.Text); ok {
-	// 							chunkContent = string(textPart)
-	// 						}
-	// 					}
-	// 				}
-	// 			}
-	// 			if chunkContent != "" {
-	// 				fullResponseBuilder.WriteString(chunkContent)
-	// 				l.sendEvent(types.StreamEvent{Type: EventTypeMessage, Data: chunkContent})
-	// 			}
-	// 			return true
-	// 		})
-	// 		if iterErr != nil && iterErr != iterator.Done {
-	// 			l.logger.WarnContext(ctx, "Error streaming itinerary update", slog.Any("error", iterErr))
-	// 			l.sendEvent(types.StreamEvent{Type: types.EventTypeError, Error: iterErr.Error()})
-	// 		}
-	// 		if ctx.Err() != nil {
-	// 			return ctx.Err()
-	// 		}
-
-	// 		parsedItinerary, parsedMsg, parseErr := l.parseUpdateResponse(fullResponseBuilder.String(), session.CurrentItinerary)
-	// 		if parseErr != nil {
-	// 			finalResponseMessage = "I received an update, but had trouble structuring it: " + fullResponseBuilder.String()
-	// 			assistantMessageType = types.TypeError
-	// 		} else {
-	// 			session.CurrentItinerary = parsedItinerary
-	// 			finalResponseMessage = parsedMsg
-	// 			itineraryModifiedByThisTurn = true
-	// 		}
-	// 	}
-	// }
 
 	// --- 6. Post-Modification Processing (Sorting, Saving Session) ---
 	if itineraryModifiedByThisTurn && userLocation != nil && userLocation.UserLat != 0 && userLocation.UserLon != 0 && session.CurrentItinerary != nil {
@@ -1311,7 +1259,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 	ctx context.Context, poiName, cityName string,
 	userLocation *types.UserLocation, userID, cityID uuid.UUID,
 	eventCh chan<- types.StreamEvent,
-) (types.POIDetail, error) {
+) (types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "generatePOIDataStream",
 		trace.WithAttributes(attribute.String("poi.name", poiName), attribute.String("city.name", cityName)))
 	defer span.End()
@@ -1329,7 +1277,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 			Timestamp: time.Now(),
 			EventID:   uuid.New().String(),
 		}, 3)
-		return types.POIDetail{}, fmt.Errorf("AI stream init failed for POI '%s': %w", poiName, err)
+		return types.POIDetailedInfo{}, fmt.Errorf("AI stream init failed for POI '%s': %w", poiName, err)
 	}
 
 	l.sendEventWithRetry(ctx, eventCh, types.StreamEvent{
@@ -1347,7 +1295,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 				Timestamp: time.Now(),
 				EventID:   uuid.New().String(),
 			}, 3)
-			return types.POIDetail{}, fmt.Errorf("streaming POI details for '%s' failed: %w", poiName, err)
+			return types.POIDetailedInfo{}, fmt.Errorf("streaming POI details for '%s' failed: %w", poiName, err)
 		}
 		for _, cand := range resp.Candidates {
 			if cand.Content != nil {
@@ -1373,7 +1321,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 			Timestamp: time.Now(),
 			EventID:   uuid.New().String(),
 		}, 3)
-		return types.POIDetail{}, fmt.Errorf("context cancelled during POI detail generation: %w", ctx.Err())
+		return types.POIDetailedInfo{}, fmt.Errorf("context cancelled during POI detail generation: %w", ctx.Err())
 	}
 
 	fullText := responseTextBuilder.String()
@@ -1384,7 +1332,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 			Timestamp: time.Now(),
 			EventID:   uuid.New().String(),
 		}, 3)
-		return types.POIDetail{Name: poiName, DescriptionPOI: "Details not found."}, fmt.Errorf("empty response for POI details '%s'", poiName)
+		return types.POIDetailedInfo{Name: poiName, DescriptionPOI: "Details not found."}, fmt.Errorf("empty response for POI details '%s'", poiName)
 	}
 
 	// Save LLM interaction
@@ -1403,15 +1351,15 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 			Timestamp: time.Now(),
 			EventID:   uuid.New().String(),
 		}, 3)
-		return types.POIDetail{}, fmt.Errorf("failed to save LLM interaction: %w", err)
+		return types.POIDetailedInfo{}, fmt.Errorf("failed to save LLM interaction: %w", err)
 	}
 
 	// Parse response
 	cleanJSON := cleanJSONResponse(fullText)
-	var poiData types.POIDetail
+	var poiData types.POIDetailedInfo
 	if err := json.Unmarshal([]byte(cleanJSON), &poiData); err != nil || poiData.Name == "" {
 		l.logger.WarnContext(ctx, "Invalid POI data from LLM", slog.String("response", fullText), slog.Any("error", err))
-		poiData = types.POIDetail{
+		poiData = types.POIDetailedInfo{
 			ID:             uuid.New(),
 			Name:           poiName,
 			Category:       "Attraction",
@@ -1435,7 +1383,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 			Timestamp: time.Now(),
 			EventID:   uuid.New().String(),
 		}, 3)
-		return types.POIDetail{}, fmt.Errorf("failed to save POI to database: %w", err)
+		return types.POIDetailedInfo{}, fmt.Errorf("failed to save POI to database: %w", err)
 	}
 	poiData.ID = dbPoiID
 
@@ -1541,7 +1489,7 @@ func (l *LlmInteractiontServiceImpl) saveCityInteraction(ctx context.Context, in
 }
 
 // handleSemanticAddPOIStreamed handles adding POIs with semantic search enhancement and streaming updates
-func (l *LlmInteractiontServiceImpl) handleSemanticAddPOIStreamed(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetail, userLocation *types.UserLocation, cityID uuid.UUID, eventCh chan<- types.StreamEvent) (string, error) {
+func (l *LlmInteractiontServiceImpl) handleSemanticAddPOIStreamed(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetailedInfo, userLocation *types.UserLocation, cityID uuid.UUID, eventCh chan<- types.StreamEvent) (string, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "handleSemanticAddPOIStreamed")
 	defer span.End()
 
@@ -1666,4 +1614,329 @@ func (l *LlmInteractiontServiceImpl) handleSemanticAddPOIStreamed(ctx context.Co
 	})
 
 	return fmt.Sprintf("I've added %s to your itinerary.", poiName), nil
+}
+
+/*
+** Unified Response
+ */
+// ProcessUnifiedChatMessageStream handles unified chat with optimized streaming based on Google GenAI patterns
+func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
+	startTime := time.Now() // Track when processing starts
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ProcessUnifiedChatMessageStream", trace.WithAttributes(
+		attribute.String("message", message),
+	))
+	defer span.End()
+
+	// Extract city and clean message
+	extractedCity, cleanedMessage, err := l.extractCityFromMessage(ctx, message)
+	if err != nil {
+		span.RecordError(err)
+		l.sendEventSimple(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: err.Error()})
+		return fmt.Errorf("failed to parse message: %w", err)
+	}
+	if extractedCity != "" {
+		cityName = extractedCity
+	}
+	span.SetAttributes(attribute.String("extracted.city", cityName), attribute.String("cleaned.message", cleanedMessage))
+
+	// Detect domain
+	domainDetector := &types.DomainDetector{}
+	domain := domainDetector.DetectDomain(ctx, cleanedMessage)
+	span.SetAttributes(attribute.String("detected.domain", string(domain)))
+
+	// Step 3: Fetch user data
+	_, searchProfile, _, err := l.FetchUserData(ctx, userID, profileID)
+	if err != nil {
+		span.RecordError(err)
+		l.sendEventSimple(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: err.Error()})
+		return fmt.Errorf("failed to fetch user data: %w", err)
+	}
+	basePreferences := getUserPreferencesPrompt(searchProfile)
+
+	// Use default location if not provided
+	var lat, lon float64
+	if userLocation == nil && searchProfile.UserLatitude != nil && searchProfile.UserLongitude != nil {
+		userLocation = &types.UserLocation{
+			UserLat: *searchProfile.UserLatitude,
+			UserLon: *searchProfile.UserLongitude,
+		}
+	}
+	if userLocation != nil {
+		lat, lon = userLocation.UserLat, userLocation.UserLon
+	}
+
+	// Step 4: Fan-in Fan-out Setup
+	var wg sync.WaitGroup
+	var closeOnce sync.Once
+
+	sessionID := uuid.New()
+	l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+		Type: types.EventTypeStart,
+		Data: map[string]interface{}{"domain": string(domain), "city": cityName, "session_id": sessionID.String()},
+	})
+
+	// Step 5: Collect responses for saving interaction
+	responses := make(map[string]*strings.Builder)
+	responsesMutex := sync.Mutex{}
+
+	// Modified sendEventWithResponse to capture responses
+	sendEventWithResponse := func(event types.StreamEvent) {
+		if event.Type == types.EventTypeChunk {
+			responsesMutex.Lock()
+			if data, ok := event.Data.(map[string]interface{}); ok {
+				if partType, exists := data["part"].(string); exists {
+					if chunk, chunkExists := data["chunk"].(string); chunkExists {
+						if responses[partType] == nil {
+							responses[partType] = &strings.Builder{}
+						}
+						responses[partType].WriteString(chunk)
+					}
+				}
+			}
+			responsesMutex.Unlock()
+		}
+		l.sendEventSimple(ctx, eventCh, event)
+	}
+
+	// Step 6: Spawn streaming workers based on domain
+	switch domain {
+	case types.DomainItinerary, types.DomainGeneral:
+		wg.Add(3)
+
+		// Worker 1: Stream City Data
+		go func() {
+			defer wg.Done()
+			prompt := getCityDataPrompt(cityName)
+			l.streamWorkerWithResponse(ctx, prompt, "city_data", sendEventWithResponse, domain)
+		}()
+
+		// Worker 2: Stream General POIs
+		go func() {
+			defer wg.Done()
+			prompt := getGeneralPOIPrompt(cityName)
+			l.streamWorkerWithResponse(ctx, prompt, "general_pois", sendEventWithResponse, domain)
+		}()
+
+		// Worker 3: Stream Personalized Itinerary
+		go func() {
+			defer wg.Done()
+			prompt := getPersonalizedItineraryPrompt(cityName, basePreferences)
+			l.streamWorkerWithResponse(ctx, prompt, "itinerary", sendEventWithResponse, domain)
+		}()
+
+	case types.DomainAccommodation:
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			prompt := getAccommodationPrompt(cityName, lat, lon, basePreferences)
+			l.streamWorkerWithResponse(ctx, prompt, "hotels", sendEventWithResponse, domain)
+		}()
+
+	case types.DomainDining:
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			prompt := getDiningPrompt(cityName, lat, lon, basePreferences)
+			l.streamWorkerWithResponse(ctx, prompt, "restaurants", sendEventWithResponse, domain)
+		}()
+
+	case types.DomainActivities:
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			prompt := getActivitiesPrompt(cityName, lat, lon, basePreferences)
+			l.streamWorkerWithResponse(ctx, prompt, "activities", sendEventWithResponse, domain)
+		}()
+
+	default:
+		sendEventWithResponse(types.StreamEvent{Type: types.EventTypeError, Error: fmt.Sprintf("unhandled domain: %s", domain)})
+		return fmt.Errorf("unhandled domain type: %s", domain)
+	}
+
+	// Step 7: Completion goroutine with sync.Once for channel closure
+	go func() {
+		wg.Wait()             // Wait for all workers to complete
+		if ctx.Err() == nil { // Only send completion event if context is still active
+			l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+				Type: types.EventTypeComplete,
+				Data: map[string]interface{}{"session_id": sessionID.String()},
+			})
+		}
+		closeOnce.Do(func() {
+			close(eventCh) // Close the channel only once
+			l.logger.InfoContext(ctx, "Event channel closed by completion goroutine")
+		})
+	}()
+
+	// Step 8: Save interaction asynchronously after completion
+	go func() {
+		wg.Wait() // Wait for all workers to complete
+
+		// Save interaction with complete response
+		asyncCtx := context.Background()
+
+		// Combine all responses into a single response text
+		var fullResponseBuilder strings.Builder
+		responsesMutex.Lock()
+		for partType, builder := range responses {
+			if builder != nil && builder.Len() > 0 {
+				fullResponseBuilder.WriteString(fmt.Sprintf("[%s]\n%s\n\n", partType, builder.String()))
+			}
+		}
+		responsesMutex.Unlock()
+
+		fullResponse := fullResponseBuilder.String()
+		if fullResponse == "" {
+			fullResponse = fmt.Sprintf("Processed %s request for %s", domain, cityName)
+		}
+
+		interaction := types.LlmInteraction{
+			ID:           uuid.New(),
+			SessionID:    sessionID,
+			UserID:       userID,
+			ProfileID:    profileID,
+			CityName:     cityName,
+			Prompt:       fmt.Sprintf("Unified Chat Stream - Domain: %s, Message: %s", domain, cleanedMessage),
+			ResponseText: fullResponse,
+			ModelUsed:    model,
+			LatencyMs:    int(time.Since(startTime).Milliseconds()),
+			Timestamp:    startTime,
+		}
+		if _, err := l.llmInteractionRepo.SaveInteraction(asyncCtx, interaction); err != nil {
+			l.logger.ErrorContext(asyncCtx, "Failed to save stream interaction", slog.Any("error", err))
+		}
+	}()
+
+	span.SetStatus(codes.Ok, "Unified chat stream processed successfully")
+	return nil
+}
+
+// streamWorker handles streaming for a single worker with context checks
+func (l *LlmInteractiontServiceImpl) streamWorker(ctx context.Context, prompt, partType string, eventCh chan<- types.StreamEvent, domain types.DomainType) {
+	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	if err != nil {
+		if ctx.Err() == nil {
+			l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+				Type:  types.EventTypeError,
+				Error: fmt.Sprintf("%s worker failed: %v", partType, err),
+			})
+		}
+		return
+	}
+
+	var fullResponse strings.Builder
+	for resp, err := range iter {
+		if ctx.Err() != nil {
+			return // Stop if context is canceled
+		}
+		if err != nil {
+			if ctx.Err() == nil {
+				l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+					Type:  types.EventTypeError,
+					Error: fmt.Sprintf("%s streaming error: %v", partType, err),
+				})
+			}
+			return
+		}
+		for _, cand := range resp.Candidates {
+			if cand.Content != nil {
+				for _, part := range cand.Content.Parts {
+					if part.Text != "" {
+						chunk := string(part.Text)
+						fullResponse.WriteString(chunk)
+						l.sendEventSimple(ctx, eventCh, types.StreamEvent{
+							Type: types.EventTypeChunk,
+							Data: map[string]interface{}{
+								"part":   partType,
+								"chunk":  chunk,
+								"domain": string(domain),
+							},
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
+// streamWorkerWithResponse handles streaming for a single worker with response capture
+func (l *LlmInteractiontServiceImpl) streamWorkerWithResponse(ctx context.Context, prompt, partType string, sendEvent func(types.StreamEvent), domain types.DomainType) {
+	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	if err != nil {
+		if ctx.Err() == nil {
+			sendEvent(types.StreamEvent{
+				Type:  types.EventTypeError,
+				Error: fmt.Sprintf("%s worker failed: %v", partType, err),
+			})
+		}
+		return
+	}
+
+	var fullResponse strings.Builder
+	for resp, err := range iter {
+		if ctx.Err() != nil {
+			return // Stop if context is canceled
+		}
+		if err != nil {
+			if ctx.Err() == nil {
+				sendEvent(types.StreamEvent{
+					Type:  types.EventTypeError,
+					Error: fmt.Sprintf("%s streaming error: %v", partType, err),
+				})
+			}
+			return
+		}
+		for _, cand := range resp.Candidates {
+			if cand.Content != nil {
+				for _, part := range cand.Content.Parts {
+					if part.Text != "" {
+						chunk := string(part.Text)
+						fullResponse.WriteString(chunk)
+						sendEvent(types.StreamEvent{
+							Type: types.EventTypeChunk,
+							Data: map[string]interface{}{
+								"part":   partType,
+								"chunk":  chunk,
+								"domain": string(domain),
+							},
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
+func extractTextFromGenAIResponse(resp *genai.GenerateContentResponse) string {
+	var text strings.Builder
+	for _, cand := range resp.Candidates {
+		if cand.Content != nil {
+			for _, part := range cand.Content.Parts {
+				if part.Text != "" {
+					text.WriteString(string(part.Text))
+				}
+			}
+		}
+	}
+	return text.String()
+}
+
+// sendEventSimple sends events with context check
+func (l *LlmInteractiontServiceImpl) sendEventSimple(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent) {
+	if ctx.Err() != nil {
+		return // Skip send if context is canceled
+	}
+	if event.EventID == "" {
+		event.EventID = uuid.New().String()
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+
+	select {
+	case ch <- event:
+		// Sent successfully
+	case <-ctx.Done():
+		// Context canceled, do not send
+	}
 }

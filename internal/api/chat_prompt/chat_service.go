@@ -2,11 +2,14 @@ package llmChat
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
+	"math"
+	"math/big"
 	"regexp"
 	"strings"
 	"sync"
@@ -48,8 +51,11 @@ type LlmInteractiontService interface {
 	GetIteneraryResponse(ctx context.Context, cityName string, userID, profileID uuid.UUID, userLocation *types.UserLocation) (*types.AiCityResponse, error)
 	SaveItenerary(ctx context.Context, userID uuid.UUID, req types.BookmarkRequest) (uuid.UUID, error)
 	RemoveItenerary(ctx context.Context, userID, itineraryID uuid.UUID) error
-	GetPOIDetailsResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64) (*types.POIDetailedInfo, error)
-	GetGeneralPOIByDistanceResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon, distance float64) ([]types.POIDetailedInfo, error)
+	GetPOIDetailedInfosResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64) (*types.POIDetailedInfo, error)
+	GetGeneralPOIByDistance(ctx context.Context, userID uuid.UUID, lat, lon, distance float64) ([]types.POIDetailedInfo, error) //, categoryFilter string
+	GetGeneralPOIByDistanceWithFilters(ctx context.Context, userID uuid.UUID, lat, lon, distance float64, filters map[string]string) ([]types.POIDetailedInfo, error)
+	//filters types.POIFilters
+
 	// hotels
 	GetHotelsByPreferenceResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64, userPreferences types.HotelUserPreferences) ([]types.HotelDetailedInfo, error)
 	GetHotelsNearbyResponse(ctx context.Context, userID uuid.UUID, city string, userLocation *types.UserLocation) ([]types.HotelDetailedInfo, error)
@@ -74,6 +80,9 @@ type LlmInteractiontService interface {
 	ProcessUnifiedChatMessage(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (interface{}, error)
 	ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error
 
+	// Chat session management
+	GetUserChatSessions(ctx context.Context, userID uuid.UUID) ([]types.ChatSession, error)
+
 	// // Context-aware chat methods
 	// StartNewSessionWithContext(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (uuid.UUID, *types.AiCityResponse, error)
 	// ContinueSessionWithContext(ctx context.Context, sessionID uuid.UUID, message string, userLocation *types.UserLocation, contextType types.ChatContextType) (*types.AiCityResponse, error)
@@ -89,7 +98,7 @@ type LlmInteractiontService interface {
 
 	// // RAG
 	//GetRAGEnabledChatResponse(ctx context.Context, message string, userID, profileID uuid.UUID, sessionID uuid.UUID, cityContext string) (*generativeAI.RAGResponse, error)
-	//SearchRelevantPOIsForRAG(ctx context.Context, query string, cityID *uuid.UUID, limit int) ([]types.POIDetail, error)
+	//SearchRelevantPOIsForRAG(ctx context.Context, query string, cityID *uuid.UUID, limit int) ([]types.POIDetailedInfo, error)
 }
 
 type IntentClassifier interface {
@@ -126,10 +135,7 @@ func NewLlmInteractiontService(interestRepo interests.Repository,
 	poiRepo poi.Repository,
 	logger *slog.Logger) *LlmInteractiontServiceImpl {
 	ctx := context.Background()
-	aiClient, err := generativeAI.NewAIClient(ctx)
-	if err != nil {
-		log.Fatalf("Failed to create AI client: %v", err) // Terminate if initialization fails
-	}
+	aiClient, _ := generativeAI.NewAIClient(ctx)
 
 	// Initialize embedding service
 	embeddingService, err := generativeAI.NewEmbeddingService(ctx, logger)
@@ -289,7 +295,7 @@ func (l *LlmInteractiontServiceImpl) GenerateGeneralPOIWorker(wg *sync.WaitGroup
 
 	cleanTxt := cleanJSONResponse(txt)
 	var poiData struct {
-		PointsOfInterest []types.POIDetail `json:"points_of_interest"`
+		PointsOfInterest []types.POIDetailedInfo `json:"points_of_interest"`
 	}
 	if err := json.Unmarshal([]byte(cleanTxt), &poiData); err != nil {
 		span.RecordError(err)
@@ -347,9 +353,9 @@ func (l *LlmInteractiontServiceImpl) GeneratePersonalisedPOIWorker(wg *sync.Wait
 
 	cleanTxt := cleanJSONResponse(txt)
 	var itineraryData struct {
-		ItineraryName      string            `json:"itinerary_name"`
-		OverallDescription string            `json:"overall_description"`
-		PointsOfInterest   []types.POIDetail `json:"points_of_interest"`
+		ItineraryName      string                  `json:"itinerary_name"`
+		OverallDescription string                  `json:"overall_description"`
+		PointsOfInterest   []types.POIDetailedInfo `json:"points_of_interest"`
 	}
 
 	if err := json.Unmarshal([]byte(cleanTxt), &itineraryData); err != nil {
@@ -400,7 +406,7 @@ func (l *LlmInteractiontServiceImpl) GeneratePersonalisedPOIWorker(wg *sync.Wait
 // GeneratePersonalisedPOIWorkerWithSemantics generates personalized POIs with semantic search enhancement
 func (l *LlmInteractiontServiceImpl) GeneratePersonalisedPOIWorkerWithSemantics(wg *sync.WaitGroup, ctx context.Context,
 	cityName string, userID, profileID uuid.UUID, resultCh chan<- types.GenAIResponse,
-	interestNames []string, tagsPromptPart string, userPrefs string, semanticPOIs []types.POIDetail,
+	interestNames []string, tagsPromptPart string, userPrefs string, semanticPOIs []types.POIDetailedInfo,
 	config *genai.GenerateContentConfig) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GeneratePersonalisedPOIWorkerWithSemantics", trace.WithAttributes(
 		attribute.String("city.name", cityName),
@@ -444,9 +450,9 @@ func (l *LlmInteractiontServiceImpl) GeneratePersonalisedPOIWorkerWithSemantics(
 
 	cleanTxt := cleanJSONResponse(txt)
 	var itineraryData struct {
-		ItineraryName      string            `json:"itinerary_name"`
-		OverallDescription string            `json:"overall_description"`
-		PointsOfInterest   []types.POIDetail `json:"points_of_interest"`
+		ItineraryName      string                  `json:"itinerary_name"`
+		OverallDescription string                  `json:"overall_description"`
+		PointsOfInterest   []types.POIDetailedInfo `json:"points_of_interest"`
 	}
 
 	if err := json.Unmarshal([]byte(cleanTxt), &itineraryData); err != nil {
@@ -490,7 +496,7 @@ func (l *LlmInteractiontServiceImpl) GeneratePersonalisedPOIWorkerWithSemantics(
 }
 
 // getPersonalizedPOIWithSemanticContext creates an enhanced prompt with semantic POI context
-func (l *LlmInteractiontServiceImpl) getPersonalizedPOIWithSemanticContext(interestNames []string, cityName, tagsPromptPart, userPrefs string, semanticPOIs []types.POIDetail) string {
+func (l *LlmInteractiontServiceImpl) getPersonalizedPOIWithSemanticContext(interestNames []string, cityName, tagsPromptPart, userPrefs string, semanticPOIs []types.POIDetailedInfo) string {
 	prompt := fmt.Sprintf(`
         Generate a personalized trip itinerary for %s, tailored to user interests [%s]. 
 
@@ -617,7 +623,7 @@ func (l *LlmInteractiontServiceImpl) PreparePromptData(interests []*types.Intere
 // RAG-enhanced methods for improved responses using semantic search
 
 // SearchRelevantPOIsForRAG searches for POIs semantically similar to the user's query
-// func (l *LlmInteractiontServiceImpl) SearchRelevantPOIsForRAG(ctx context.Context, query string, cityID *uuid.UUID, limit int) ([]types.POIDetail, error) {
+// func (l *LlmInteractiontServiceImpl) SearchRelevantPOIsForRAG(ctx context.Context, query string, cityID *uuid.UUID, limit int) ([]types.POIDetailedInfo, error) {
 // 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "SearchRelevantPOIsForRAG", trace.WithAttributes(
 // 		attribute.String("query", query),
 // 		attribute.Int("limit", limit),
@@ -634,7 +640,7 @@ func (l *LlmInteractiontServiceImpl) PreparePromptData(interests []*types.Intere
 // 	}
 
 // 	// Search for similar POIs
-// 	var relevantPOIs []types.POIDetail
+// 	var relevantPOIs []types.POIDetailedInfo
 // 	if cityID != nil {
 // 		// City-specific search
 // 		relevantPOIs, err = l.poiRepo.FindSimilarPOIsByCity(ctx, queryEmbedding, *cityID, limit)
@@ -715,7 +721,7 @@ func (l *LlmInteractiontServiceImpl) PreparePromptData(interests []*types.Intere
 // 	relevantPOIs, err := l.SearchRelevantPOIsForRAG(ctx, query, nil, 5)
 // 	if err != nil {
 // 		l.logger.WarnContext(ctx, "Failed to search relevant POIs, continuing without semantic context", slog.Any("error", err))
-// 		relevantPOIs = []types.POIDetail{} // Continue with empty context
+// 		relevantPOIs = []types.POIDetailedInfo{} // Continue with empty context
 // 	}
 
 // 	// Build RAG context
@@ -752,7 +758,7 @@ func (l *LlmInteractiontServiceImpl) PreparePromptData(interests []*types.Intere
 // }
 
 // // EnhancePersonalizedPOIWithRAG enhances personalized POI generation with semantic context
-// func (l *LlmInteractiontServiceImpl) EnhancePersonalizedPOIWithRAG(ctx context.Context, cityName string, userID, profileID uuid.UUID, cityID *uuid.UUID) ([]types.POIDetail, error) {
+// func (l *LlmInteractiontServiceImpl) EnhancePersonalizedPOIWithRAG(ctx context.Context, cityName string, userID, profileID uuid.UUID, cityID *uuid.UUID) ([]types.POIDetailedInfo, error) {
 // 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "EnhancePersonalizedPOIWithRAG", trace.WithAttributes(
 // 		attribute.String("city.name", cityName),
 // 		attribute.String("user.id", userID.String()),
@@ -779,7 +785,7 @@ func (l *LlmInteractiontServiceImpl) PreparePromptData(interests []*types.Intere
 // 		userPrefs)
 
 // 	// Search for semantically similar POIs
-// 	var relevantPOIs []types.POIDetail
+// 	var relevantPOIs []types.POIDetailedInfo
 // 	if cityID != nil {
 // 		relevantPOIs, err = l.SearchRelevantPOIsForRAG(ctx, searchQuery, cityID, 10)
 // 	} else {
@@ -854,7 +860,7 @@ func (l *LlmInteractiontServiceImpl) PreparePromptData(interests []*types.Intere
 // 	return ragResponse, nil
 // }
 
-func (l *LlmInteractiontServiceImpl) CollectResults(resultCh <-chan types.GenAIResponse) (itinerary types.AiCityResponse, llmInteractionID uuid.UUID, rawPersonalisedPOIs []types.POIDetail, errors []error) {
+func (l *LlmInteractiontServiceImpl) CollectResults(resultCh <-chan types.GenAIResponse) (itinerary types.AiCityResponse, llmInteractionID uuid.UUID, rawPersonalisedPOIs []types.POIDetailedInfo, errors []error) {
 	for res := range resultCh {
 		if res.Err != nil {
 			errors = append(errors, res.Err)
@@ -908,7 +914,7 @@ func (l *LlmInteractiontServiceImpl) HandleCityData(ctx context.Context, cityDat
 	return cityID, nil
 }
 
-func (l *LlmInteractiontServiceImpl) HandleGeneralPOIs(ctx context.Context, pois []types.POIDetail, cityID uuid.UUID) {
+func (l *LlmInteractiontServiceImpl) HandleGeneralPOIs(ctx context.Context, pois []types.POIDetailedInfo, cityID uuid.UUID) {
 	for _, poi := range pois {
 		existingPoi, err := l.poiRepo.FindPoiByNameAndCity(ctx, poi.Name, cityID)
 		if err != nil {
@@ -924,7 +930,7 @@ func (l *LlmInteractiontServiceImpl) HandleGeneralPOIs(ctx context.Context, pois
 	}
 }
 
-func (l *LlmInteractiontServiceImpl) HandlePersonalisedPOIs(ctx context.Context, pois []types.POIDetail, cityID uuid.UUID, userLocation *types.UserLocation, llmInteractionID uuid.UUID, userID, profileID uuid.UUID) ([]types.POIDetail, error) {
+func (l *LlmInteractiontServiceImpl) HandlePersonalisedPOIs(ctx context.Context, pois []types.POIDetailedInfo, cityID uuid.UUID, userLocation *types.UserLocation, llmInteractionID uuid.UUID, userID, profileID uuid.UUID) ([]types.POIDetailedInfo, error) {
 	if userLocation == nil || cityID == uuid.Nil || len(pois) == 0 {
 		return pois, nil // No sorting possible
 	}
@@ -1519,7 +1525,7 @@ func (l *LlmInteractiontServiceImpl) SaveItenerary(ctx context.Context, userID u
 
 	// Add CityID to POIs (if not already present)
 	for i := range pois {
-		pois[i].CityID = cityID // Ensure POIDetail has CityID field
+		pois[i].CityID = cityID // Ensure POIDetailedInfo has CityID field
 	}
 
 	// Save to itinerary_pois
@@ -1559,12 +1565,38 @@ func (l *LlmInteractiontServiceImpl) RemoveItenerary(ctx context.Context, userID
 	return nil
 }
 
-// getPOIdetails returns a formatted string with POI details.
-func (l *LlmInteractiontServiceImpl) getPOIdetails(wg *sync.WaitGroup, ctx context.Context,
+// GetUserChatSessions retrieves all chat sessions for a user
+func (l *LlmInteractiontServiceImpl) GetUserChatSessions(ctx context.Context, userID uuid.UUID) ([]types.ChatSession, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetUserChatSessions", trace.WithAttributes(
+		attribute.String("user.id", userID.String()),
+	))
+	defer span.End()
+
+	l.logger.InfoContext(ctx, "Retrieving chat sessions for user",
+		slog.String("userID", userID.String()))
+
+	sessions, err := l.llmInteractionRepo.GetUserChatSessions(ctx, userID)
+	if err != nil {
+		l.logger.ErrorContext(ctx, "Failed to get user chat sessions", slog.Any("error", err))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to get user chat sessions")
+		return nil, fmt.Errorf("failed to get user chat sessions: %w", err)
+	}
+
+	l.logger.InfoContext(ctx, "Successfully retrieved chat sessions",
+		slog.String("userID", userID.String()),
+		slog.Int("sessionCount", len(sessions)))
+	span.SetAttributes(attribute.Int("sessions.count", len(sessions)))
+	span.SetStatus(codes.Ok, "Chat sessions retrieved successfully")
+	return sessions, nil
+}
+
+// getPOIDetailedInfos returns a formatted string with POI details.
+func (l *LlmInteractiontServiceImpl) getPOIDetailedInfos(wg *sync.WaitGroup, ctx context.Context,
 	city string, lat float64, lon float64, userID uuid.UUID,
 	resultCh chan<- types.POIDetailedInfo, config *genai.GenerateContentConfig) {
 	defer wg.Done()
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "getPOIdetails", trace.WithAttributes(
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "getPOIDetailedInfos", trace.WithAttributes(
 		attribute.String("city.name", city),
 		attribute.Float64("latitude", lat),
 		attribute.Float64("longitude", lon),
@@ -1658,8 +1690,8 @@ func (l *LlmInteractiontServiceImpl) getPOIdetails(wg *sync.WaitGroup, ctx conte
 	span.SetStatus(codes.Ok, "POI details generated and saved successfully")
 }
 
-func (l *LlmInteractiontServiceImpl) GetPOIDetailsResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64) (*types.POIDetailedInfo, error) {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetPOIDetailsResponse", trace.WithAttributes(
+func (l *LlmInteractiontServiceImpl) GetPOIDetailedInfosResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64) (*types.POIDetailedInfo, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetPOIDetailedInfosResponse", trace.WithAttributes(
 		attribute.String("city.name", city),
 		attribute.Float64("latitude", lat),
 		attribute.Float64("longitude", lon),
@@ -1722,7 +1754,7 @@ func (l *LlmInteractiontServiceImpl) GetPOIDetailsResponse(ctx context.Context, 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	go l.getPOIdetails(&wg, ctx, city, lat, lon, userID, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
+	go l.getPOIDetailedInfos(&wg, ctx, city, lat, lon, userID, resultCh, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
 
 	go func() {
 		wg.Wait()
@@ -1748,7 +1780,7 @@ func (l *LlmInteractiontServiceImpl) GetPOIDetailsResponse(ctx context.Context, 
 	}
 
 	// Save to database
-	_, err = l.poiRepo.SavePOIDetails(ctx, *poiResult, cityID)
+	_, err = l.poiRepo.SavePoi(ctx, *poiResult, cityID)
 	if err != nil {
 		l.logger.WarnContext(ctx, "Failed to save POI details to database", slog.Any("error", err))
 		span.RecordError(err)
@@ -1767,12 +1799,10 @@ func (l *LlmInteractiontServiceImpl) GetPOIDetailsResponse(ctx context.Context, 
 func (l *LlmInteractiontServiceImpl) getGeneralPOIByDistance(wg *sync.WaitGroup,
 	ctx context.Context,
 	userID uuid.UUID,
-	cityName string,
 	lat, lon, distance float64,
 	resultCh chan<- types.GenAIResponse,
 	config *genai.GenerateContentConfig) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GenerateGeneralPOIWorker", trace.WithAttributes(
-		attribute.String("city.name", cityName),
 		attribute.Float64("latitude", lat),
 		attribute.Float64("longitude", lon),
 		attribute.Float64("distance.km", distance),
@@ -1781,7 +1811,7 @@ func (l *LlmInteractiontServiceImpl) getGeneralPOIByDistance(wg *sync.WaitGroup,
 	defer span.End()
 	defer wg.Done()
 
-	prompt := getGeneralPOIByDistance(cityName, lat, lon, distance)
+	prompt := getGeneralPOIByDistance(lat, lon, distance)
 	span.SetAttributes(attribute.Int("prompt.length", len(prompt)))
 
 	startTime := time.Now()
@@ -1814,7 +1844,7 @@ func (l *LlmInteractiontServiceImpl) getGeneralPOIByDistance(wg *sync.WaitGroup,
 
 	cleanTxt := cleanJSONResponse(txt)
 	var poiData struct {
-		PointsOfInterest []types.POIDetail `json:"points_of_interest"`
+		PointsOfInterest []types.POIDetailedInfo `json:"points_of_interest"`
 	}
 	if err := json.Unmarshal([]byte(cleanTxt), &poiData); err != nil {
 		span.RecordError(err)
@@ -1823,51 +1853,99 @@ func (l *LlmInteractiontServiceImpl) getGeneralPOIByDistance(wg *sync.WaitGroup,
 		return
 	}
 
+	fmt.Println(cleanTxt)
+
 	span.SetAttributes(attribute.Int("pois.count", len(poiData.PointsOfInterest)))
 	span.SetStatus(codes.Ok, "General POIs generated successfully")
 	resultCh <- types.GenAIResponse{GeneralPOI: poiData.PointsOfInterest}
 }
 
-func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon, distance float64) ([]types.POIDetailedInfo, error) {
+// func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistance(ctx context.Context, userID uuid.UUID, lat, lon, distance float64, categoryFilter string) ([]types.POIDetailedInfo, error) {
+// 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetGeneralPOIByDistanceResponse")
+// 	defer span.End()
+
+// 	cacheKey := generateFilteredPOICacheKey(lat, lon, distance, userID)
+// 	span.SetAttributes(attribute.String("cache.key", cacheKey))
+
+// 	// Check cache first
+// 	if cached, found := l.cache.Get(cacheKey); found {
+// 		if pois, ok := cached.([]types.POIDetailedInfo); ok {
+// 			span.SetStatus(codes.Ok, "Served from cache")
+// 			l.logger.InfoContext(ctx, "Served POIs from cache", slog.Int("count", len(pois)))
+// 			return pois, nil
+// 		}
+// 	}
+
+// 	l.logger.InfoContext(ctx, "Querying POIs from database",
+// 		slog.Float64("lat", lat),
+// 		slog.Float64("lon", lon),
+// 		slog.Float64("distance_meters", distance),
+// 		slog.String("category_filter", categoryFilter))
+
+// 	// Query POIs from database using PostGIS
+// 	pois, err := l.poiRepo.GetPOIsByLocationAndDistance(ctx, lat, lon, distance, categoryFilter)
+// 	if err != nil {
+// 		l.logger.ErrorContext(ctx, "Failed to query POIs from database", slog.Any("error", err))
+// 		span.RecordError(err)
+// 		span.SetStatus(codes.Error, "Database query failed")
+// 		return nil, fmt.Errorf("failed to query POIs from database: %w", err)
+// 	}
+
+// 	l.logger.InfoContext(ctx, "POIs retrieved from database", slog.Int("count", len(pois)))
+
+// 	// Cache the results, even if empty
+// 	l.cache.Set(cacheKey, pois, cache.DefaultExpiration)
+
+// 	if len(pois) == 0 {
+// 		l.logger.InfoContext(ctx, "No POIs found within the specified radius")
+// 		span.SetStatus(codes.Ok, "No POIs found")
+// 		return pois, nil // Return empty slice for consistency
+// 	}
+
+// 	span.SetStatus(codes.Ok, "POIs retrieved from database and cached")
+// 	return pois, nil
+// }
+
+func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistance(ctx context.Context, userID uuid.UUID, lat, lon, distance float64) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetGeneralPOIByDistanceResponse")
 	defer span.End()
 
-	cacheKey := generatePOICacheKey(city, lat, lon, distance, userID)
+	cacheKey := generateFilteredPOICacheKey(lat, lon, distance, userID)
 	span.SetAttributes(attribute.String("cache.key", cacheKey))
 
+	// Check cache first
 	if cached, found := l.cache.Get(cacheKey); found {
 		if pois, ok := cached.([]types.POIDetailedInfo); ok {
+			l.logger.InfoContext(ctx, "Serving POIs from cache", "key", cacheKey)
 			span.SetStatus(codes.Ok, "Served from cache")
 			return pois, nil
 		}
 	}
 
-	// Fetch cityID
-	cityData, err := l.cityRepo.FindCityByNameAndCountry(ctx, city, "")
-	if err != nil || cityData == nil {
-		span.RecordError(err)
-		return nil, fmt.Errorf("city %s not found: %w", city, err)
-	}
-	cityID := cityData.ID
+	l.logger.InfoContext(ctx, "Querying POIs from database first",
+		slog.Float64("lat", lat),
+		slog.Float64("lon", lon),
+		slog.Float64("distance_meters", distance))
 
-	// Query database
-	userLocation := types.UserLocation{UserLat: lat, UserLon: lon, SearchRadiusKm: distance}
-	pois, err := l.poiRepo.GetPOIsByCityAndDistance(ctx, cityID, userLocation)
+	// First, try to get POIs from database using PostGIS
+	pois, err := l.poiRepo.GetPOIsByLocationAndDistance(ctx, lat, lon, distance)
 	if err != nil {
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to query POIs: %w", err)
-	}
-	if len(pois) > 0 {
+		l.logger.WarnContext(ctx, "Failed to query POIs from database, will fallback to LLM", slog.Any("error", err))
+	} else if len(pois) > 0 {
+		l.logger.InfoContext(ctx, "Found POIs in database, using them instead of LLM", slog.Int("count", len(pois)))
 		l.cache.Set(cacheKey, pois, cache.DefaultExpiration)
 		span.SetStatus(codes.Ok, "Served from database")
 		return pois, nil
 	}
 
+	// Fallback to LLM if database is empty or query failed
+	l.logger.InfoContext(ctx, "No POIs found in database, falling back to LLM generation")
+
 	// Generate via AI
 	resultCh := make(chan types.GenAIResponse, 1)
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go l.getGeneralPOIByDistance(&wg, ctx, userID, city, lat, lon, distance, resultCh, &genai.GenerateContentConfig{
+	go l.getGeneralPOIByDistance(&wg, ctx, userID, lat, lon, distance, resultCh, &genai.GenerateContentConfig{
 		Temperature:     genai.Ptr[float32](0.7),
 		MaxOutputTokens: 16384,
 	})
@@ -1880,29 +1958,608 @@ func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceResponse(ctx context
 		return nil, genAIResponse.Err
 	}
 
-	// Convert AI response to POIDetailedInfo if necessary
-	var poisDetailed []types.POIDetailedInfo
+	// Save all LLM-generated POIs to the database
 	for _, p := range genAIResponse.GeneralPOI {
-		poisDetailed = append(poisDetailed, types.POIDetailedInfo{
-			ID:        p.ID,
+		poiID := p.ID
+		if poiID == uuid.Nil { // uuid.Nil is "00000000-0000-0000-0000-000000000000"
+			poiID = uuid.New()
+		}
+		cityID, cityName, err := l.cityRepo.GetCity(ctx, p.Latitude, p.Longitude)
+
+		if err != nil {
+			l.logger.WarnContext(ctx, "Failed to determine city ID for POI, attempting to create city",
+				slog.Any("error", err),
+				slog.String("poi_name", p.Name))
+
+			// Create a city using the data from LLM response
+			if genAIResponse.City != "" && genAIResponse.Country != "" {
+				cityDetail := types.CityDetail{
+					Name:            genAIResponse.City,
+					Country:         genAIResponse.Country,
+					StateProvince:   genAIResponse.StateProvince,
+					AiSummary:       genAIResponse.CityDescription,
+					CenterLatitude:  genAIResponse.Latitude,
+					CenterLongitude: genAIResponse.Longitude,
+				}
+
+				// If we don't have city center coordinates from LLM, use the POI coordinates as approximation
+				if cityDetail.CenterLatitude == 0 && cityDetail.CenterLongitude == 0 {
+					cityDetail.CenterLatitude = p.Latitude
+					cityDetail.CenterLongitude = p.Longitude
+				}
+
+				createdCityID, cityErr := l.cityRepo.SaveCity(ctx, cityDetail)
+				if cityErr != nil {
+					l.logger.ErrorContext(ctx, "Failed to create city for POI",
+						slog.Any("error", cityErr),
+						slog.String("poi_name", p.Name),
+						slog.String("city_name", genAIResponse.City))
+					continue
+				}
+
+				cityID = createdCityID
+				cityName = genAIResponse.City
+				l.logger.InfoContext(ctx, "Created new city for POI",
+					slog.String("city_id", cityID.String()),
+					slog.String("city_name", cityName),
+					slog.String("poi_name", p.Name))
+			} else {
+				l.logger.ErrorContext(ctx, "Cannot create city for POI - missing city data from LLM",
+					slog.String("poi_name", p.Name))
+				continue
+			}
+		}
+
+		poi := types.POIDetailedInfo{
+			ID:        poiID,
+			City:      cityName,
+			CityID:    cityID,
 			Name:      p.Name,
 			Latitude:  p.Latitude,
 			Longitude: p.Longitude,
 			Category:  p.Category,
-		})
-	}
-
-	// Save to database
-	for _, poi := range poisDetailed {
-		_, err := l.poiRepo.SavePOIDetails(ctx, poi, cityID)
+			// Note: Distance is not saved as it’s query-specific
+		}
+		_, err = l.poiRepo.SavePOIDetails(ctx, poi, cityID)
 		if err != nil {
-			l.logger.WarnContext(ctx, "Failed to save POI", slog.Any("error", err), slog.String("poi_name", poi.Name))
+			l.logger.WarnContext(ctx, "Failed to save POI",
+				slog.Any("error", err),
+				slog.String("poi_name", poi.Name))
 		}
 	}
 
+	// Filter LLM-generated POIs for the current response
+	var poisDetailed []types.POIDetailedInfo
+
+	for _, p := range genAIResponse.GeneralPOI {
+		distanceKm := calculateDistance(lat, lon, p.Latitude, p.Longitude)
+		if distanceKm <= distance/1000 { // Convert meters to km for comparison
+			poi := types.POIDetailedInfo{
+				ID:        p.ID,
+				Name:      p.Name,
+				Latitude:  p.Latitude,
+				Longitude: p.Longitude,
+				Category:  p.Category,
+				Distance:  distanceKm,
+			}
+			poisDetailed = append(poisDetailed, poi)
+		}
+	}
+
+	l.logger.InfoContext(ctx, "Generated and filtered POIs using LLM", slog.Int("count", len(poisDetailed)))
+
 	l.cache.Set(cacheKey, poisDetailed, cache.DefaultExpiration)
-	span.SetStatus(codes.Ok, "POIs generated and cached")
+	span.SetStatus(codes.Ok, "POIs generated via LLM and cached")
 	return poisDetailed, nil
+}
+
+func (l *LlmInteractiontServiceImpl) GetGeneralPOIByDistanceWithFilters(ctx context.Context, userID uuid.UUID, lat, lon, distance float64, filters map[string]string) ([]types.POIDetailedInfo, error) {
+	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetGeneralPOIByDistanceWithFilters")
+	defer span.End()
+
+	// Create cache key including filters
+	filtersKey := "no-filters"
+	if filters != nil && len(filters) > 0 {
+		filtersJSON, _ := json.Marshal(filters)
+		filtersKey = string(filtersJSON)
+	}
+	cacheKey := fmt.Sprintf("poi:distance:%.6f:%.6f:%.0f:%s:%s", lat, lon, distance, userID.String(), filtersKey)
+	span.SetAttributes(attribute.String("cache.key", cacheKey))
+
+	// Check cache first
+	if cached, found := l.cache.Get(cacheKey); found {
+		if pois, ok := cached.([]types.POIDetailedInfo); ok {
+			span.SetStatus(codes.Ok, "Served from cache")
+			return pois, nil
+		}
+	}
+
+	l.logger.InfoContext(ctx, "Querying POIs from database with filters",
+		slog.Float64("lat", lat),
+		slog.Float64("lon", lon),
+		slog.Float64("distance_meters", distance),
+		slog.Any("filters", filters))
+
+	// Try to get POIs from database using PostGIS with filters
+	pois, err := l.poiRepo.GetPOIsByLocationAndDistanceWithFilters(ctx, lat, lon, distance, filters)
+	if err != nil {
+		l.logger.WarnContext(ctx, "Failed to query POIs from database with filters, will fallback to LLM", slog.Any("error", err))
+	} else if len(pois) > 0 {
+		l.logger.InfoContext(ctx, "Found POIs in database with filters", slog.Int("count", len(pois)))
+		l.cache.Set(cacheKey, pois, cache.DefaultExpiration)
+		span.SetStatus(codes.Ok, "Served from database")
+		return pois, nil
+	}
+
+	// Fallback to LLM if database is empty or query failed
+	l.logger.InfoContext(ctx, "No POIs found in database with filters, falling back to LLM generation")
+
+	// Generate via AI (reuse existing LLM generation logic)
+	resultCh := make(chan types.GenAIResponse, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go l.getGeneralPOIByDistance(&wg, ctx, userID, lat, lon, distance, resultCh, &genai.GenerateContentConfig{
+		Temperature:     genai.Ptr[float32](0.7),
+		MaxOutputTokens: 16384,
+	})
+	wg.Wait()
+	close(resultCh)
+
+	genAIResponse := <-resultCh
+	if genAIResponse.Err != nil {
+		span.RecordError(genAIResponse.Err)
+		return nil, genAIResponse.Err
+	}
+
+	// Save all LLM-generated POIs to the database (same logic as existing method)
+	for _, p := range genAIResponse.GeneralPOI {
+		poiID := p.ID
+		if poiID == uuid.Nil {
+			poiID = uuid.New()
+		}
+
+		cityID, cityName, err := l.cityRepo.GetCity(ctx, p.Latitude, p.Longitude)
+
+		if err != nil {
+			// Create city if not exists (same logic as existing method)
+			if genAIResponse.City != "" && genAIResponse.Country != "" {
+				cityDetail := types.CityDetail{
+					Name:            genAIResponse.City,
+					Country:         genAIResponse.Country,
+					StateProvince:   genAIResponse.StateProvince,
+					AiSummary:       genAIResponse.CityDescription,
+					CenterLatitude:  genAIResponse.Latitude,
+					CenterLongitude: genAIResponse.Longitude,
+				}
+
+				if cityDetail.CenterLatitude == 0 && cityDetail.CenterLongitude == 0 {
+					cityDetail.CenterLatitude = p.Latitude
+					cityDetail.CenterLongitude = p.Longitude
+				}
+
+				createdCityID, cityErr := l.cityRepo.SaveCity(ctx, cityDetail)
+				if cityErr != nil {
+					continue
+				}
+				cityID = createdCityID
+				cityName = genAIResponse.City
+			} else {
+				continue
+			}
+		}
+
+		poi := types.POIDetailedInfo{
+			ID:        poiID,
+			City:      cityName,
+			CityID:    cityID,
+			Name:      p.Name,
+			Latitude:  p.Latitude,
+			Longitude: p.Longitude,
+			Category:  p.Category,
+		}
+		_, err = l.poiRepo.SavePOIDetails(ctx, poi, cityID)
+		if err != nil {
+			l.logger.WarnContext(ctx, "Failed to save POI",
+				slog.Any("error", err),
+				slog.String("poi_name", poi.Name))
+		}
+	}
+
+	// Filter LLM-generated POIs for the current response and apply client-side filters
+	var poisDetailed []types.POIDetailedInfo
+	for _, p := range genAIResponse.GeneralPOI {
+
+		distanceKm := calculateDistance(lat, lon, p.Latitude, p.Longitude)
+		if distanceKm <= distance/1000 { // Convert meters to km for comparison
+			// Apply client-side filters for LLM-generated data
+			includeItem := true
+
+			if filters != nil {
+				if categoryFilter, exists := filters["category"]; exists && categoryFilter != "" && categoryFilter != "all" {
+					if !strings.EqualFold(p.Category, categoryFilter) {
+						includeItem = false
+					}
+				}
+			}
+
+			if includeItem {
+				poiID := p.ID
+				if poiID == uuid.Nil {
+					poiID = uuid.New()
+				}
+				poi := types.POIDetailedInfo{
+					ID:        poiID,
+					Name:      p.Name,
+					Latitude:  p.Latitude,
+					Longitude: p.Longitude,
+					Category:  p.Category,
+					Distance:  distanceKm,
+				}
+				poisDetailed = append(poisDetailed, poi)
+			}
+		}
+	}
+
+	l.logger.InfoContext(ctx, "Generated and filtered POIs using LLM with filters", slog.Int("count", len(poisDetailed)))
+
+	l.cache.Set(cacheKey, poisDetailed, cache.DefaultExpiration)
+	span.SetStatus(codes.Ok, "POIs generated via LLM with filters and cached")
+	return poisDetailed, nil
+}
+
+func (l *LlmInteractiontServiceImpl) generatePOIsWithLLM(ctx context.Context, userID uuid.UUID, lat, lon, distance float64) (*types.GenAIResponse, error) {
+	resultCh := make(chan types.GenAIResponse, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go l.getGeneralPOIByDistance(&wg, ctx, userID, lat, lon, distance, resultCh, &genai.GenerateContentConfig{
+		Temperature:     genai.Ptr[float32](0.7),
+		MaxOutputTokens: 8192,
+	})
+
+	wg.Wait()
+	close(resultCh)
+
+	// Receive the single value from the channel
+	result := <-resultCh
+
+	// The received struct might contain an error from the goroutine, so check it.
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	// Return a pointer to the result struct and a nil error.
+	return &result, nil
+}
+
+func (l *LlmInteractiontServiceImpl) enrichLLMPOIsWithMetadata(ctx context.Context, pois []types.POIDetailedInfo, userLat, userLon, searchRadiusMeters float64) ([]types.POIDetailedInfo, uuid.UUID, error) {
+	var enrichedPOIs []types.POIDetailedInfo
+
+	// Find the city for the given coordinates to associate the new POIs with.
+	// This is a simplified approach; a real app might use a reverse geocoding API.
+	cityID, cityName, err := l.cityRepo.GetCity(ctx, userLat, userLon)
+	var newCityID uuid.UUID
+	var newCityName string
+	if err != nil {
+		l.logger.WarnContext(ctx, "Could not determine city for enrichment, POIs will not be saved.", "error", err)
+	} else if cityName == "" {
+		newCityID = cityID
+		newCityName = cityName
+	}
+
+	for _, p := range pois {
+		// The LLM can be inaccurate, so we re-calculate distance using our reliable PostGIS.
+		distanceMeters, err := l.llmInteractionRepo.CalculateDistancePostGIS(ctx, userLat, userLon, p.Latitude, p.Longitude)
+		if err != nil {
+			l.logger.WarnContext(ctx, "Could not calculate distance for POI, skipping distance field", "poi_name", p.Name, "error", err)
+		}
+
+		// Filter out POIs that the LLM returned but are outside the user's requested radius.
+		if distanceMeters > searchRadiusMeters {
+			continue
+		}
+
+		POIDetailedInfoed := types.POIDetailedInfo{
+			ID:          p.ID,
+			Name:        p.Name,
+			Latitude:    p.Latitude,
+			Longitude:   p.Longitude,
+			Category:    p.Category,
+			Description: p.DescriptionPOI,
+			Distance:    distanceMeters,
+			City:        newCityName,
+			CityID:      newCityID,
+		}
+		enrichedPOIs = append(enrichedPOIs, POIDetailedInfoed)
+	}
+
+	return enrichedPOIs, cityID, nil
+}
+
+// // enrichLLMPOIsWithMetadata enhances LLM-generated POIs with realistic metadata for filtering
+// func (l *LlmInteractiontServiceImpl) enrichLLMPOIsWithMetadata(pois []types.POIDetailedInfo, filters map[string]string) []types.POIDetailedInfo {
+// 	enrichedPois := make([]types.POIDetailedInfo, len(pois))
+
+// 	for i, poi := range pois {
+// 		enrichedPoi := poi
+
+// 		// Enrich with realistic rating based on category and name patterns
+// 		if enrichedPoi.Rating == 0 {
+// 			enrichedPoi.Rating = l.generateRealisticRating(poi.Category, poi.Name)
+// 		}
+
+// 		// Enrich with price level based on category and description
+// 		if enrichedPoi.PriceRange == "" && enrichedPoi.PriceLevel == "" {
+// 			enrichedPoi.PriceLevel = l.generateRealisticPriceLevel(poi.Category, poi.Description)
+// 			enrichedPoi.PriceRange = enrichedPoi.PriceLevel
+// 		}
+
+// 		// Add realistic opening hours if missing
+// 		if enrichedPoi.OpeningHours == nil || len(enrichedPoi.OpeningHours) == 0 {
+// 			enrichedPoi.OpeningHours = l.generateRealisticOpeningHours(poi.Category)
+// 		}
+
+// 		// Ensure proper address format
+// 		if enrichedPoi.Address == "" {
+// 			enrichedPoi.Address = l.generateAddressFromLocation(poi.Latitude, poi.Longitude, poi.City)
+// 		}
+
+// 		// Add realistic tags based on category
+// 		if len(enrichedPoi.Tags) == 0 {
+// 			enrichedPoi.Tags = l.generateRealisticTags(poi.Category, poi.Description)
+// 		}
+
+// 		enrichedPois[i] = enrichedPoi
+// 	}
+
+// 	return enrichedPois
+// }
+
+// generateRealisticRating creates a realistic rating based on category and name patterns
+func (l *LlmInteractiontServiceImpl) generateRealisticRating(category, name string) float64 {
+	baseRating := 4.0 // Default good rating
+
+	// Adjust based on category
+	switch strings.ToLower(category) {
+	case "museum", "historical", "landmark", "cultural":
+		baseRating = 4.3 // Museums tend to have higher ratings
+	case "restaurant", "cafe", "bar":
+		baseRating = 4.1 // Food places have variable ratings
+	case "park", "nature", "garden":
+		baseRating = 4.4 // Parks usually well-rated
+	case "shopping", "store":
+		baseRating = 3.9 // Shopping has more varied ratings
+	case "attraction", "entertainment":
+		baseRating = 4.2 // Attractions usually good
+	}
+
+	// Add some realistic variation (±0.5)
+
+	variation, _ := rand.Int(rand.Reader, big.NewInt(100))
+	adjustedVariation := (float64(variation.Int64()) - 50) / 100 // -0.5 to +0.5
+
+	rating := baseRating + adjustedVariation
+
+	// Ensure rating is within reasonable bounds
+	if rating < 2.5 {
+		rating = 2.5
+	}
+	if rating > 5.0 {
+		rating = 5.0
+	}
+
+	// Round to 1 decimal place
+	return float64(int(rating*10)) / 10
+}
+
+// generateRealisticPriceLevel creates appropriate price levels based on category
+func (l *LlmInteractiontServiceImpl) generateRealisticPriceLevel(category, description string) string {
+	descLower := strings.ToLower(description)
+	categoryLower := strings.ToLower(category)
+
+	// Check for price indicators in description
+	if strings.Contains(descLower, "free") || strings.Contains(descLower, "no cost") {
+		return "Free"
+	}
+
+	if strings.Contains(descLower, "luxury") || strings.Contains(descLower, "premium") ||
+		strings.Contains(descLower, "exclusive") || strings.Contains(descLower, "upscale") {
+		return "€€€€"
+	}
+
+	if strings.Contains(descLower, "expensive") || strings.Contains(descLower, "fine dining") {
+		return "€€€"
+	}
+
+	// Category-based defaults
+	switch categoryLower {
+	case "museum", "gallery", "exhibition":
+		return "€€" // Museums usually have moderate entry fees
+	case "park", "garden", "nature", "beach":
+		return "Free" // Parks are usually free
+	case "restaurant":
+		if strings.Contains(descLower, "michelin") || strings.Contains(descLower, "fine") {
+			return "€€€€"
+		} else if strings.Contains(descLower, "casual") || strings.Contains(descLower, "local") {
+			return "€€"
+		}
+		return "€€€" // Default for restaurants
+	case "cafe", "bar":
+		return "€€" // Cafes and bars are usually moderate
+	case "historical", "landmark", "monument":
+		return "€" // Historical sites often have low entry fees
+	case "shopping", "market":
+		return "€€" // Shopping varies, moderate default
+	case "entertainment", "theater", "cinema":
+		return "€€€" // Entertainment usually moderate to expensive
+	case "hotel", "accommodation":
+		return "€€€" // Hotels tend to be more expensive
+	default:
+		return "€€" // Default moderate pricing
+	}
+}
+
+// generateRealisticOpeningHours creates realistic opening hours based on category
+func (l *LlmInteractiontServiceImpl) generateRealisticOpeningHours(category string) map[string]string {
+	categoryLower := strings.ToLower(category)
+
+	switch categoryLower {
+	case "museum", "gallery", "exhibition":
+		return map[string]string{
+			"monday":    "10:00-18:00",
+			"tuesday":   "10:00-18:00",
+			"wednesday": "10:00-18:00",
+			"thursday":  "10:00-18:00",
+			"friday":    "10:00-18:00",
+			"saturday":  "10:00-18:00",
+			"sunday":    "10:00-17:00",
+		}
+	case "restaurant":
+		return map[string]string{
+			"monday":    "12:00-23:00",
+			"tuesday":   "12:00-23:00",
+			"wednesday": "12:00-23:00",
+			"thursday":  "12:00-23:00",
+			"friday":    "12:00-24:00",
+			"saturday":  "12:00-24:00",
+			"sunday":    "12:00-22:00",
+		}
+	case "cafe":
+		return map[string]string{
+			"monday":    "07:00-20:00",
+			"tuesday":   "07:00-20:00",
+			"wednesday": "07:00-20:00",
+			"thursday":  "07:00-20:00",
+			"friday":    "07:00-21:00",
+			"saturday":  "08:00-21:00",
+			"sunday":    "08:00-19:00",
+		}
+	case "bar":
+		return map[string]string{
+			"monday":    "18:00-02:00",
+			"tuesday":   "18:00-02:00",
+			"wednesday": "18:00-02:00",
+			"thursday":  "18:00-02:00",
+			"friday":    "18:00-03:00",
+			"saturday":  "18:00-03:00",
+			"sunday":    "18:00-01:00",
+		}
+	case "park", "garden", "nature":
+		return map[string]string{
+			"monday":    "06:00-22:00",
+			"tuesday":   "06:00-22:00",
+			"wednesday": "06:00-22:00",
+			"thursday":  "06:00-22:00",
+			"friday":    "06:00-22:00",
+			"saturday":  "06:00-22:00",
+			"sunday":    "06:00-22:00",
+		}
+	case "shopping", "store", "market":
+		return map[string]string{
+			"monday":    "10:00-19:00",
+			"tuesday":   "10:00-19:00",
+			"wednesday": "10:00-19:00",
+			"thursday":  "10:00-19:00",
+			"friday":    "10:00-20:00",
+			"saturday":  "10:00-20:00",
+			"sunday":    "12:00-18:00",
+		}
+	default:
+		// Default business hours
+		return map[string]string{
+			"monday":    "09:00-18:00",
+			"tuesday":   "09:00-18:00",
+			"wednesday": "09:00-18:00",
+			"thursday":  "09:00-18:00",
+			"friday":    "09:00-18:00",
+			"saturday":  "10:00-17:00",
+			"sunday":    "10:00-16:00",
+		}
+	}
+}
+
+// generateAddressFromLocation creates a realistic address
+func (l *LlmInteractiontServiceImpl) generateAddressFromLocation(lat, lon float64, city string) string {
+	if city == "" {
+		city = "Porto" // Default city
+	}
+
+	// Generate a simple realistic address
+	streetNumber := int(math.Abs(lat*1000))%999 + 1
+	if streetNumber <= 0 {
+		streetNumber = 1
+	}
+
+	streets := []string{"Rua da República", "Avenida dos Aliados", "Rua de Santa Catarina",
+		"Rua do Almada", "Rua Formosa", "Rua das Flores", "Avenida da Boavista"}
+	streetIndex := int(math.Abs(lon*1000)) % len(streets)
+
+	// Extra safety check to ensure valid index
+	if streetIndex < 0 || streetIndex >= len(streets) {
+		streetIndex = 0
+	}
+
+	return fmt.Sprintf("%s, %d, %s, Portugal", streets[streetIndex], streetNumber, city)
+}
+
+// generateRealisticTags creates relevant tags based on category and description
+func (l *LlmInteractiontServiceImpl) generateRealisticTags(category, description string) []string {
+	tags := []string{}
+	categoryLower := strings.ToLower(category)
+	descLower := strings.ToLower(description)
+
+	// Add category-based tags
+	switch categoryLower {
+	case "museum", "gallery":
+		tags = append(tags, "Culture", "Art", "History", "Educational")
+	case "restaurant":
+		tags = append(tags, "Dining", "Food", "Local Cuisine")
+		if strings.Contains(descLower, "seafood") {
+			tags = append(tags, "Seafood")
+		}
+		if strings.Contains(descLower, "traditional") {
+			tags = append(tags, "Traditional")
+		}
+	case "cafe":
+		tags = append(tags, "Coffee", "Casual", "Local")
+	case "bar":
+		tags = append(tags, "Nightlife", "Drinks", "Social")
+	case "park", "garden":
+		tags = append(tags, "Nature", "Outdoor", "Relaxing", "Family-friendly")
+	case "historical", "landmark":
+		tags = append(tags, "History", "Architecture", "Sightseeing", "Cultural")
+	case "shopping", "market":
+		tags = append(tags, "Shopping", "Local Products", "Souvenirs")
+	case "entertainment":
+		tags = append(tags, "Entertainment", "Fun", "Activities")
+	}
+
+	// Add description-based tags
+	if strings.Contains(descLower, "family") {
+		tags = append(tags, "Family-friendly")
+	}
+	if strings.Contains(descLower, "romantic") {
+		tags = append(tags, "Romantic")
+	}
+	if strings.Contains(descLower, "outdoor") {
+		tags = append(tags, "Outdoor")
+	}
+	if strings.Contains(descLower, "traditional") {
+		tags = append(tags, "Traditional")
+	}
+	if strings.Contains(descLower, "modern") {
+		tags = append(tags, "Modern")
+	}
+	if strings.Contains(descLower, "view") || strings.Contains(descLower, "panoramic") {
+		tags = append(tags, "Great Views")
+	}
+
+	// Ensure we have at least 2-3 tags
+	if len(tags) < 2 {
+		tags = append(tags, "Popular", "Recommended")
+	}
+
+	return tags
 }
 
 // StartNewSession creates a new chat session
@@ -1950,7 +2607,7 @@ func (l *LlmInteractiontServiceImpl) StartNewSession(ctx context.Context, userID
 	}
 
 	// Enhance with semantic search context - get contextually relevant POIs
-	var semanticPOIs []types.POIDetail
+	var semanticPOIs []types.POIDetailedInfo
 	if len(interestNames) > 0 {
 		l.logger.DebugContext(ctx, "Enhancing session with semantic POI recommendations")
 		cityUUID, cityErr := l.cityRepo.GetCityIDByName(ctx, cityName)
@@ -2236,7 +2893,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSession(ctx context.Context, sessio
 }
 
 // generatePOIData queries the LLM for POI details and calculates distance using PostGIS
-func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiName, cityName string, userLocation *types.UserLocation, userID, cityID uuid.UUID) (types.POIDetail, error) {
+func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiName, cityName string, userLocation *types.UserLocation, userID, cityID uuid.UUID) (types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GeneratePOIData", trace.WithAttributes(
 		attribute.String("poi.name", poiName),
 		attribute.String("city.name", cityName),
@@ -2247,12 +2904,10 @@ func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiNam
 	prompt := generatedContinuedConversationPrompt(poiName, cityName)
 
 	// Generate LLM response
-	response, err := l.aiClient.GenerateContent(ctx, prompt, &genai.GenerateContentConfig{
-		Temperature: genai.Ptr[float32](0.7),
-	})
+	response, err := l.aiClient.GenerateContent(ctx, prompt, nil)
 	if err != nil {
 		span.RecordError(err)
-		return types.POIDetail{}, fmt.Errorf("failed to generate POI data: %w", err)
+		return types.POIDetailedInfo{}, fmt.Errorf("failed to generate POI data: %w", err)
 	}
 
 	interaction := types.LlmInteraction{
@@ -2266,19 +2921,19 @@ func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiNam
 	if err != nil {
 		l.logger.ErrorContext(ctx, "Failed to save LLM interaction in generatePOIData", slog.Any("error", err))
 		// Decide if this is fatal for POI generation. It might be if FK is NOT NULL.
-		return types.POIDetail{}, fmt.Errorf("failed to save LLM interaction: %w", err)
+		return types.POIDetailedInfo{}, fmt.Errorf("failed to save LLM interaction: %w", err)
 	}
 	span.SetAttributes(attribute.String("llm.interaction_id.for_poi_data", savedLlmInteractionID.String()))
 
 	cleanResponse := cleanJSONResponse(response)
-	var poiData types.POIDetail
+	var poiData types.POIDetailedInfo
 	if err := json.Unmarshal([]byte(cleanResponse), &poiData); err != nil || poiData.Name == "" {
 		l.logger.WarnContext(ctx, "LLM returned invalid or empty POI data",
 			slog.String("poiName", poiName),
 			slog.String("llmResponse", response),
 			slog.Any("unmarshalError", err))
 		span.AddEvent("Invalid LLM response")
-		poiData = types.POIDetail{
+		poiData = types.POIDetailedInfo{
 			ID:             uuid.New(),
 			Name:           poiName,
 			Latitude:       0,
@@ -2337,7 +2992,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIData(ctx context.Context, poiNam
 }
 
 // enhancePOIRecommendationsWithSemantics uses embeddings to find similar POIs and enrich recommendations
-func (l *LlmInteractiontServiceImpl) enhancePOIRecommendationsWithSemantics(ctx context.Context, userMessage string, cityID uuid.UUID, userPreferences []string, limit int) ([]types.POIDetail, error) {
+func (l *LlmInteractiontServiceImpl) enhancePOIRecommendationsWithSemantics(ctx context.Context, userMessage string, cityID uuid.UUID, userPreferences []string, limit int) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "enhancePOIRecommendationsWithSemantics", trace.WithAttributes(
 		attribute.String("user.message", userMessage),
 		attribute.String("city.id", cityID.String()),
@@ -2352,7 +3007,7 @@ func (l *LlmInteractiontServiceImpl) enhancePOIRecommendationsWithSemantics(ctx 
 	if l.embeddingService == nil {
 		l.logger.WarnContext(ctx, "Embedding service not available, falling back to traditional search")
 		span.AddEvent("Embedding service not available")
-		return []types.POIDetail{}, nil
+		return []types.POIDetailedInfo{}, nil
 	}
 
 	// Generate embedding for user message combined with preferences
@@ -2368,7 +3023,7 @@ func (l *LlmInteractiontServiceImpl) enhancePOIRecommendationsWithSemantics(ctx 
 			slog.String("query", searchQuery))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to generate query embedding")
-		return []types.POIDetail{}, fmt.Errorf("failed to generate query embedding: %w", err)
+		return []types.POIDetailedInfo{}, fmt.Errorf("failed to generate query embedding: %w", err)
 	}
 
 	// Search for similar POIs in the city
@@ -2377,7 +3032,7 @@ func (l *LlmInteractiontServiceImpl) enhancePOIRecommendationsWithSemantics(ctx 
 		l.logger.ErrorContext(ctx, "Failed to find similar POIs", slog.Any("error", err))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to find similar POIs")
-		return []types.POIDetail{}, fmt.Errorf("failed to find similar POIs: %w", err)
+		return []types.POIDetailedInfo{}, fmt.Errorf("failed to find similar POIs: %w", err)
 	}
 
 	l.logger.InfoContext(ctx, "Found semantically similar POIs",
@@ -2471,7 +3126,7 @@ func (l *LlmInteractiontServiceImpl) enhanceConversationContextWithSemantics(ctx
 }
 
 // generateSemanticPOIRecommendations generates POI recommendations using semantic search
-func (l *LlmInteractiontServiceImpl) generateSemanticPOIRecommendations(ctx context.Context, userMessage string, cityID uuid.UUID, userID uuid.UUID, userLocation *types.UserLocation, semanticWeight float64) ([]types.POIDetail, error) {
+func (l *LlmInteractiontServiceImpl) generateSemanticPOIRecommendations(ctx context.Context, userMessage string, cityID uuid.UUID, userID uuid.UUID, userLocation *types.UserLocation, semanticWeight float64) ([]types.POIDetailedInfo, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "generateSemanticPOIRecommendations", trace.WithAttributes(
 		attribute.String("user.message", userMessage),
 		attribute.String("city.id", cityID.String()),
@@ -2502,7 +3157,7 @@ func (l *LlmInteractiontServiceImpl) generateSemanticPOIRecommendations(ctx cont
 		return nil, fmt.Errorf("failed to generate query embedding: %w", err)
 	}
 
-	var pois []types.POIDetail
+	var pois []types.POIDetailedInfo
 
 	// If user location is available, use hybrid search (spatial + semantic)
 	if userLocation != nil && userLocation.UserLat != 0 && userLocation.UserLon != 0 {
@@ -2582,7 +3237,7 @@ func (l *LlmInteractiontServiceImpl) generateSemanticPOIRecommendations(ctx cont
 }
 
 // handleSemanticAddPOI handles adding POIs with semantic search enhancement
-func (l *LlmInteractiontServiceImpl) handleSemanticAddPOI(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetail, userLocation *types.UserLocation, cityID uuid.UUID) (string, error) {
+func (l *LlmInteractiontServiceImpl) handleSemanticAddPOI(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetailedInfo, userLocation *types.UserLocation, cityID uuid.UUID) (string, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "handleSemanticAddPOI")
 	defer span.End()
 
@@ -2691,7 +3346,7 @@ func (l *LlmInteractiontServiceImpl) handleSemanticRemovePOI(ctx context.Context
 }
 
 // handleSemanticQuestion handles questions with contextual semantic information
-func (l *LlmInteractiontServiceImpl) handleSemanticQuestion(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetail) string {
+func (l *LlmInteractiontServiceImpl) handleSemanticQuestion(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetailedInfo) string {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "handleSemanticQuestion")
 	defer span.End()
 
@@ -2727,7 +3382,7 @@ func (l *LlmInteractiontServiceImpl) handleSemanticQuestion(ctx context.Context,
 }
 
 // handleSemanticModifyItinerary handles itinerary modifications with semantic understanding
-func (l *LlmInteractiontServiceImpl) handleSemanticModifyItinerary(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetail, userLocation *types.UserLocation, cityID uuid.UUID) (string, error) {
+func (l *LlmInteractiontServiceImpl) handleSemanticModifyItinerary(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetailedInfo, userLocation *types.UserLocation, cityID uuid.UUID) (string, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "handleSemanticModifyItinerary")
 	defer span.End()
 
@@ -2740,7 +3395,7 @@ func (l *LlmInteractiontServiceImpl) handleSemanticModifyItinerary(ctx context.C
 		for i, poi := range session.CurrentItinerary.AIItineraryResponse.PointsOfInterest {
 			if strings.Contains(strings.ToLower(poi.Name), oldPOI) {
 				// First try to find semantic match for replacement
-				var newPOI types.POIDetail
+				var newPOI types.POIDetailedInfo
 				var found bool
 
 				for _, semanticPOI := range semanticPOIs {
@@ -2969,7 +3624,7 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessage(ctx context.Conte
 			txt := extractTextFromResponse(resp)
 			cleanTxt := cleanJSONResponse(txt)
 			var poiData struct {
-				PointsOfInterest []types.POIDetail `json:"points_of_interest"`
+				PointsOfInterest []types.POIDetailedInfo `json:"points_of_interest"`
 			}
 			if err := json.Unmarshal([]byte(cleanTxt), &poiData); err != nil {
 				resultCh <- workerResult{Err: fmt.Errorf("failed to parse general POIs: %w", err)}
@@ -3089,7 +3744,7 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessage(ctx context.Conte
 			switch data := result.Data.(type) {
 			case types.GeneralCityData:
 				itinerary.GeneralCityData = data
-			case []types.POIDetail:
+			case []types.POIDetailedInfo:
 				itinerary.PointsOfInterest = data
 			case types.AIItineraryResponse:
 				itinerary.AIItineraryResponse = data
@@ -3226,231 +3881,48 @@ func assignIDs(response interface{}, interactionID uuid.UUID) {
 	}
 }
 
-// ProcessUnifiedChatMessageStream handles unified chat with optimized streaming based on Google GenAI patterns
-func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
-	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ProcessUnifiedChatMessageStream", trace.WithAttributes(
-		attribute.String("message", message),
-	))
-	defer span.End()
+// calculateDistance calculates the distance between two coordinates using the Haversine formula
+// Returns distance in kilometers
+func calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
+	const R = 6371 // Earth's radius in kilometers
 
-	// Extract city and clean message
-	extractedCity, cleanedMessage, err := l.extractCityFromMessage(ctx, message)
-	if err != nil {
-		span.RecordError(err)
-		l.sendEventSimple(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: err.Error()})
-		return fmt.Errorf("failed to parse message: %w", err)
-	}
-	if extractedCity != "" {
-		cityName = extractedCity
-	}
-	span.SetAttributes(attribute.String("extracted.city", cityName), attribute.String("cleaned.message", cleanedMessage))
+	// Convert degrees to radians
+	lat1Rad := lat1 * math.Pi / 180
+	lon1Rad := lon1 * math.Pi / 180
+	lat2Rad := lat2 * math.Pi / 180
+	lon2Rad := lon2 * math.Pi / 180
 
-	// Detect domain
-	domainDetector := &types.DomainDetector{}
-	domain := domainDetector.DetectDomain(ctx, cleanedMessage)
-	span.SetAttributes(attribute.String("detected.domain", string(domain)))
+	// Differences
+	dlat := lat2Rad - lat1Rad
+	dlon := lon2Rad - lon1Rad
 
-	// Step 3: Fetch user data
-	_, searchProfile, _, err := l.FetchUserData(ctx, userID, profileID)
-	if err != nil {
-		span.RecordError(err)
-		l.sendEventSimple(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: err.Error()})
-		return fmt.Errorf("failed to fetch user data: %w", err)
-	}
-	basePreferences := getUserPreferencesPrompt(searchProfile)
+	// Haversine formula
+	a := math.Sin(dlat/2)*math.Sin(dlat/2) +
+		math.Cos(lat1Rad)*math.Cos(lat2Rad)*math.Sin(dlon/2)*math.Sin(dlon/2)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 
-	// Use default location if not provided
-	var lat, lon float64
-	if userLocation == nil && searchProfile.UserLatitude != nil && searchProfile.UserLongitude != nil {
-		userLocation = &types.UserLocation{
-			UserLat: *searchProfile.UserLatitude,
-			UserLon: *searchProfile.UserLongitude,
-		}
-	}
-	if userLocation != nil {
-		lat, lon = userLocation.UserLat, userLocation.UserLon
-	}
-
-	// Step 4: Fan-in Fan-out Setup
-	var wg sync.WaitGroup
-	var closeOnce sync.Once
-
-	sessionID := uuid.New()
-	l.sendEventSimple(ctx, eventCh, types.StreamEvent{
-		Type: types.EventTypeStart,
-		Data: map[string]interface{}{"domain": string(domain), "city": cityName, "session_id": sessionID.String()},
-	})
-
-	// Step 5: Spawn streaming workers based on domain
-	switch domain {
-	case types.DomainItinerary, types.DomainGeneral:
-		wg.Add(3)
-
-		// Worker 1: Stream City Data
-		go func() {
-			defer wg.Done()
-			prompt := getCityDataPrompt(cityName)
-			l.streamWorker(ctx, prompt, "city_data", eventCh, domain)
-		}()
-
-		// Worker 2: Stream General POIs
-		go func() {
-			defer wg.Done()
-			prompt := getGeneralPOIPrompt(cityName)
-			l.streamWorker(ctx, prompt, "general_pois", eventCh, domain)
-		}()
-
-		// Worker 3: Stream Personalized Itinerary
-		go func() {
-			defer wg.Done()
-			prompt := getPersonalizedItineraryPrompt(cityName, basePreferences)
-			l.streamWorker(ctx, prompt, "itinerary", eventCh, domain)
-		}()
-
-	case types.DomainAccommodation:
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			prompt := getAccommodationPrompt(cityName, lat, lon, basePreferences)
-			l.streamWorker(ctx, prompt, "hotels", eventCh, domain)
-		}()
-
-	case types.DomainDining:
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			prompt := getDiningPrompt(cityName, lat, lon, basePreferences)
-			l.streamWorker(ctx, prompt, "restaurants", eventCh, domain)
-		}()
-
-	case types.DomainActivities:
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			prompt := getActivitiesPrompt(cityName, lat, lon, basePreferences)
-			l.streamWorker(ctx, prompt, "activities", eventCh, domain)
-		}()
-
-	default:
-		l.sendEventSimple(ctx, eventCh, types.StreamEvent{Type: types.EventTypeError, Error: fmt.Sprintf("unhandled domain: %s", domain)})
-		return fmt.Errorf("unhandled domain type: %s", domain)
-	}
-
-	// Step 6: Completion goroutine with sync.Once for channel closure
-	go func() {
-		wg.Wait()             // Wait for all workers to complete
-		if ctx.Err() == nil { // Only send completion event if context is still active
-			l.sendEventSimple(ctx, eventCh, types.StreamEvent{
-				Type: types.EventTypeComplete,
-				Data: map[string]interface{}{"session_id": sessionID.String()},
-			})
-		}
-		closeOnce.Do(func() {
-			close(eventCh) // Close the channel only once
-			l.logger.InfoContext(ctx, "Event channel closed by completion goroutine")
-		})
-	}()
-
-	// Step 7: Save interaction asynchronously
-	go func() {
-		asyncCtx := context.Background()
-		interaction := types.LlmInteraction{
-			ID:        uuid.New(),
-			SessionID: sessionID,
-			UserID:    userID,
-			ProfileID: profileID,
-			CityName:  cityName,
-			Prompt:    fmt.Sprintf("Unified Chat Stream - Domain: %s, Message: %s", domain, cleanedMessage),
-			ModelUsed: model,
-			Timestamp: time.Now(),
-		}
-		if _, err := l.llmInteractionRepo.SaveInteraction(asyncCtx, interaction); err != nil {
-			l.logger.ErrorContext(asyncCtx, "Failed to save stream interaction", slog.Any("error", err))
-		}
-	}()
-
-	span.SetStatus(codes.Ok, "Unified chat stream processed successfully")
-	return nil
+	// Distance in kilometers
+	distance := R * c
+	return distance
 }
 
-// streamWorker handles streaming for a single worker with context checks
-func (l *LlmInteractiontServiceImpl) streamWorker(ctx context.Context, prompt, partType string, eventCh chan<- types.StreamEvent, domain types.DomainType) {
-	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
-	if err != nil {
-		if ctx.Err() == nil {
-			l.sendEventSimple(ctx, eventCh, types.StreamEvent{
-				Type:  types.EventTypeError,
-				Error: fmt.Sprintf("%s worker failed: %v", partType, err),
-			})
+// generateAdvancedFilteredPOICacheKey creates a cache key for advanced POI filtering with multiple filters
+func generateAdvancedFilteredPOICacheKey(lat, lon, distance float64, userID uuid.UUID, filters map[string]string) string {
+	// Sort filter keys for consistent cache keys
+	var filterParts []string
+	for key, value := range filters {
+		if value != "" && value != "all" {
+			filterParts = append(filterParts, fmt.Sprintf("%s:%s", key, value))
 		}
-		return
 	}
-
-	var fullResponse strings.Builder
-	for resp, err := range iter {
-		if ctx.Err() != nil {
-			return // Stop if context is canceled
-		}
-		if err != nil {
-			if ctx.Err() == nil {
-				l.sendEventSimple(ctx, eventCh, types.StreamEvent{
-					Type:  types.EventTypeError,
-					Error: fmt.Sprintf("%s streaming error: %v", partType, err),
-				})
-			}
-			return
-		}
-		for _, cand := range resp.Candidates {
-			if cand.Content != nil {
-				for _, part := range cand.Content.Parts {
-					if part.Text != "" {
-						chunk := string(part.Text)
-						fullResponse.WriteString(chunk)
-						l.sendEventSimple(ctx, eventCh, types.StreamEvent{
-							Type: types.EventTypeChunk,
-							Data: map[string]interface{}{
-								"part":   partType,
-								"chunk":  chunk,
-								"domain": string(domain),
-							},
-						})
-					}
-				}
+	// Sort to ensure consistent ordering
+	for i := 0; i < len(filterParts)-1; i++ {
+		for j := i + 1; j < len(filterParts); j++ {
+			if filterParts[i] > filterParts[j] {
+				filterParts[i], filterParts[j] = filterParts[j], filterParts[i]
 			}
 		}
 	}
-}
-
-func extractTextFromGenAIResponse(resp *genai.GenerateContentResponse) string {
-	var text strings.Builder
-	for _, cand := range resp.Candidates {
-		if cand.Content != nil {
-			for _, part := range cand.Content.Parts {
-				if part.Text != "" {
-					text.WriteString(string(part.Text))
-				}
-			}
-		}
-	}
-	return text.String()
-}
-
-// sendEventSimple sends events with context check
-func (l *LlmInteractiontServiceImpl) sendEventSimple(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent) {
-	if ctx.Err() != nil {
-		return // Skip send if context is canceled
-	}
-	if event.EventID == "" {
-		event.EventID = uuid.New().String()
-	}
-	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now()
-	}
-
-	select {
-	case ch <- event:
-		// Sent successfully
-	case <-ctx.Done():
-		// Context canceled, do not send
-	}
+	filterStr := strings.Join(filterParts, "_")
+	return fmt.Sprintf("poi_advanced_%f_%f_%f_%s_%s", lat, lon, distance, userID.String(), filterStr)
 }

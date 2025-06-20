@@ -15,9 +15,9 @@ import (
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/providers/google"
 
-	httpSwagger "github.com/swaggo/http-swagger/v2"
-
 	_ "github.com/FACorreiaa/go-poi-au-suggestions/docs" // Import for swagger docs
+	"github.com/go-chi/httprate"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 
 	"github.com/FACorreiaa/go-poi-au-suggestions/app/observability/metrics"
 	"github.com/FACorreiaa/go-poi-au-suggestions/app/observability/tracer"
@@ -143,36 +143,40 @@ func main() {
 		LLMInteractionHandler:   c.LLMInteractionHandlerImpl,
 		PointsOfInterestHandler: c.POIHandler,
 		ItineraryListHandler:    c.ItineraryListHandler,
+		CityHandler:             c.CityHandler,
+		RecentsHandler:          c.RecentsHandler,
 		AuthenticateMiddleware:  authenticateMiddleware,
 		Logger:                  logger,
 	}
 	apiRouter := router.SetupRouter(routerConfig)
 
 	// --- Server-Wide Middleware Setup ---
-	rootRouter := chi.NewMux()
-	//rootRouter.Use(authenticateMiddleware)
-	rootRouter.Use(chiMiddleware.RequestID)
-	rootRouter.Use(chiMiddleware.RealIP)
-	rootRouter.Use(l.StructuredLogger(logger))
-	rootRouter.Use(chiMiddleware.Recoverer)
-	rootRouter.Use(chiMiddleware.StripSlashes)
-	rootRouter.Use(chiMiddleware.Timeout(60 * time.Second))
-	rootRouter.Use(chiMiddleware.Compress(5, "application/json"))
-	rootRouter.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+	r := chi.NewMux()
+	//r.Use(authenticateMiddleware)
+	r.Use(chiMiddleware.RequestID)
+	r.Use(chiMiddleware.RealIP)
+	r.Use(l.StructuredLogger(logger))
+	r.Use(chiMiddleware.Recoverer)
+	r.Use(chiMiddleware.StripSlashes)
+	r.Use(chiMiddleware.Timeout(60 * time.Second))
+	r.Use(chiMiddleware.Compress(5, "application/json"))
+	r.Use(httprate.LimitByIP(100, time.Minute))
+
+	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, err = w.Write([]byte("pong"))
 		if err != nil {
 			return
 		}
 	})
-	rootRouter.Get("/swagger/*", httpSwagger.WrapHandler)
-	rootRouter.Mount("/", apiRouter)
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
+	r.Mount("/", apiRouter)
 
 	// --- HTTP Server Setup ---
 	serverAddress := fmt.Sprintf(":%s", cfg.Server.HTTPPort)
 	srv := &http.Server{
 		Addr:         serverAddress,
-		Handler:      rootRouter,
+		Handler:      r,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,

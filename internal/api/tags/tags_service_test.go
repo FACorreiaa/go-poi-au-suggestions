@@ -2,7 +2,6 @@ package tags
 
 import (
 	"context"
-	"database/sql" // For sql.NullString
 	"errors"
 	"log/slog"
 	"os"
@@ -83,7 +82,7 @@ func setuptagsServiceTest() (*tagsServiceImpl, *MocktagsRepo) {
 	return service, mockRepo
 }
 
-func TesttagsServiceImpl_GetTags(t *testing.T) {
+func TestTagsServiceImpl_GetTags(t *testing.T) {
 	service, mockRepo := setuptagsServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -123,7 +122,7 @@ func TesttagsServiceImpl_GetTags(t *testing.T) {
 	})
 }
 
-func TesttagsServiceImpl_GetTag(t *testing.T) {
+func TestTagsServiceImpl_GetTag(t *testing.T) {
 	service, mockRepo := setuptagsServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -151,7 +150,7 @@ func TesttagsServiceImpl_GetTag(t *testing.T) {
 	})
 }
 
-func TesttagsServiceImpl_CreateTag(t *testing.T) {
+func TestTagsServiceImpl_CreateTag(t *testing.T) {
 	service, mockRepo := setuptagsServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -190,7 +189,7 @@ func TesttagsServiceImpl_CreateTag(t *testing.T) {
 	})
 }
 
-func TesttagsServiceImpl_DeleteTag(t *testing.T) {
+func TestTagsServiceImpl_DeleteTag(t *testing.T) {
 	service, mockRepo := setuptagsServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()
@@ -216,7 +215,7 @@ func TesttagsServiceImpl_DeleteTag(t *testing.T) {
 	})
 }
 
-func TesttagsServiceImpl_Update(t *testing.T) {
+func TestTagsServiceImpl_Update(t *testing.T) {
 	service, mockRepo := setuptagsServiceTest()
 	ctx := context.Background()
 	userID := uuid.New()

@@ -16,6 +16,7 @@ import (
 	itineraryList "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/list"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/profiles"
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/recents"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/tags"
 	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/user"
 )
@@ -33,6 +34,8 @@ type Container struct {
 	LLMInteractionHandlerImpl *llmChat.HandlerImpl
 	POIHandler                *poi.HandlerImpl
 	ItineraryListHandler      *itineraryList.HandlerImpl
+	CityHandler               *city.Handler
+	RecentsHandler            *recents.HandlerImpl
 	// Add other HandlerImpls, services, and repositories as needed
 }
 
@@ -78,8 +81,10 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	profilessHandlerImpl := profiles.NewUserHandlerImpl(profilessService, logger)
 	// Create and return the container
 
-	// city repository
+	// city repository, service, and handler
 	cityRepo := city.NewCityRepository(pool, logger)
+	cityService := city.NewCityService(cityRepo, logger)
+	cityHandler := city.NewCityHandler(cityService, logger)
 
 	poiRepo := poi.NewRepository(pool, logger)
 	// initialise the LLM interaction service
@@ -102,6 +107,11 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 	itineraryListRepository := itineraryList.NewRepository(pool, logger)
 	itineraryLisrService := itineraryList.NewServiceImpl(itineraryListRepository, logger)
 	itineraryListHandler := itineraryList.NewHandler(itineraryLisrService, logger)
+
+	// Initialize recents components
+	recentsRepository := recents.NewRepository(pool, logger)
+	recentsService := recents.NewService(recentsRepository, logger)
+	recentsHandler := recents.NewHandler(recentsService, logger)
 	return &Container{
 		Config:                    cfg,
 		Logger:                    logger,
@@ -114,6 +124,8 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 		LLMInteractionHandlerImpl: llmInteractionHandlerImpl,
 		POIHandler:                poiHandler,
 		ItineraryListHandler:      itineraryListHandler,
+		CityHandler:               cityHandler,
+		RecentsHandler:            recentsHandler,
 		// Add other HandlerImpls, services, and repositories as needed
 	}, nil
 }

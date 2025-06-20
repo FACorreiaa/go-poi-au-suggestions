@@ -1,158 +1,140 @@
 package main
 
-import (
-	"context"
-	"fmt"
-	"log"
-	"log/slog"
-	"os"
+// func main() {
+// 	ctx := context.Background()
 
-	database "github.com/FACorreiaa/go-poi-au-suggestions/app/db"
+// 	// Load environment variables
+// 	if err := godotenv.Load(); err != nil {
+// 		log.Printf("Warning: Could not load .env file: %v", err)
+// 	}
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
+// 	// Set up logger
+// 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+// 		Level: slog.LevelInfo,
+// 	}))
 
-	"github.com/FACorreiaa/go-poi-au-suggestions/config"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/city"
-	generativeAI "github.com/FACorreiaa/go-poi-au-suggestions/internal/api/generative_ai"
-	"github.com/FACorreiaa/go-poi-au-suggestions/internal/api/poi"
-)
+// 	// Load configuration
+// 	cfg, err := config.InitConfig()
+// 	if err != nil {
+// 		log.Fatalf("Failed to load config: %v", err)
+// 	}
 
-func main() {
-	ctx := context.Background()
+// 	dbConfig, err := database.NewDatabaseConfig(cfg, logger)
+// 	if err != nil {
+// 		logger.Error("Failed to generate database config", slog.Any("error", err))
+// 		os.Exit(1)
+// 	}
 
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Printf("Warning: Could not load .env file: %v", err)
-	}
+// 	// Set up database connection
+// 	dbpool, err := pgxpool.New(ctx, dbConfig.ConnectionURL)
+// 	if err != nil {
+// 		log.Fatalf("Failed to connect to database: %v", err)
+// 	}
+// 	defer dbpool.Close()
 
-	// Set up logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
+// 	// Test database connection
+// 	if err := dbpool.Ping(ctx); err != nil {
+// 		log.Fatalf("Failed to ping database: %v", err)
+// 	}
+// 	logger.Info("Connected to database successfully")
 
-	// Load configuration
-	cfg, err := config.InitConfig()
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
+// 	// Initialize services
+// 	embeddingService, err := generativeAI.NewEmbeddingService(ctx, logger)
+// 	if err != nil {
+// 		log.Fatalf("Failed to create embedding service: %v", err)
+// 	}
+// 	defer embeddingService.Close()
 
-	dbConfig, err := database.NewDatabaseConfig(cfg, logger)
-	if err != nil {
-		logger.Error("Failed to generate database config", slog.Any("error", err))
-		os.Exit(1)
-	}
+// 	poiRepository := poi.NewRepository(dbpool, logger)
+// 	poiService := poi.NewServiceImpl(poiRepository, embeddingService, logger)
 
-	// Set up database connection
-	dbpool, err := pgxpool.New(ctx, dbConfig.ConnectionURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer dbpool.Close()
+// 	cityRepository := city.NewCityRepository(dbpool, logger)
 
-	// Test database connection
-	if err := dbpool.Ping(ctx); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
-	}
-	logger.Info("Connected to database successfully")
+// 	logger.Info("Starting embedding generation for existing data...")
 
-	// Initialize services
-	embeddingService, err := generativeAI.NewEmbeddingService(ctx, logger)
-	if err != nil {
-		log.Fatalf("Failed to create embedding service: %v", err)
-	}
-	defer embeddingService.Close()
+// 	// Generate embeddings for POIs
+// 	logger.Info("Generating embeddings for POIs...")
+// 	err = poiService.GenerateEmbeddingsForAllPOIs(ctx, 20) // Process in batches of 20
+// 	if err != nil {
+// 		logger.Error("Failed to generate POI embeddings", slog.Any("error", err))
+// 	} else {
+// 		logger.Info("Successfully generated embeddings for all POIs")
+// 	}
 
-	poiRepository := poi.NewRepository(dbpool, logger)
-	poiService := poi.NewServiceImpl(poiRepository, embeddingService, logger)
+// 	// Generate embeddings for cities
+// 	logger.Info("Generating embeddings for cities...")
+// 	err = generateCityEmbeddings(ctx, embeddingService, cityRepository, logger)
+// 	if err != nil {
+// 		logger.Error("Failed to generate city embeddings", slog.Any("error", err))
+// 	} else {
+// 		logger.Info("Successfully generated embeddings for all cities")
+// 	}
 
-	cityRepository := city.NewCityRepository(dbpool, logger)
+// 	logger.Info("Embedding generation completed!")
+// }
 
-	logger.Info("Starting embedding generation for existing data...")
+// func generateCityEmbeddings(ctx context.Context, embeddingService *generativeAI.EmbeddingService, cityRepo city.Repository, logger *slog.Logger) error {
+// 	batchSize := 10
+// 	totalProcessed := 0
+// 	totalErrors := 0
 
-	// Generate embeddings for POIs
-	logger.Info("Generating embeddings for POIs...")
-	err = poiService.GenerateEmbeddingsForAllPOIs(ctx, 20) // Process in batches of 20
-	if err != nil {
-		logger.Error("Failed to generate POI embeddings", slog.Any("error", err))
-	} else {
-		logger.Info("Successfully generated embeddings for all POIs")
-	}
+// 	for {
+// 		// Get batch of cities without embeddings
+// 		cities, err := cityRepo.GetCitiesWithoutEmbeddings(ctx, batchSize)
+// 		if err != nil {
+// 			return fmt.Errorf("failed to get cities without embeddings: %w", err)
+// 		}
 
-	// Generate embeddings for cities
-	logger.Info("Generating embeddings for cities...")
-	err = generateCityEmbeddings(ctx, embeddingService, cityRepository, logger)
-	if err != nil {
-		logger.Error("Failed to generate city embeddings", slog.Any("error", err))
-	} else {
-		logger.Info("Successfully generated embeddings for all cities")
-	}
+// 		if len(cities) == 0 {
+// 			// No more cities to process
+// 			break
+// 		}
 
-	logger.Info("Embedding generation completed!")
-}
+// 		logger.Info("Processing batch of cities", slog.Int("batch_size", len(cities)))
 
-func generateCityEmbeddings(ctx context.Context, embeddingService *generativeAI.EmbeddingService, cityRepo city.Repository, logger *slog.Logger) error {
-	batchSize := 10
-	totalProcessed := 0
-	totalErrors := 0
+// 		// Process each city in the batch
+// 		for _, cityData := range cities {
+// 			// Generate embedding
+// 			embedding, err := embeddingService.GenerateCityEmbedding(ctx, cityData.Name, cityData.Country, cityData.AiSummary)
+// 			if err != nil {
+// 				logger.Error("Failed to generate embedding for city",
+// 					slog.Any("error", err),
+// 					slog.String("city_id", cityData.ID.String()),
+// 					slog.String("city_name", cityData.Name))
+// 				totalErrors++
+// 				continue
+// 			}
 
-	for {
-		// Get batch of cities without embeddings
-		cities, err := cityRepo.GetCitiesWithoutEmbeddings(ctx, batchSize)
-		if err != nil {
-			return fmt.Errorf("failed to get cities without embeddings: %w", err)
-		}
+// 			// Update city with embedding
+// 			err = cityRepo.UpdateCityEmbedding(ctx, cityData.ID, embedding)
+// 			if err != nil {
+// 				logger.Error("Failed to update city embedding",
+// 					slog.Any("error", err),
+// 					slog.String("city_id", cityData.ID.String()),
+// 					slog.String("city_name", cityData.Name))
+// 				totalErrors++
+// 				continue
+// 			}
 
-		if len(cities) == 0 {
-			// No more cities to process
-			break
-		}
+// 			totalProcessed++
+// 			logger.Debug("City embedding generated successfully",
+// 				slog.String("city_id", cityData.ID.String()),
+// 				slog.String("city_name", cityData.Name))
+// 		}
 
-		logger.Info("Processing batch of cities", slog.Int("batch_size", len(cities)))
+// 		// Break if we processed fewer cities than the batch size (end of data)
+// 		if len(cities) < batchSize {
+// 			break
+// 		}
+// 	}
 
-		// Process each city in the batch
-		for _, cityData := range cities {
-			// Generate embedding
-			embedding, err := embeddingService.GenerateCityEmbedding(ctx, cityData.Name, cityData.Country, cityData.AiSummary)
-			if err != nil {
-				logger.Error("Failed to generate embedding for city",
-					slog.Any("error", err),
-					slog.String("city_id", cityData.ID.String()),
-					slog.String("city_name", cityData.Name))
-				totalErrors++
-				continue
-			}
+// 	logger.Info("Batch city embedding generation completed",
+// 		slog.Int("total_processed", totalProcessed),
+// 		slog.Int("total_errors", totalErrors))
 
-			// Update city with embedding
-			err = cityRepo.UpdateCityEmbedding(ctx, cityData.ID, embedding)
-			if err != nil {
-				logger.Error("Failed to update city embedding",
-					slog.Any("error", err),
-					slog.String("city_id", cityData.ID.String()),
-					slog.String("city_name", cityData.Name))
-				totalErrors++
-				continue
-			}
+// 	if totalErrors > 0 {
+// 		return fmt.Errorf("city embedding generation completed with %d errors out of %d total cities", totalErrors, totalProcessed+totalErrors)
+// 	}
 
-			totalProcessed++
-			logger.Debug("City embedding generated successfully",
-				slog.String("city_id", cityData.ID.String()),
-				slog.String("city_name", cityData.Name))
-		}
-
-		// Break if we processed fewer cities than the batch size (end of data)
-		if len(cities) < batchSize {
-			break
-		}
-	}
-
-	logger.Info("Batch city embedding generation completed",
-		slog.Int("total_processed", totalProcessed),
-		slog.Int("total_errors", totalErrors))
-
-	if totalErrors > 0 {
-		return fmt.Errorf("city embedding generation completed with %d errors out of %d total cities", totalErrors, totalProcessed+totalErrors)
-	}
-
-	return nil
-}
+// 	return nil
+// }

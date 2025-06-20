@@ -60,6 +60,9 @@ type Handler interface {
 	// Unified chat methods
 	ProcessUnifiedChatMessage(w http.ResponseWriter, r *http.Request)
 	ProcessUnifiedChatMessageStream(w http.ResponseWriter, r *http.Request)
+
+	// Chat session management
+	GetUserChatSessions(w http.ResponseWriter, r *http.Request)
 }
 type HandlerImpl struct {
 	llmInteractionService LlmInteractiontService
@@ -470,6 +473,45 @@ func (HandlerImpl *HandlerImpl) SaveItenerary(w http.ResponseWriter, r *http.Req
 	api.WriteJSONResponse(w, r, http.StatusCreated, savedItinerary)
 }
 
+func (HandlerImpl *HandlerImpl) GetUserChatSessions(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "GetUserChatSessions", trace.WithAttributes(
+		semconv.HTTPRequestMethodKey.String(r.Method),
+		semconv.HTTPRouteKey.String("/llm/prompt-response/chat/sessions/user/{profileID}"),
+	))
+	defer span.End()
+
+	l := HandlerImpl.logger.With(slog.String("HandlerImpl", "GetUserChatSessions"))
+	l.DebugContext(ctx, "Getting user chat sessions")
+
+	// Get user ID from context
+	userIDStr, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		l.ErrorContext(ctx, "User ID not found in context")
+		api.ErrorResponse(w, r, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		l.ErrorContext(ctx, "Invalid user ID format", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusBadRequest, "Invalid user ID format")
+		return
+	}
+	span.SetAttributes(semconv.EnduserIDKey.String(userID.String()))
+	l = l.With(slog.String("userID", userID.String()))
+
+	// Get chat sessions from service
+	sessions, err := HandlerImpl.llmInteractionService.GetUserChatSessions(ctx, userID)
+	if err != nil {
+		l.ErrorContext(ctx, "Failed to get user chat sessions", slog.Any("error", err))
+		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to get chat sessions: %s", err.Error()))
+		return
+	}
+
+	l.InfoContext(ctx, "Successfully retrieved user chat sessions", slog.Int("sessionCount", len(sessions)))
+	api.WriteJSONResponse(w, r, http.StatusOK, sessions)
+}
+
 func (HandlerImpl *HandlerImpl) RemoveItenerary(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("HandlerImpl").Start(r.Context(), "RemoveItenerary", trace.WithAttributes(
 		semconv.HTTPRequestMethodKey.String(r.Method),
@@ -576,7 +618,7 @@ func (HandlerImpl *HandlerImpl) GetPOIDetails(w http.ResponseWriter, r *http.Req
 	}
 
 	// Call service to get POI details
-	pois, err := HandlerImpl.llmInteractionService.GetPOIDetailsResponse(ctx, userID, serviceReq.CityName, serviceReq.Latitude, serviceReq.Longitude)
+	pois, err := HandlerImpl.llmInteractionService.GetPOIDetailedInfosResponse(ctx, userID, serviceReq.CityName, serviceReq.Latitude, serviceReq.Longitude)
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch POI details", slog.Any("error", err))
 		span.SetStatus(codes.Error, "Service error")
@@ -1047,10 +1089,26 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 	l.DebugContext(ctx, "Fetching POIs by distance")
 
 	// Get query parameters
-	city := r.URL.Query().Get("city")
 	latStr := r.URL.Query().Get("lat")
 	lonStr := r.URL.Query().Get("lon")
 	distanceStr := r.URL.Query().Get("distance")
+
+	// Optional filter parameters
+	category := r.URL.Query().Get("category")
+	priceRange := r.URL.Query().Get("price_range")
+	minRating := r.URL.Query().Get("min_rating")
+
+	// Create filters map
+	filters := make(map[string]string)
+	if category != "" && category != "all" {
+		filters["category"] = category
+	}
+	if priceRange != "" && priceRange != "all" {
+		filters["price_range"] = priceRange
+	}
+	if minRating != "" && minRating != "all" {
+		filters["min_rating"] = minRating
+	}
 
 	// Parse latitude
 	lat, err := strconv.ParseFloat(latStr, 64)
@@ -1090,8 +1148,27 @@ func (HandlerImpl *HandlerImpl) GetPOIsByDistance(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Call service method
-	pois, err := HandlerImpl.llmInteractionService.GetGeneralPOIByDistanceResponse(ctx, userID, city, lat, lon, distance)
+	// Create filters struct
+	// filters := types.POIFilters{
+	// 	City:       city,
+	// 	Category:   category,
+	// 	PriceRange: priceRange,
+	// }
+
+	// Create filters struct
+	// filters := map[string]string{
+	// 	"category":    category,
+	// 	"price_range": priceRange,
+	// 	"popularity":  popularity,
+	// }
+
+	// Call service method with filters
+	var pois []types.POIDetailedInfo
+	if len(filters) > 0 {
+		pois, err = HandlerImpl.llmInteractionService.GetGeneralPOIByDistanceWithFilters(ctx, userID, lat, lon, distance, filters)
+	} else {
+		pois, err = HandlerImpl.llmInteractionService.GetGeneralPOIByDistance(ctx, userID, lat, lon, distance)
+	}
 	if err != nil {
 		l.ErrorContext(ctx, "Failed to fetch POIs", slog.Any("error", err))
 		api.ErrorResponse(w, r, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch POIs: %s", err.Error()))

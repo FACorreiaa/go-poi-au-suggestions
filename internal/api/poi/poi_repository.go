@@ -430,6 +430,44 @@ func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetail
 	))
 	defer span.End()
 
+	// Validate coordinates
+	if poi.Latitude < -90 || poi.Latitude > 90 || poi.Longitude < -180 || poi.Longitude > 180 {
+		err := fmt.Errorf("invalid coordinates: lat=%f, lon=%f", poi.Latitude, poi.Longitude)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Invalid coordinates")
+		return uuid.Nil, err
+	}
+
+	// Check for duplicate POI by name and location (within 100m radius)
+	duplicateCheckQuery := `
+		SELECT id FROM poi_details 
+		WHERE city_id = $1 
+		AND LOWER(name) = LOWER($2)
+		AND ST_DWithin(
+			location::geography,
+			ST_SetSRID(ST_MakePoint($3, $4)::geography, 4326),
+			100
+		)
+		LIMIT 1
+	`
+	var existingID uuid.UUID
+	err := r.pgpool.QueryRow(ctx, duplicateCheckQuery, cityID, poi.Name, poi.Longitude, poi.Latitude).Scan(&existingID)
+	if err == nil {
+		// Duplicate found
+		r.logger.InfoContext(ctx, "POI already exists, skipping save",
+			slog.String("poi_name", poi.Name),
+			slog.String("existing_id", existingID.String()),
+			slog.String("city_id", cityID.String()))
+		span.SetAttributes(attribute.String("poi.existing_id", existingID.String()))
+		span.SetStatus(codes.Ok, "POI already exists")
+		return existingID, nil
+	} else if err != pgx.ErrNoRows {
+		// Unexpected error
+		r.logger.WarnContext(ctx, "Error checking for duplicate POI",
+			slog.Any("error", err),
+			slog.String("poi_name", poi.Name))
+	}
+
 	// Start a transaction to ensure both tables are updated atomically
 	tx, err := r.pgpool.Begin(ctx)
 	if err != nil {
@@ -460,8 +498,13 @@ func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetail
 		uuid.NullUUID{UUID: poi.LlmInteractionID, Valid: poi.LlmInteractionID != uuid.Nil},
 	)
 	if err != nil {
+		r.logger.ErrorContext(ctx, "Failed to save POI details",
+			slog.Any("error", err),
+			slog.String("poi_name", poi.Name),
+			slog.String("poi_id", poiID.String()),
+			slog.String("city_id", cityID.String()))
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to save POI details")
+		span.SetStatus(codes.Error, "Failed to save poi_details")
 		return uuid.Nil, fmt.Errorf("failed to save poi_details: %w", err)
 	}
 
@@ -469,17 +512,27 @@ func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetail
 	var priceLevel *int
 	if poi.PriceRange != "" {
 		switch poi.PriceRange {
-		case "€", "$":
+		case "€", "$", "free", "Free", "1":
 			level := 1
 			priceLevel = &level
-		case "€€", "$$":
+		case "€€", "$$", "budget", "Budget", "2":
 			level := 2
 			priceLevel = &level
-		case "€€€", "$$$":
+		case "€€€", "$$$", "moderate", "Moderate", "3":
 			level := 3
 			priceLevel = &level
-		case "€€€€", "$$$$":
+		case "€€€€", "$$$$", "expensive", "Expensive", "4":
 			level := 4
+			priceLevel = &level
+		case "luxury", "Luxury", "premium", "Premium", "5":
+			level := 5
+			priceLevel = &level
+		default:
+			r.logger.WarnContext(ctx, "Unknown price range",
+				slog.String("price_range", poi.PriceRange),
+				slog.String("poi_name", poi.Name))
+			// Default to level 2 (budget) for unknown price ranges
+			level := 2
 			priceLevel = &level
 		}
 	}
@@ -504,6 +557,11 @@ func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetail
 		"loci_ai", poi.Description, poi.Tags,
 	)
 	if err != nil {
+		r.logger.ErrorContext(ctx, "Failed to save POI to points_of_interest",
+			slog.Any("error", err),
+			slog.String("poi_name", poi.Name),
+			slog.String("poi_id", poiID.String()),
+			slog.String("city_id", cityID.String()))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to save POI to points_of_interest")
 		return uuid.Nil, fmt.Errorf("failed to save points_of_interest: %w", err)
@@ -512,10 +570,21 @@ func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetail
 	// Commit the transaction
 	err = tx.Commit(ctx)
 	if err != nil {
+		r.logger.ErrorContext(ctx, "Failed to commit POI transaction",
+			slog.Any("error", err),
+			slog.String("poi_name", poi.Name),
+			slog.String("poi_id", poiID.String()))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to commit transaction")
 		return uuid.Nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
+
+	r.logger.InfoContext(ctx, "Successfully saved POI to database",
+		slog.String("poi_name", poi.Name),
+		slog.String("poi_id", poiID.String()),
+		slog.String("city_id", cityID.String()),
+		slog.Float64("latitude", poi.Latitude),
+		slog.Float64("longitude", poi.Longitude))
 
 	span.SetAttributes(attribute.String("poi.id", poiID.String()))
 	span.SetStatus(codes.Ok, "POI details saved successfully to both tables")

@@ -1,9 +1,12 @@
 package llmChat
 
 import (
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
+	"github.com/FACorreiaa/go-poi-au-suggestions/internal/types"
 	"github.com/google/uuid"
 )
 
@@ -11,9 +14,14 @@ func generatePOICacheKey(city string, lat, lon, distance float64, userID uuid.UU
 	return fmt.Sprintf("poi:%s:%f:%f:%f:%s", city, lat, lon, distance, userID.String())
 }
 
+func generateFilteredPOICacheKeyWithFilters(lat, lon, distance float64, filters map[string]string, userID uuid.UUID) string {
+	// Serialize filters to JSON for consistent cache key
+	filtersJSON, _ := json.Marshal(filters)
+	return fmt.Sprintf("poi_filtered:%f:%f:%f:%s:%s", lat, lon, distance, userID.String(), string(filtersJSON))
+}
+
 func generateFilteredPOICacheKey(lat, lon, distance float64, userID uuid.UUID) string {
-	return fmt.Sprintf("poi_filtered%f:%f:%f:%s",
-		lat, lon, distance, userID.String())
+	return fmt.Sprintf("poi_filtered:%f:%f:%f:%s", lat, lon, distance, userID.String())
 }
 
 func generateHotelCacheKey(city string, lat, lon float64, userID uuid.UUID) string {
@@ -78,4 +86,66 @@ func extractPOIName(message string) string {
 	// cases.Title
 	// use this https://pkg.go.dev/golang.org/x/text/cases later and handle language as well
 	return strings.Title(strings.Join(filtered, " "))
+}
+
+// enrichLLMPOIsWithMetadata adds city and user context to POI data from LLM
+func enrichLLMPOIsWithMetadata(pois []types.POIDetailedInfo, cityID uuid.UUID, cityName string, userID uuid.UUID, llmInteractionID uuid.UUID) []types.POIDetailedInfo {
+	enrichedPOIs := make([]types.POIDetailedInfo, len(pois))
+	for i, poi := range pois {
+		enrichedPOI := poi
+		enrichedPOI.City = cityName
+		enrichedPOI.LlmInteractionID = llmInteractionID
+		// Add ID if not set
+		if enrichedPOI.ID == uuid.Nil {
+			enrichedPOI.ID = uuid.New()
+		}
+		enrichedPOIs[i] = enrichedPOI
+	}
+	return enrichedPOIs
+}
+
+// applyClientFilters applies filtering logic to POI slice
+func applyClientFilters(pois []types.POIDetailedInfo, filters map[string]string) []types.POIDetailedInfo {
+	if len(filters) == 0 {
+		return pois
+	}
+
+	var filtered []types.POIDetailedInfo
+	for _, poi := range pois {
+		include := true
+
+		// Category filter
+		if category, exists := filters["category"]; exists && category != "" && category != "all" {
+			if !strings.EqualFold(poi.Category, category) {
+				include = false
+			}
+		}
+
+		// Price range filter
+		if priceRange, exists := filters["price_range"]; exists && priceRange != "" && priceRange != "all" {
+			if poi.PriceRange == "" || !strings.EqualFold(poi.PriceRange, priceRange) {
+				include = false
+			}
+		}
+
+		// Min rating filter
+		if minRatingStr, exists := filters["min_rating"]; exists && minRatingStr != "" && minRatingStr != "all" {
+			if minRating := parseFloat(minRatingStr); minRating > 0 && poi.Rating < minRating {
+				include = false
+			}
+		}
+
+		if include {
+			filtered = append(filtered, poi)
+		}
+	}
+	return filtered
+}
+
+// parseFloat safely parses a string to float64
+func parseFloat(s string) float64 {
+	if val, err := strconv.ParseFloat(s, 64); err == nil {
+		return val
+	}
+	return 0
 }

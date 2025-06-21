@@ -42,7 +42,6 @@ type Repository interface {
 	//
 	SaveSinglePOI(ctx context.Context, poi types.POIDetailedInfo, userID, cityID uuid.UUID, llmInteractionID uuid.UUID) (uuid.UUID, error)
 	GetPOIsBySessionSortedByDistance(ctx context.Context, sessionID, cityID uuid.UUID, userLocation types.UserLocation) ([]types.POIDetailedInfo, error)
-	CalculateDistancePostGIS(ctx context.Context, userLat, userLon, poiLat, poiLon float64) (float64, error)
 	GetOrCreatePOI(ctx context.Context, tx pgx.Tx, POIDetailedInfo types.POIDetailedInfo, cityID uuid.UUID, sourceInteractionID uuid.UUID) (uuid.UUID, error)
 
 	// RAG
@@ -1065,22 +1064,6 @@ func (r *RepositoryImpl) GetPOIsBySessionSortedByDistance(ctx context.Context, s
 	return pois, rows.Err()
 }
 
-// calculateDistancePostGIS computes the distance between two points using PostGIS (in meters)
-func (l *RepositoryImpl) CalculateDistancePostGIS(ctx context.Context, userLat, userLon, poiLat, poiLon float64) (float64, error) {
-	query := `
-        SELECT ST_Distance(
-            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-            ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography
-        ) AS distance;
-    `
-	var distance float64
-	err := l.pgpool.QueryRow(ctx, query, userLon, userLat, poiLon, poiLat).Scan(&distance)
-	if err != nil {
-		return 0, fmt.Errorf("failed to calculate distance with PostGIS: %w", err)
-	}
-	return distance, nil
-}
-
 // type POIDetailedInfo struct {
 // 	Name        string  `json:"name"`
 // 	Latitude    float64 `json:"latitude"`
@@ -1335,49 +1318,3 @@ func (r *RepositoryImpl) GetOrCreatePOI(ctx context.Context, tx pgx.Tx, POIDetai
 // 	span.SetStatus(codes.Ok, "Interaction saved successfully")
 // 	return interactionID, nil
 // }
-
-// // func (r *RepositoryImpl) CalculateDistancePostGIS(ctx context.Context, poi types.POIDetailedInfo, userLocation types.UserLocation) (float64, error) {
-// // 	ctx, span := otel.Tracer("Repository").Start(ctx, "CalculateDistancePostGIS", trace.WithAttributes(
-// // 		attribute.String("poi.name", poi.Name),
-// // 		attribute.Float64("poi.latitude", poi.Latitude),
-// // 		attribute.Float64("poi.longitude", poi.Longitude),
-// // 		attribute.Float64("user.latitude", userLocation.UserLat),
-// // 		attribute.Float64("user.longitude", userLocation.UserLon),
-// // 	))
-// // 	defer span.End()
-
-// // 	// Validate coordinates
-// // 	if poi.Latitude < -90 || poi.Latitude > 90 || poi.Longitude < -180 || poi.Longitude > 180 {
-// // 		err := fmt.Errorf("invalid POI coordinates: lat=%f, lon=%f", poi.Latitude, poi.Longitude)
-// // 		span.RecordError(err)
-// // 		span.SetStatus(codes.Error, "Invalid POI coordinates")
-// // 		return 0, err
-// // 	}
-// // 	if userLocation.UserLat < -90 || userLocation.UserLat > 90 || userLocation.UserLon < -180 || userLocation.UserLon > 180 {
-// // 		err := fmt.Errorf("invalid user coordinates: lat=%f, lon=%f", userLocation.UserLat, userLocation.UserLon)
-// // 		span.RecordError(err)
-// // 		span.SetStatus(codes.Error, "Invalid user coordinates")
-// // 		return 0, err
-// // 	}
-
-// // 	query := `
-// //         SELECT ST_Distance(
-// //             ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-// //             ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography
-// //         ) AS distance
-// //     `
-// // 	var distance float64
-// // 	err := r.pgpool.QueryRow(ctx, query, poi.Longitude, poi.Latitude, userLocation.UserLon, userLocation.UserLat).Scan(&distance)
-// // 	if err != nil {
-// // 		span.RecordError(err)
-// // 		span.SetStatus(codes.Error, "Failed to calculate distance")
-// // 		return 0, fmt.Errorf("failed to calculate distance: %w", err)
-// // 	}
-
-// // 	span.SetAttributes(attribute.Float64("distance.meters", distance))
-// // 	span.SetStatus(codes.Ok, "Distance calculated successfully")
-// // 	r.logger.Info("Distance calculated",
-// // 		slog.String("poi.name", poi.Name),
-// // 		slog.Float64("distance.meters", distance))
-// // 	return distance, nil
-// // }

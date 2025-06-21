@@ -195,7 +195,6 @@ func LLMInteractionRoutes(HandlerImpl *llmChat.HandlerImpl) http.Handler {
 	// LLM interaction routes
 	//r.Post("/prompt-response/profile/{profileID}", HandlerImpl.GetPrompResponse)        // GET http://localhost:8000/api/v1/user/interests
 	r.Get("/prompt-response/poi/details", HandlerImpl.GetPOIDetails)                    // GET http://localhost:8000/api/v1/llm/prompt-response/{interactionID}
-	r.Get("/prompt-response/poi/nearby", HandlerImpl.GetPOIsByDistance)                 // GET http://localhost:8000/api/v1/llm/prompt-response/poi/nearby
 	r.Post("/prompt-response/bookmark", HandlerImpl.SaveItenerary)                      // POST http://localhost:8000/api/v1/llm/prompt-response
 	r.Delete("/prompt-response/bookmark/{itineraryID}", HandlerImpl.RemoveItenerary)    // DELETE http://localhost:8000/api/v1/llm/bookmark/{bookmarkID}
 	r.Get("/prompt-response/city/hotel/preferences", HandlerImpl.GetHotelsByPreference) // GET http://localhost:8000/api/v1/pois/city/hotel/preferences
@@ -219,6 +218,7 @@ func POIRoutes(HandlerImpl *poi.HandlerImpl) http.Handler {
 	r.Get("/itineraries", HandlerImpl.GetItineraries)                           // GET /api/v1/itineraries?page=1&page_size=20
 	r.Get("/itineraries/itinerary/{itinerary_id}", HandlerImpl.GetItinerary)    // GET /api/v1/itineraries/{uuid}
 	r.Put("/itineraries/itinerary/{itinerary_id}", HandlerImpl.UpdateItinerary) // PUT /api/v1/itineraries/{uuid}
+	r.Get("/nearby", HandlerImpl.GetPOIsByDistance)                             // GET http://localhost:8000/api/v1/llm/prompt-response/poi/nearby
 
 	// Traditional search
 	r.Get("/search", HandlerImpl.GetPOIs) // GET http://localhost:8000/api/v1/pois/search
@@ -264,8 +264,8 @@ func CityRoutes(h *city.Handler) http.Handler {
 func RecentsRoutes(h *recents.HandlerImpl) http.Handler {
 	r := chi.NewRouter()
 
-	r.Get("/", h.GetUserRecentInteractions)                 // GET http://localhost:8000/api/v1/recents
-	r.Get("/city/{cityName}", h.GetCityDetailsForUser)      // GET http://localhost:8000/api/v1/recents/city/{cityName}
+	r.Get("/", h.GetUserRecentInteractions)            // GET http://localhost:8000/api/v1/recents
+	r.Get("/city/{cityName}", h.GetCityDetailsForUser) // GET http://localhost:8000/api/v1/recents/city/{cityName}
 
 	return r
 }

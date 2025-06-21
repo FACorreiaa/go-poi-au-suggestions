@@ -52,7 +52,7 @@ func (m *mockLlmRepo) SaveInteraction(ctx context.Context, interaction types.Llm
 // func TestGetPOIDetailedInfosResponse_Database(t *testing.T) {
 // 	logger := slog.New(slog.NewTextHandlerImpl(os.Stdout, nil))
 // 	poiRepo := &mockPOIRepo{pois: make(map[string]*types.POIDetailedInfo)}
-// 	service := &LlmInteractiontServiceImpl{
+// 	service := &ServiceImpl{
 // 		logger:             logger,
 // 		aiClient:           &mockAIClient{},
 // 		cityRepo:           &mockCityRepo{},

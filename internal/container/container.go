@@ -101,7 +101,7 @@ func NewContainer(cfg *config.Config, logger *slog.Logger) (*Container, error) {
 
 	embeddingService, _ := generativeAI.NewEmbeddingService(context.Background(), logger)
 	poiRepository := poi.NewRepository(pool, logger)
-	poiService := poi.NewServiceImpl(poiRepository, embeddingService, logger)
+	poiService := poi.NewServiceImpl(poiRepository, embeddingService, cityRepo, logger)
 	poiHandler := poi.NewHandlerImpl(poiService, logger)
 
 	itineraryListRepository := itineraryList.NewRepository(pool, logger)

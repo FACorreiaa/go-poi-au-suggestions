@@ -33,10 +33,10 @@ type Handler interface {
 type HandlerImpl struct {
 	logger  *slog.Logger
 	service Service
-	// llmChatService *llmChat.LlmInteractiontServiceImpl // If needed for AI list generation
+	// llmChatService *llmChat.ServiceImpl // If needed for AI list generation
 }
 
-func NewHandler(service Service, logger *slog.Logger /*, llmService *llmChat.LlmInteractiontServiceImpl*/) *HandlerImpl {
+func NewHandler(service Service, logger *slog.Logger /*, llmService *llmChat.ServiceImpl*/) *HandlerImpl {
 	return &HandlerImpl{
 		logger:  logger,
 		service: service,

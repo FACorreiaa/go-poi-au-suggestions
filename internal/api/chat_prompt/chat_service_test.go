@@ -27,13 +27,13 @@ type MockAIClient struct {
 	mock.Mock
 }
 
-// Ensure MockAIClient satisfies an interface if LlmInteractiontServiceImpl uses one.
+// Ensure MockAIClient satisfies an interface if ServiceImpl uses one.
 // For now, assuming direct use of *generativeAI.AIClient struct type.
-// To make this more testable, LlmInteractiontServiceImpl should ideally depend on an interface for AIClient.
+// To make this more testable, ServiceImpl should ideally depend on an interface for AIClient.
 // Let's define a minimal interface that AIClient should satisfy for our service's needs:
 type AIClientInterface interface {
 	GenerateResponse(ctx context.Context, prompt string, config *genai.GenerateContentConfig) (*genai.GenerateContentResponse, error)
-	// Add other methods used by LlmInteractiontServiceImpl if any, e.g., StartChatSession
+	// Add other methods used by ServiceImpl if any, e.g., StartChatSession
 }
 
 func (m *MockAIClient) GenerateResponse(ctx context.Context, prompt string, config *genai.GenerateContentConfig) (*genai.GenerateContentResponse, error) {
@@ -562,7 +562,7 @@ func (m *MockTagsRepo) GetTagsForProfile(ctx context.Context, profileID uuid.UUI
 
 // Helper to setup service with mocks for each test
 func setupTestServiceWithMocks() (
-	*LlmInteractiontServiceImpl,
+	*ServiceImpl,
 	*MockAIClient, // Assuming AIClient will be interface type in service
 	*MockinterestsRepo,
 	*MockSearchProfileRepo,
@@ -580,7 +580,7 @@ func setupTestServiceWithMocks() (
 	mockCityR := new(MockCityRepository)
 	mockPOIR := new(MockPOIRepository)
 
-	// To use MockAIClient, LlmInteractiontServiceImpl should accept an AIClientInterface.
+	// To use MockAIClient, ServiceImpl should accept an AIClientInterface.
 	// For now, we can't directly inject MockAIClient if the service expects *generativeAI.AIClient.
 	// This is a common pain point. The service constructor needs to accept an interface for AIClient.
 
@@ -592,7 +592,7 @@ func setupTestServiceWithMocks() (
 	ctx := context.Background()
 	realAIC, _ := generativeAI.NewAIClient(ctx) // This will init real client (needs API key for New, but not for being a field)
 
-	service := &LlmInteractiontServiceImpl{
+	service := &ServiceImpl{
 		logger:            logger,
 		interestRepo:      mockInterestR,
 		searchProfileRepo: mockSearchProfileR,
@@ -666,7 +666,7 @@ func TestLlmInteractionServiceImpl_GetPOIDetailedInfosResponse_Unit(t *testing.T
 				{Content: &genai.Content{Parts: []*genai.Part{genai.Text(aiResponseJSON)}}},
 			},
 		}
-		// This mocking assumes LlmInteractiontServiceImpl.aiClient is an interface type
+		// This mocking assumes ServiceImpl.aiClient is an interface type
 		// and has been set to mockAI. If not, this mock won't be hit.
 		// For now, this test won't work as expected without that refactor.
 		// mockAI.On("GenerateResponse", ctx, mock.AnythingOfType("string"), mock.AnythingOfType("*genai.GenerateContentConfig")).Return(mockGenAIResponse, nil).Once()
@@ -775,7 +775,7 @@ func TestLlmInteractionServiceImpl_GetPOIDetailedInfosResponse_Integration(t *te
 	// Setup:
 	// 1. Ensure GOOGLE_GEMINI_API_KEY is set
 	// 2. Connect to a real test database (e.g., using Dockerized Postgres)
-	// 3. Initialize real repositories and the LlmInteractiontServiceImpl with them.
+	// 3. Initialize real repositories and the ServiceImpl with them.
 	// For simplicity, this setup is omitted here but is crucial.
 
 	// Example:

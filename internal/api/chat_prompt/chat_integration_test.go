@@ -73,7 +73,7 @@ func TestMain(m *testing.M) {
 		}
 	}
 
-	testChatService = NewLlmInteractiontServiceImpl(
+	testChatService = NewServiceImpl(
 		testChatRepo,
 		interestRepo,
 		profileRepo,
@@ -126,7 +126,7 @@ func createTestCityForChat(t *testing.T) uuid.UUID {
 	return cityID
 }
 
-func TestLlmInteractiontServiceImpl_SaveItenerary_Integration(t *testing.T) {
+func TestServiceImpl_SaveItenerary_Integration(t *testing.T) {
 	ctx := context.Background()
 	clearChatTables(t)
 
@@ -156,7 +156,7 @@ func TestLlmInteractiontServiceImpl_SaveItenerary_Integration(t *testing.T) {
 	})
 }
 
-func TestLlmInteractiontServiceImpl_RemoveItenerary_Integration(t *testing.T) {
+func TestServiceImpl_RemoveItenerary_Integration(t *testing.T) {
 	ctx := context.Background()
 	clearChatTables(t)
 
@@ -196,7 +196,7 @@ func TestLlmInteractiontServiceImpl_RemoveItenerary_Integration(t *testing.T) {
 	})
 }
 
-func TestLlmInteractiontServiceImpl_StartNewSession_Integration(t *testing.T) {
+func TestServiceImpl_StartNewSession_Integration(t *testing.T) {
 	ctx := context.Background()
 	clearChatTables(t)
 
@@ -233,7 +233,7 @@ func TestLlmInteractiontServiceImpl_StartNewSession_Integration(t *testing.T) {
 	})
 }
 
-func TestLlmInteractiontServiceImpl_ContinueSession_Integration(t *testing.T) {
+func TestServiceImpl_ContinueSession_Integration(t *testing.T) {
 	ctx := context.Background()
 	clearChatTables(t)
 
@@ -273,7 +273,7 @@ func TestLlmInteractiontServiceImpl_ContinueSession_Integration(t *testing.T) {
 	})
 }
 
-func TestLlmInteractiontServiceImpl_GetIteneraryResponse_Integration(t *testing.T) {
+func TestServiceImpl_GetIteneraryResponse_Integration(t *testing.T) {
 	ctx := context.Background()
 	clearChatTables(t)
 
@@ -299,7 +299,7 @@ func TestLlmInteractiontServiceImpl_GetIteneraryResponse_Integration(t *testing.
 	})
 }
 
-func TestLlmInteractiontServiceImpl_GetPOIDetailsResponse_Integration(t *testing.T) {
+func TestServiceImpl_GetPOIDetailsResponse_Integration(t *testing.T) {
 	ctx := context.Background()
 	clearChatTables(t)
 
@@ -321,28 +321,6 @@ func TestLlmInteractiontServiceImpl_GetPOIDetailsResponse_Integration(t *testing
 		} else {
 			assert.NotNil(t, response)
 		}
-	})
-}
-
-func TestLlmInteractiontServiceImpl_GetGeneralPOIByDistanceResponse_Integration(t *testing.T) {
-	ctx := context.Background()
-	clearChatTables(t)
-
-	userID := createTestUserForChat(t)
-	createTestCityForChat(t)
-
-	t.Run("Get POIs by distance", func(t *testing.T) {
-		city := "Lisbon"
-		lat := 38.7223
-		lon := -9.1393
-		distance := 5.0 // 5km radius
-
-		pois, err := testChatService.GetGeneralPOIByDistanceResponse(ctx, userID, city, lat, lon, distance)
-		require.NoError(t, err)
-
-		// POIs should be empty if no test data exists, but method should succeed
-		assert.NotNil(t, pois)
-		// assert.GreaterOrEqual(t, len(pois), 0) // Could be 0 if no POIs in test DB
 	})
 }
 

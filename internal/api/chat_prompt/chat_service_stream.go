@@ -26,7 +26,7 @@ import (
 //     // Save to a persistent store
 // }
 
-func (l *LlmInteractiontServiceImpl) sendEventWithRetry(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent, retries int) bool {
+func (l *ServiceImpl) sendEventWithRetry(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent, retries int) bool {
 	for i := 0; i < retries; i++ {
 		if l.sendEvent(ctx, ch, event) {
 			return true
@@ -36,14 +36,14 @@ func (l *LlmInteractiontServiceImpl) sendEventWithRetry(ctx context.Context, ch 
 	return false
 }
 
-func (l *LlmInteractiontServiceImpl) processDeadLetterQueue() {
+func (l *ServiceImpl) processDeadLetterQueue() {
 	for event := range l.deadLetterCh {
 		l.logger.ErrorContext(context.Background(), "Unprocessed event sent to dead letter queue", slog.Any("event", event))
 		// TODO Save events to DB
 	}
 }
 
-func (l *LlmInteractiontServiceImpl) sendEvent(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent) bool {
+func (l *ServiceImpl) sendEvent(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent) bool {
 	if event.EventID == "" {
 		event.EventID = uuid.New().String()
 	}
@@ -107,7 +107,7 @@ func getPersonalizedPOI(interestNames []string, cityName, tagsPromptPart, userPr
 }
 
 // streamingCityDataWorker generates city data with streaming updates
-func (l *LlmInteractiontServiceImpl) streamingCityDataWorker(wg *sync.WaitGroup,
+func (l *ServiceImpl) streamingCityDataWorker(wg *sync.WaitGroup,
 	ctx context.Context, cityName string, resultCh chan<- types.GenAIResponse,
 	eventCh chan<- types.StreamEvent, userID uuid.UUID) {
 	ctxWorker, span := otel.Tracer("LlmInteractionService").Start(ctx, "streamingCityDataWorker", trace.WithAttributes(
@@ -218,7 +218,7 @@ func (l *LlmInteractiontServiceImpl) streamingCityDataWorker(wg *sync.WaitGroup,
 }
 
 // streamingGeneralPOIWorker generates general POIs with streaming updates
-func (l *LlmInteractiontServiceImpl) streamingGeneralPOIWorker(wg *sync.WaitGroup,
+func (l *ServiceImpl) streamingGeneralPOIWorker(wg *sync.WaitGroup,
 	ctx context.Context, cityName string,
 	resultCh chan<- types.GenAIResponse,
 	eventCh chan<- types.StreamEvent,
@@ -371,7 +371,7 @@ func (l *LlmInteractiontServiceImpl) streamingGeneralPOIWorker(wg *sync.WaitGrou
 }
 
 // streamingPersonalizedPOIWorker generates personalized POIs with streaming updates
-func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorker(wg *sync.WaitGroup, ctx context.Context, cityName string, userID, profileID uuid.UUID, resultCh chan<- types.GenAIResponse, eventCh chan<- types.StreamEvent, interestNames []string, tagsPromptPart, userPrefs string) {
+func (l *ServiceImpl) streamingPersonalizedPOIWorker(wg *sync.WaitGroup, ctx context.Context, cityName string, userID, profileID uuid.UUID, resultCh chan<- types.GenAIResponse, eventCh chan<- types.StreamEvent, interestNames []string, tagsPromptPart, userPrefs string) {
 	defer wg.Done()
 
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "streamingPersonalizedPOIWorker", trace.WithAttributes(
@@ -527,7 +527,7 @@ func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorker(wg *sync.Wai
 }
 
 // streamingPersonalizedPOIWorkerWithSemantics generates personalized POIs with semantic context and streaming updates
-func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorkerWithSemantics(wg *sync.WaitGroup, ctx context.Context, cityName string, userID, profileID uuid.UUID, resultCh chan<- types.GenAIResponse, eventCh chan<- types.StreamEvent, interestNames []string, tagsPromptPart, userPrefs string, semanticPOIs []types.POIDetailedInfo) {
+func (l *ServiceImpl) streamingPersonalizedPOIWorkerWithSemantics(wg *sync.WaitGroup, ctx context.Context, cityName string, userID, profileID uuid.UUID, resultCh chan<- types.GenAIResponse, eventCh chan<- types.StreamEvent, interestNames []string, tagsPromptPart, userPrefs string, semanticPOIs []types.POIDetailedInfo) {
 	defer wg.Done()
 
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "streamingPersonalizedPOIWorkerWithSemantics", trace.WithAttributes(
@@ -699,7 +699,7 @@ func (l *LlmInteractiontServiceImpl) streamingPersonalizedPOIWorkerWithSemantics
 	resultCh <- result
 }
 
-func (l *LlmInteractiontServiceImpl) StartNewSessionStreamed(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (*types.StreamingResponse, error) {
+func (l *ServiceImpl) StartNewSessionStreamed(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation) (*types.StreamingResponse, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "StartNewSessionStreamed", trace.WithAttributes(
 		attribute.String("city.name", cityName),
 		attribute.String("user.id", userID.String()),
@@ -973,7 +973,7 @@ func (l *LlmInteractiontServiceImpl) StartNewSessionStreamed(ctx context.Context
 }
 
 // ContinueSessionStreamed handles subsequent messages in an existing session and streams responses/updates.
-func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
+func (l *ServiceImpl) ContinueSessionStreamed(
 	ctx context.Context, sessionID uuid.UUID,
 	message string, userLocation *types.UserLocation,
 	eventCh chan<- types.StreamEvent, // Output channel for events
@@ -1255,7 +1255,7 @@ func (l *LlmInteractiontServiceImpl) ContinueSessionStreamed(
 }
 
 // generatePOIDataStream queries the LLM for POI details and streams updates
-func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
+func (l *ServiceImpl) generatePOIDataStream(
 	ctx context.Context, poiName, cityName string,
 	userLocation *types.UserLocation, userID, cityID uuid.UUID,
 	eventCh chan<- types.StreamEvent,
@@ -1389,7 +1389,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 
 	// Calculate distance
 	if userLocation != nil && userLocation.UserLat != 0 && userLocation.UserLon != 0 && poiData.Latitude != 0 && poiData.Longitude != 0 {
-		distance, err := l.llmInteractionRepo.CalculateDistancePostGIS(ctx, userLocation.UserLat, userLocation.UserLon, poiData.Latitude, poiData.Longitude)
+		distance, err := l.poiRepo.CalculateDistancePostGIS(ctx, userLocation.UserLat, userLocation.UserLon, poiData.Latitude, poiData.Longitude)
 		if err != nil {
 			l.logger.WarnContext(ctx, "Failed to calculate distance", slog.Any("error", err))
 			span.RecordError(err)
@@ -1409,7 +1409,7 @@ func (l *LlmInteractiontServiceImpl) generatePOIDataStream(
 
 // streamingCityDataWorker ContinueSessionStreamed
 
-func (l *LlmInteractiontServiceImpl) generateCityData(ctx context.Context, cityName string) (string, error) {
+func (l *ServiceImpl) generateCityData(ctx context.Context, cityName string) (string, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "generateCityData", trace.WithAttributes(
 		attribute.String("city.name", cityName),
 	))
@@ -1465,7 +1465,7 @@ func (l *LlmInteractiontServiceImpl) generateCityData(ctx context.Context, cityN
 	return cleanJSONResponse(fullText), nil
 }
 
-func (l *LlmInteractiontServiceImpl) saveCityInteraction(ctx context.Context, interaction types.LlmInteraction) (uuid.UUID, error) {
+func (l *ServiceImpl) saveCityInteraction(ctx context.Context, interaction types.LlmInteraction) (uuid.UUID, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "saveCityInteraction")
 	defer span.End()
 
@@ -1489,7 +1489,7 @@ func (l *LlmInteractiontServiceImpl) saveCityInteraction(ctx context.Context, in
 }
 
 // handleSemanticAddPOIStreamed handles adding POIs with semantic search enhancement and streaming updates
-func (l *LlmInteractiontServiceImpl) handleSemanticAddPOIStreamed(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetailedInfo, userLocation *types.UserLocation, cityID uuid.UUID, eventCh chan<- types.StreamEvent) (string, error) {
+func (l *ServiceImpl) handleSemanticAddPOIStreamed(ctx context.Context, message string, session *types.ChatSession, semanticPOIs []types.POIDetailedInfo, userLocation *types.UserLocation, cityID uuid.UUID, eventCh chan<- types.StreamEvent) (string, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "handleSemanticAddPOIStreamed")
 	defer span.End()
 
@@ -1620,7 +1620,7 @@ func (l *LlmInteractiontServiceImpl) handleSemanticAddPOIStreamed(ctx context.Co
 ** Unified Response
  */
 // ProcessUnifiedChatMessageStream handles unified chat with optimized streaming based on Google GenAI patterns
-func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
+func (l *ServiceImpl) ProcessUnifiedChatMessageStream(ctx context.Context, userID, profileID uuid.UUID, cityName, message string, userLocation *types.UserLocation, eventCh chan<- types.StreamEvent) error {
 	startTime := time.Now() // Track when processing starts
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "ProcessUnifiedChatMessageStream", trace.WithAttributes(
 		attribute.String("message", message),
@@ -1812,7 +1812,7 @@ func (l *LlmInteractiontServiceImpl) ProcessUnifiedChatMessageStream(ctx context
 }
 
 // streamWorker handles streaming for a single worker with context checks
-func (l *LlmInteractiontServiceImpl) streamWorker(ctx context.Context, prompt, partType string, eventCh chan<- types.StreamEvent, domain types.DomainType) {
+func (l *ServiceImpl) streamWorker(ctx context.Context, prompt, partType string, eventCh chan<- types.StreamEvent, domain types.DomainType) {
 	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
 	if err != nil {
 		if ctx.Err() == nil {
@@ -1860,7 +1860,7 @@ func (l *LlmInteractiontServiceImpl) streamWorker(ctx context.Context, prompt, p
 }
 
 // streamWorkerWithResponse handles streaming for a single worker with response capture
-func (l *LlmInteractiontServiceImpl) streamWorkerWithResponse(ctx context.Context, prompt, partType string, sendEvent func(types.StreamEvent), domain types.DomainType) {
+func (l *ServiceImpl) streamWorkerWithResponse(ctx context.Context, prompt, partType string, sendEvent func(types.StreamEvent), domain types.DomainType) {
 	iter, err := l.aiClient.GenerateContentStream(ctx, prompt, &genai.GenerateContentConfig{Temperature: genai.Ptr[float32](defaultTemperature)})
 	if err != nil {
 		if ctx.Err() == nil {
@@ -1922,7 +1922,7 @@ func extractTextFromGenAIResponse(resp *genai.GenerateContentResponse) string {
 }
 
 // sendEventSimple sends events with context check
-func (l *LlmInteractiontServiceImpl) sendEventSimple(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent) {
+func (l *ServiceImpl) sendEventSimple(ctx context.Context, ch chan<- types.StreamEvent, event types.StreamEvent) {
 	if ctx.Err() != nil {
 		return // Skip send if context is canceled
 	}

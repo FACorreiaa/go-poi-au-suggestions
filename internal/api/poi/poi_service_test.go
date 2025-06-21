@@ -262,3 +262,25 @@ func TestPOIServiceImpl_AddPoiToFavourites(t *testing.T) {
 		mockRepo.AssertExpectations(t)
 	})
 }
+
+func TestServiceImpl_GetGeneralPOIByDistanceResponse_Integration(t *testing.T) {
+	ctx := context.Background()
+	clearChatTables(t)
+
+	userID := createTestUserForChat(t)
+	createTestCityForChat(t)
+
+	t.Run("Get POIs by distance", func(t *testing.T) {
+		city := "Lisbon"
+		lat := 38.7223
+		lon := -9.1393
+		distance := 5.0 // 5km radius
+
+		pois, err := testChatService.GetGeneralPOIByDistanceResponse(ctx, userID, city, lat, lon, distance)
+		require.NoError(t, err)
+
+		// POIs should be empty if no test data exists, but method should succeed
+		assert.NotNil(t, pois)
+		// assert.GreaterOrEqual(t, len(pois), 0) // Could be 0 if no POIs in test DB
+	})
+}

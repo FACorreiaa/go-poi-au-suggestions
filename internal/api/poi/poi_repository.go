@@ -40,7 +40,7 @@ type Repository interface {
 
 	// POI details
 	FindPOIDetails(ctx context.Context, cityID uuid.UUID, lat, lon float64, tolerance float64) (*types.POIDetailedInfo, error)
-	SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
+	SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.NullUUID) (uuid.UUID, error)
 	SearchPOIs(ctx context.Context, filter types.POIFilter) ([]types.POIDetailedInfo, error)
 
 	// Vector similarity search methods
@@ -74,6 +74,9 @@ type Repository interface {
 	SaveItineraryPOIs(ctx context.Context, itineraryID uuid.UUID, pois []types.POIDetailedInfo) error
 	SavePOItoPointsOfInterest(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error)
 	CityExists(ctx context.Context, cityID uuid.UUID) (bool, error)
+
+	// Distance
+	CalculateDistancePostGIS(ctx context.Context, userLat, userLon, poiLat, poiLon float64) (float64, error)
 }
 
 type RepositoryImpl struct {
@@ -423,9 +426,14 @@ func (r *RepositoryImpl) FindPOIDetails(ctx context.Context, cityID uuid.UUID, l
 	return &poi, nil
 }
 
-func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.UUID) (uuid.UUID, error) {
+func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetailedInfo, cityID uuid.NullUUID) (uuid.UUID, error) {
 	ctx, span := otel.Tracer("Repository").Start(ctx, "SavePOIDetailedInfos", trace.WithAttributes(
-		attribute.String("city.id", cityID.String()),
+		attribute.String("city.id", func() string {
+			if cityID.Valid {
+				return cityID.UUID.String()
+			}
+			return "null"
+		}()),
 		attribute.String("poi.name", poi.Name),
 	))
 	defer span.End()
@@ -439,25 +447,30 @@ func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetail
 	}
 
 	// Check for duplicate POI by name and location (within 100m radius)
+	// Updated to work without city constraint for discover endpoint
 	duplicateCheckQuery := `
 		SELECT id FROM poi_details 
-		WHERE city_id = $1 
-		AND LOWER(name) = LOWER($2)
+		WHERE LOWER(name) = LOWER($1)
 		AND ST_DWithin(
 			location::geography,
-			ST_SetSRID(ST_MakePoint($3, $4)::geography, 4326),
+			ST_SetSRID(ST_MakePoint($2, $3)::geography, 4326),
 			100
 		)
 		LIMIT 1
 	`
 	var existingID uuid.UUID
-	err := r.pgpool.QueryRow(ctx, duplicateCheckQuery, cityID, poi.Name, poi.Longitude, poi.Latitude).Scan(&existingID)
+	err := r.pgpool.QueryRow(ctx, duplicateCheckQuery, poi.Name, poi.Longitude, poi.Latitude).Scan(&existingID)
 	if err == nil {
 		// Duplicate found
 		r.logger.InfoContext(ctx, "POI already exists, skipping save",
 			slog.String("poi_name", poi.Name),
 			slog.String("existing_id", existingID.String()),
-			slog.String("city_id", cityID.String()))
+			slog.String("city_id", func() string {
+				if cityID.Valid {
+					return cityID.UUID.String()
+				}
+				return "null"
+			}()))
 		span.SetAttributes(attribute.String("poi.existing_id", existingID.String()))
 		span.SetStatus(codes.Ok, "POI already exists")
 		return existingID, nil
@@ -502,7 +515,12 @@ func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetail
 			slog.Any("error", err),
 			slog.String("poi_name", poi.Name),
 			slog.String("poi_id", poiID.String()),
-			slog.String("city_id", cityID.String()))
+			slog.String("city_id", func() string {
+				if cityID.Valid {
+					return cityID.UUID.String()
+				}
+				return "null"
+			}()))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to save poi_details")
 		return uuid.Nil, fmt.Errorf("failed to save poi_details: %w", err)
@@ -561,7 +579,12 @@ func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetail
 			slog.Any("error", err),
 			slog.String("poi_name", poi.Name),
 			slog.String("poi_id", poiID.String()),
-			slog.String("city_id", cityID.String()))
+			slog.String("city_id", func() string {
+				if cityID.Valid {
+					return cityID.UUID.String()
+				}
+				return "null"
+			}()))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to save POI to points_of_interest")
 		return uuid.Nil, fmt.Errorf("failed to save points_of_interest: %w", err)
@@ -582,7 +605,12 @@ func (r *RepositoryImpl) SavePOIDetails(ctx context.Context, poi types.POIDetail
 	r.logger.InfoContext(ctx, "Successfully saved POI to database",
 		slog.String("poi_name", poi.Name),
 		slog.String("poi_id", poiID.String()),
-		slog.String("city_id", cityID.String()),
+		slog.String("city_id", func() string {
+			if cityID.Valid {
+				return cityID.UUID.String()
+			}
+			return "null"
+		}()),
 		slog.Float64("latitude", poi.Latitude),
 		slog.Float64("longitude", poi.Longitude))
 
@@ -2281,4 +2309,20 @@ func (r *RepositoryImpl) GetPOIsByLocationAndDistanceWithFilters(ctx context.Con
 	span.SetStatus(codes.Ok, "POIs by location and distance with filters retrieved")
 
 	return pois, nil
+}
+
+// calculateDistancePostGIS computes the distance between two points using PostGIS (in meters)
+func (l *RepositoryImpl) CalculateDistancePostGIS(ctx context.Context, userLat, userLon, poiLat, poiLon float64) (float64, error) {
+	query := `
+        SELECT ST_Distance(
+            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+            ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography
+        ) AS distance;
+    `
+	var distance float64
+	err := l.pgpool.QueryRow(ctx, query, userLon, userLat, poiLon, poiLat).Scan(&distance)
+	if err != nil {
+		return 0, fmt.Errorf("failed to calculate distance with PostGIS: %w", err)
+	}
+	return distance, nil
 }

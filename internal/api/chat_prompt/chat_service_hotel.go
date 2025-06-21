@@ -22,7 +22,7 @@ import (
 // var dbHitCounter = metric.NewCounter("db_hits", metric.WithDescription("Number of database hits"))
 // var aiCallCounter = metric.NewCounter("ai_calls", metric.WithDescription("Number of AI calls"))
 
-func (l *LlmInteractiontServiceImpl) getHotelsByPreferenceDetails(wg *sync.WaitGroup, ctx context.Context,
+func (l *ServiceImpl) getHotelsByPreferenceDetails(wg *sync.WaitGroup, ctx context.Context,
 	city string, lat float64, lon float64, userID uuid.UUID, userPreferences types.HotelUserPreferences,
 	resultCh chan<- []types.HotelDetailedInfo, config *genai.GenerateContentConfig) {
 	defer wg.Done()
@@ -116,7 +116,7 @@ func (l *LlmInteractiontServiceImpl) getHotelsByPreferenceDetails(wg *sync.WaitG
 	span.SetStatus(codes.Ok, "Hotel details generated and saved successfully")
 }
 
-func (l *LlmInteractiontServiceImpl) GetHotelsByPreferenceResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64, userPreferences types.HotelUserPreferences) ([]types.HotelDetailedInfo, error) {
+func (l *ServiceImpl) GetHotelsByPreferenceResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64, userPreferences types.HotelUserPreferences) ([]types.HotelDetailedInfo, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetHotelsByPreferenceResponse", trace.WithAttributes(
 		attribute.String("city.name", city),
 		attribute.Float64("latitude", lat),
@@ -226,7 +226,7 @@ func (l *LlmInteractiontServiceImpl) GetHotelsByPreferenceResponse(ctx context.C
 	return hotelResults, nil
 }
 
-func (l *LlmInteractiontServiceImpl) getHotelsNearby(wg *sync.WaitGroup, ctx context.Context,
+func (l *ServiceImpl) getHotelsNearby(wg *sync.WaitGroup, ctx context.Context,
 	city string, lat float64, lon float64, userID uuid.UUID,
 	resultCh chan<- []types.HotelDetailedInfo, config *genai.GenerateContentConfig) {
 	defer wg.Done()
@@ -324,7 +324,7 @@ func (l *LlmInteractiontServiceImpl) getHotelsNearby(wg *sync.WaitGroup, ctx con
 	span.SetStatus(codes.Ok, "Hotel details generated and saved successfully")
 }
 
-func (l *LlmInteractiontServiceImpl) GetHotelsNearbyResponse(ctx context.Context, userID uuid.UUID, city string, userLocation *types.UserLocation) ([]types.HotelDetailedInfo, error) {
+func (l *ServiceImpl) GetHotelsNearbyResponse(ctx context.Context, userID uuid.UUID, city string, userLocation *types.UserLocation) ([]types.HotelDetailedInfo, error) {
 	lat := userLocation.UserLat
 	lon := userLocation.UserLon
 	distance := userLocation.SearchRadiusKm
@@ -437,7 +437,7 @@ func (l *LlmInteractiontServiceImpl) GetHotelsNearbyResponse(ctx context.Context
 	return hotelResults, nil
 }
 
-func (s *LlmInteractiontServiceImpl) GetHotelByIDResponse(ctx context.Context, hotelID uuid.UUID) (*types.HotelDetailedInfo, error) {
+func (s *ServiceImpl) GetHotelByIDResponse(ctx context.Context, hotelID uuid.UUID) (*types.HotelDetailedInfo, error) {
 	hotel, err := s.poiRepo.GetHotelByID(ctx, hotelID)
 	if err != nil {
 		s.logger.Error("failed to get hotel by ID", "error", err)

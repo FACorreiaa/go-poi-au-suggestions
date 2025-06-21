@@ -17,7 +17,7 @@ import (
 	"google.golang.org/genai"
 )
 
-func (l *LlmInteractiontServiceImpl) getRestaurantsByPreferences(wg *sync.WaitGroup, ctx context.Context,
+func (l *ServiceImpl) getRestaurantsByPreferences(wg *sync.WaitGroup, ctx context.Context,
 	city string, lat, lon float64, userID uuid.UUID, preferences types.RestaurantUserPreferences,
 	resultCh chan<- []types.RestaurantDetailedInfo, config *genai.GenerateContentConfig) {
 	defer wg.Done()
@@ -86,7 +86,7 @@ func (l *LlmInteractiontServiceImpl) getRestaurantsByPreferences(wg *sync.WaitGr
 	span.SetStatus(codes.Ok, "Restaurants generated successfully")
 }
 
-func (l *LlmInteractiontServiceImpl) GetRestaurantsByPreferencesResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64, preferences types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error) {
+func (l *ServiceImpl) GetRestaurantsByPreferencesResponse(ctx context.Context, userID uuid.UUID, city string, lat, lon float64, preferences types.RestaurantUserPreferences) ([]types.RestaurantDetailedInfo, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetRestaurantsByPreferencesResponse")
 	defer span.End()
 
@@ -144,7 +144,7 @@ func (l *LlmInteractiontServiceImpl) GetRestaurantsByPreferencesResponse(ctx con
 	return restaurants, nil
 }
 
-func (l *LlmInteractiontServiceImpl) getRestaurantsNearby(wg *sync.WaitGroup, ctx context.Context,
+func (l *ServiceImpl) getRestaurantsNearby(wg *sync.WaitGroup, ctx context.Context,
 	city string, lat float64, lon float64, userID uuid.UUID, resultCh chan<- []types.RestaurantDetailedInfo, config *genai.GenerateContentConfig) {
 	defer wg.Done()
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "getRestaurantsNearby")
@@ -247,7 +247,7 @@ func (l *LlmInteractiontServiceImpl) getRestaurantsNearby(wg *sync.WaitGroup, ct
 	span.SetStatus(codes.Ok, "Restaurant details generated successfully")
 }
 
-func (l *LlmInteractiontServiceImpl) GetRestaurantsNearbyResponse(ctx context.Context, userID uuid.UUID, city string, userLocation types.UserLocation) ([]types.RestaurantDetailedInfo, error) {
+func (l *ServiceImpl) GetRestaurantsNearbyResponse(ctx context.Context, userID uuid.UUID, city string, userLocation types.UserLocation) ([]types.RestaurantDetailedInfo, error) {
 	lat := userLocation.UserLat
 	lon := userLocation.UserLon
 	distance := userLocation.SearchRadiusKm
@@ -359,7 +359,7 @@ func (l *LlmInteractiontServiceImpl) GetRestaurantsNearbyResponse(ctx context.Co
 	return restaurantResults, nil
 }
 
-func (l *LlmInteractiontServiceImpl) GetRestaurantDetailsResponse(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error) {
+func (l *ServiceImpl) GetRestaurantDetailsResponse(ctx context.Context, restaurantID uuid.UUID) (*types.RestaurantDetailedInfo, error) {
 	ctx, span := otel.Tracer("LlmInteractionService").Start(ctx, "GetRestaurantDetailsResponse")
 	defer span.End()
 
